@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 gtk = "0.7"
-pf_sandbox_lib = { path = "../pf_sandbox_lib" }
+canon_collision_lib = { path = "../canon_collision_lib" }

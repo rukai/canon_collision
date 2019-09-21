@@ -1,0 +1,44 @@
+[package]
+name = "canon_collision"
+version = "0.0.1"
+authors = ["Rukai <rubickent@gmail.com>"]
+description = ""
+license = "GPL-3.0"
+repository = "https://github.com/rukai/pf_sandbox"
+homepage = "https://pfsandbox.net"
+keywords = ["platform", "fighter", "game"]
+categories = ["games", "game-engines"]
+default-run = "canon_collision"
+edition = "2018"
+
+[dependencies]
+canon_collision_lib = { path = "../canon_collision_lib" }
+byteorder = "1"
+chrono = { version = "0.4", features = ["serde"] }
+num-traits = "0.2"
+getopts = "0.2"
+gilrs-core = "0.2"
+libusb = "0.3"
+log = "0.4"
+lyon = "0.14"
+rand = "0.7.0"
+rand_chacha = "0.2"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+treeflection = "0.1"
+treeflection_derive = "0.4"
+winit = "0.20.0-alpha3" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
+winit_input_helper = "0.4.0-alpha3"
+hotwatch = "0.4"
+
+cgmath = { version = "0.17", optional = true }
+
+vk-shader-macros = { version = "0.2", optional = true }
+wgpu_glyph = { version = "0.4", optional = true }
+wgpu = { version = "0.3", features = ["vulkan"], optional = true }
+raw-window-handle = "0.1"
+
+[features]
+default = ["wgpu_renderer"]
+wgpu_renderer = ["wgpu", "wgpu_glyph", "vk-shader-macros", "cgmath"]

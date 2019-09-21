@@ -1,0 +1,39 @@
+[package]
+name = "canon_collision_lib"
+version = "0.0.1"
+authors = ["Rukai <rubickent@gmail.com>"]
+description = "Data structures and helper code for PF Sandbox"
+license = "GPL-3.0"
+repository = "https://github.com/rukai/pf_sandbox"
+homepage = "https://pfsandbox.net"
+keywords = ["pf", "sandbox", "platform", "fighter", "game"]
+categories = ["games", "game-engines"]
+edition = "2018"
+
+[dependencies]
+backtrace = "0.3"
+bincode = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "2"
+strum = "0.15"
+strum_macros = "0.15"
+num-traits = "0.2"
+num-derive = "0.2"
+env_logger = "0.6"
+gilrs-core = "0.2"
+log = "0.4"
+matches = "0.1"
+os_type = "2"
+rand = "0.7"
+reqwest = "0.9"
+sha2 = "0.8"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+toml = "0.5"
+treeflection = "0.1"
+treeflection_derive = "0.4"
+uuid = { version = "0.7", features = ["v4", "serde"] }
+winit = "0.20.0-alpha3" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
+winit_input_helper = "0.4.0-alpha3"
+zip = "0.5"

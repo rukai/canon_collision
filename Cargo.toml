@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "pf_sandbox",
-    "pf_tas",
-    "pf_cli",
+    "canon_collision",
+    "canon_collision_lib",
+    "cc_cli",
     "map_controllers",
     "panic_handler"
 ]

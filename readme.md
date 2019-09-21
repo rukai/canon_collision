@@ -1,10 +1,7 @@
-# PF Sandbox [![Build Status](https://travis-ci.org/rukai/PF_Sandbox.svg?branch=master)](https://travis-ci.org/rukai/PF_Sandbox) [![Build status](https://ci.appveyor.com/api/projects/status/89drle66lde9pq35?svg=true)](https://ci.appveyor.com/project/rukai/pf-sandbox) [![dependency status](https://deps.rs/repo/github/rukai/pf_sandbox/status.svg)](https://deps.rs/repo/github/rukai/pf_sandbox)
-
-A platform fighter featuring a character editor tightly integrated with gameplay.
+# Canon Collision [![Build Status](https://travis-ci.org/rukai/canon_collison.svg?branch=master)](https://travis-ci.org/rukai/canon_collison) [![Build status](https://ci.appveyor.com/api/projects/status/89drle66lde9pq35?svg=true)](https://ci.appveyor.com/project/rukai/canon-collision) [![dependency status](https://deps.rs/repo/github/rukai/canon_collison/status.svg)](https://deps.rs/repo/github/rukai/canon_collison)
 
 ## Quick links
 
-*   [pfsandbox.net](https://pfsandbox.net)
 *   [Compile from source (Windows & Linux)](compiling.md)
 *   [Discord](https://discord.gg/KyjBs4x)
 *   [Infrastructure Repository](https://github.com/rukai/pf_sandbox_infra)
@@ -17,32 +14,6 @@ A platform fighter featuring a character editor tightly integrated with gameplay
 *   Mac OS: Unsupported
 
 You cannot use a keyboard to play, you must use a controller.
-
-## Goals/Features
-
-*   Package system used to distribute complete games that run on PF Sandbox
-    +   A package includes:
-        -   Fighters
-        -   Stages
-        -   Rules - Set game mode and mechanics e.g. game length, stock count, l-canceling, ledge-hog mechanic
-        -   A url specifying where to download updates
-    +   Package data is serialized into multiple files stored in a folder, allowing individual characters/stages to be easily copied between packages
-*   Powerful Fighter/Stage editor
-    +   Make edits in the middle of a match
-    +   Use the mouse to select elements for editing.
-    +   Command line used for viewing/setting selected elements
-    +   Keyboard shortcuts and click and drag where applicable
-*   Replays that do not desync on character/mechanics/physics changes
-*   Controller support including Native Wii U -> GC adapter Support
-*   TAS Tools
-*   Netplay
-*   Minimalist but visually appealing graphics
-
-## Restrictions/Non-Goals
-
-*   Advanced features need not be beginner Friendly (e.g. editor/frame advance/replays/TAS)
-*   Ability to recreate other platform fighters does not overrule other advantages (e.g. 2D hitboxes instead of 3D hitboxes)
-*   Restricting character graphics to only hitboxes reduces scope for development of the project and development of packages
 
 ## CI Infrastructure
 
