@@ -2,7 +2,7 @@ use treeflection::{NodeRunner, Node};
 use bincode;
 use rand::Rng;
 use rand;
-use crate::json_upgrade;
+use crate::files::build_version;
 
 use std::net::{TcpListener, UdpSocket, IpAddr, SocketAddr};
 use std::io::Read;
@@ -403,7 +403,7 @@ impl Netplay {
         self.confirmed_inputs.push(vec!());
         self.set_state(NetplayState::InitConnection (InitConnection {
             random:        rand::thread_rng().gen::<u64>(),
-            build_version: json_upgrade::build_version(),
+            build_version: build_version(),
             hash
         }));
     }
@@ -411,7 +411,7 @@ impl Netplay {
     pub fn connect_match_making(&mut self, region: String, num_players: u8, package_hash: String) {
         self.clear();
         let request = MatchMakingRequest {
-            build_version: json_upgrade::build_version(),
+            build_version: build_version(),
             region,
             num_players,
             package_hash,

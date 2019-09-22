@@ -1,6 +1,7 @@
 use std::collections::{HashSet, HashMap};
 use std::fs;
 use std::mem;
+use std::fs::File;
 use std::path::PathBuf;
 
 use sha2::{Sha256, Digest};
@@ -8,13 +9,9 @@ use reqwest::Url;
 use reqwest::UrlError;
 use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
-use zip::ZipWriter;
-use zip::write::FileOptions;
 
 use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole, CollisionBoxLink, LinkType, RenderOrder};
-use crate::files;
-use crate::json_upgrade::engine_version;
-use crate::json_upgrade;
+use crate::files::{self, engine_version};
 use crate::rules::Rules;
 use crate::stage::Stage;
 
@@ -48,19 +45,7 @@ pub fn generate_example_stub() {
     }
 }
 
-/// Extract the contents of a saved zip into a package
-pub fn extract_from_path(source_path: PathBuf) {
-    if files::has_ext(&source_path, "zip") {
-        if let Some(file_name) = source_path.file_stem() {
-            let mut dest_path = get_packages_path();
-            dest_path.push(file_name);
-            files::extract_zip_fs(&source_path, &dest_path);
-        }
-    }
-}
-
-/// Stores data that makes up a single game
-/// Is also responsible for loading and saving itself
+/// Stores persistent that data that can be modified at runtime.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
     pub meta:               PackageMeta,
@@ -116,7 +101,7 @@ impl Package {
 
     /// Loads and returns the package with the specified name.
     /// Returns None if the package doesnt exist or is broken.
-    pub fn open(name: &str) -> Option<Package> {
+    pub fn open(name: &str) -> Option<Package> { // TODO
         let path = get_packages_path().join(name);
 
         let mut package = Package {
@@ -155,8 +140,8 @@ impl Package {
         let mut package = Package {
             meta:            meta,
             rules:           Rules::default(),
-            stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.json"), Stage::default()))),
-            fighters:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.json"), Fighter::default()))),
+            stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
+            fighters:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), Fighter::default()))),
             package_updates: vec!(),
         };
         package.save();
@@ -177,48 +162,7 @@ impl Package {
         }
     }
 
-    /// Produces a zip of the package in the PF_Sandbox/publish directory
-    /// The actual package has its published_version incremented and is then saved
-    /// The exported package has its published flag set to true
-    pub fn publish(&mut self) -> String {
-        if self.meta.published {
-            return String::from("Publish FAILED! The published property in package_meta is already set.");
-        }
-
-        self.meta.published_version += 1;
-
-        self.save(); // If more failure cases are added to save they should be checked for in publish as well.
-        let new_meta = PackageMeta {
-            published: true,
-            .. self.meta.clone()
-        };
-
-        let mut path = files::get_path();
-        path.push("publish");
-        files::nuke_dir(&path);
-
-        let zip_file = fs::File::create(path.join(format!("package{}.zip", new_meta.published_version))).unwrap();
-        let mut zip = ZipWriter::new(zip_file);
-        files::write_to_zip(&mut zip, "package_meta.json", &new_meta);
-        files::write_to_zip(&mut zip, "rules.json", &self.rules);
-
-        zip.add_directory("Stages/", FileOptions::default()).unwrap();
-        for (key, stage) in self.stages.key_value_iter() {
-            files::write_to_zip(&mut zip, format!("Stages/{}", key).as_ref(), &stage);
-        }
-
-        zip.add_directory("Fighters/", FileOptions::default()).unwrap();
-        for (key, fighter) in self.fighters.key_value_iter() {
-            files::write_to_zip(&mut zip, format!("Fighters/{}", key).as_ref(), &fighter);
-        }
-        zip.finish().unwrap();
-
-        files::save_struct(path.join("package_meta.json"), &new_meta);
-
-        String::from("Publish completed succesfully.")
-    }
-
-    // Write to a new folder first, in case there is a panic, in between deleting and writing data
+    // Write to a new folder first, in case there is a panic in between deleting and writing data.
     // Then we delete the existing folder and rename the new one
     pub fn save(&mut self) -> String {
         if self.meta.published {
@@ -246,16 +190,16 @@ impl Package {
             }
         }
 
-        // save all json files
-        files::save_struct(new_path.join("rules.json"), &self.rules);
-        files::save_struct(new_path.join("package_meta.json"), &self.meta);
+        // save all cbor files
+        files::save_struct_cbor(new_path.join("rules.cbor"), &self.rules);
+        files::save_struct_cbor(new_path.join("package_meta.cbor"), &self.meta);
 
         for (key, fighter) in self.fighters.key_value_iter() {
-            files::save_struct(new_path.join("Fighters").join(key), fighter);
+            files::save_struct_cbor(new_path.join("Fighters").join(key), fighter);
         }
         
         for (key, stage) in self.stages.key_value_iter() {
-            files::save_struct(new_path.join("Stages").join(key), stage);
+            files::save_struct_cbor(new_path.join("Stages").join(key), stage);
         }
 
         // replace old directory with new directory
@@ -267,26 +211,13 @@ impl Package {
         String::from("Save completed successfully.")
     }
 
-    /// Clears the current package data, then loads the package from disk
-    /// The upgraded json is loaded into this package
-    /// the user can then save the package to make the upgrade permanent
-    /// Advantages over saving upgraded json immediately:
-    /// *    the package cannot be saved if it wont load
-    /// *    the user can choose to not save, if they find issues with the upgrade
     pub fn load(&mut self) -> Result<(), String> {
-        // Previously all the json files were loaded from disk, then every json file was upgraded,
-        // then every json file was converted to a struct.
-        // This ran out of memory very quickly.
-        // So now we "load, upgrade, convert" one by one instead of batched.
-
         // load the meta file if exists otherwise generate one.
         // if the meta file exists but is invalid fail the package load
         let path = self.meta.path.clone(); // path is only set at runtime, back it up
-        self.meta = match files::load_file(self.meta.path.join("package_meta.json")) {
-            Ok (string) => {
-                let mut json = serde_json::from_str(&string).map_err(|x| format!("{:?}", x))?;
-                json_upgrade::upgrade_to_latest_meta(&mut json);
-                serde_json::from_value(json).map_err(|x| format!("{:?}", x))?
+        self.meta = match File::open(self.meta.path.join("package_meta.json")) {
+            Ok (reader) => {
+                serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
             }
             Err (_) => PackageMeta::default()
         };
@@ -294,11 +225,9 @@ impl Package {
 
         // load the rules file if exists otherwise generate one.
         // if the rules file exists but is invalid fail the package load
-        self.rules = match files::load_file(self.meta.path.join("rules.json")) {
-            Ok (string) => {
-                let mut json = serde_json::from_str(&string).map_err(|x| format!("{:?}", x))?;
-                json_upgrade::upgrade_to_latest_rules(&mut json);
-                serde_json::from_value(json).map_err(|x| format!("{:?}", x))?
+        self.rules = match File::open(self.meta.path.join("rules.json")) {
+            Ok (reader) => {
+                serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
             }
             Err (_) => Rules::default()
         };
@@ -317,18 +246,16 @@ impl Package {
         self.fighters = KeyedContextVec::new();
         for file_name in &self.meta.fighter_keys {
             if let Some(file_path) = fighter_paths.remove(file_name) {
-                let mut json = files::load_json(file_path)?;
-                json_upgrade::upgrade_to_latest_fighter(&mut json, file_name);
-                let fighter = serde_json::from_value(json).map_err(|x| format!("{:?}", x))?;
+                let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+                let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
                 self.fighters.push(file_name.clone(), fighter);
             }
         }
 
         // add remaining fighters in any order
         for (file_name, file_path) in fighter_paths {
-            let mut json = files::load_json(file_path)?;
-            json_upgrade::upgrade_to_latest_fighter(&mut json, &file_name);
-            let fighter = serde_json::from_value(json).map_err(|x| format!("{:?}", x))?;
+            let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+            let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
             self.fighters.push(file_name.clone(), fighter);
         }
 
@@ -346,18 +273,16 @@ impl Package {
         self.stages = KeyedContextVec::new();
         for file_name in &self.meta.stage_keys {
             if let Some(file_path) = stage_paths.remove(file_name) {
-                let mut json = files::load_json(file_path)?;
-                json_upgrade::upgrade_to_latest_stage(&mut json, file_name);
-                let stage = serde_json::from_value(json).map_err(|x| format!("{:?}", x))?;
+                let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+                let stage = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
                 self.stages.push(file_name.clone(), stage);
             }
         }
 
         // add remaining stages in any order
         for (file_name, file_path) in stage_paths {
-            let mut json = files::load_json(file_path)?;
-            json_upgrade::upgrade_to_latest_stage(&mut json, &file_name);
-            let stage = serde_json::from_value(json).map_err(|x| format!("{:?}", x))?;
+            let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+            let stage = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
             self.stages.push(file_name.clone(), stage);
         }
 
@@ -763,9 +688,6 @@ Accessors:
                     "save" => {
                         self.save()
                     }
-                    "publish" => {
-                        self.publish()
-                    }
                     "reload" => {
                         if let Err(err) = self.load() {
                             err
@@ -812,13 +734,15 @@ pub struct PackageMeta {
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
         path:              PathBuf,
-    pub engine_version:    u64, // compared with a value incremented by pf sandbox when there are breaking changes to data structures
-    pub published_version: u64, // incremented every time the package is published
+    /// compared with a value incremented by canon collision when there are breaking changes to data structures
+    pub engine_version:    u64,
+    /// incremented every time the package is published
+    pub published_version: u64,
     pub title:             String,
-    pub fighter_keys:      Vec<String>,
     pub source:            Option<String>,
     pub published:         bool,
     pub hash:              String,
+    pub fighter_keys:      Vec<String>,
     pub stage_keys:        Vec<String>,
 }
 
@@ -873,28 +797,6 @@ impl PackageMeta {
             files::load_struct_from_url(url)
         } else {
             None
-        }
-    }
-
-    /// If downloading fails then just continue, we dont want to prevent playing due to network issues.
-    pub fn update(&self) {
-        if self.published {
-            if let Some(url) = self.url("package_meta.json") {
-                if let Some(latest_meta) = files::load_struct_from_url::<PackageMeta>(url) {
-                    if self.published_version < latest_meta.published_version {
-                        let path = format!("package{}.zip", latest_meta.published_version);
-                        if let Some(url) = self.url(path.as_str()) {
-                            if let Some(zip) = files::load_bin_from_url(url) {
-                                files::extract_zip(&zip, &self.path);
-                            } else {
-                                println!("Failed to download package zip file");
-                            }
-                        }
-                    }
-                } else {
-                    println!("Failed to download or deserialize package_meta.json");
-                }
-            }
         }
     }
 

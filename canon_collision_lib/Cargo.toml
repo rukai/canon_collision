@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["Rukai <rubickent@gmail.com>"]
 description = "Data structures and helper code for PF Sandbox"
 license = "GPL-3.0"
-repository = "https://github.com/rukai/pf_sandbox"
+repository = "https://github.com/rukai/canon_collision"
 homepage = "https://pfsandbox.net"
 keywords = ["pf", "sandbox", "platform", "fighter", "game"]
 categories = ["games", "game-engines"]
@@ -12,7 +12,6 @@ edition = "2018"
 
 [dependencies]
 backtrace = "0.3"
-bincode = "1"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "2"
 strum = "0.15"
@@ -30,10 +29,11 @@ sha2 = "0.8"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
+serde_cbor = "0.10"
+bincode = "1"
 toml = "0.5"
 treeflection = "0.1"
 treeflection_derive = "0.4"
 uuid = { version = "0.7", features = ["v4", "serde"] }
 winit = "0.20.0-alpha3" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
 winit_input_helper = "0.4.0-alpha3"
-zip = "0.5"

@@ -4,7 +4,8 @@ members = [
     "canon_collision_lib",
     "cc_cli",
     "map_controllers",
-    "panic_handler"
+    "panic_handler",
+    "runtime_state_upgrader"
 ]
 
 [profile.release]

@@ -1,8 +1,9 @@
 use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
 use strum::IntoEnumIterator;
 use num_traits::ToPrimitive;
+use std::collections::HashMap;
 
-use crate::json_upgrade::engine_version;
+use crate::files::engine_version;
 
 impl Default for Fighter {
     fn default() -> Fighter {
@@ -87,6 +88,8 @@ impl Default for Fighter {
             tilt_turn_flip_dir_frame: 5,
             tilt_turn_into_dash_iasa: 5,
             actions:                  actions,
+            u32s:                     HashMap::new(),
+            f32s:                     HashMap::new(),
         }
     }
 }
@@ -139,6 +142,8 @@ pub struct Fighter {
     pub run_turn_flip_dir_frame:  u64,
     pub tilt_turn_flip_dir_frame: u64,
     pub tilt_turn_into_dash_iasa: u64,
+    pub u32s:                     HashMap<String, u32>,
+    pub f32s:                     HashMap<String, f32>,
     pub actions:                  ContextVec<ActionDef>,
 }
 

@@ -1,4 +1,4 @@
-use crate::json_upgrade;
+use crate::files::engine_version;
 use crate::files;
 
 use std::path::PathBuf;
@@ -39,7 +39,7 @@ impl ControllerMaps {
 impl Default for ControllerMaps {
     fn default() -> ControllerMaps {
         ControllerMaps {
-            engine_version: json_upgrade::engine_version(),
+            engine_version: engine_version(),
             maps:           vec!()
         }
     }
