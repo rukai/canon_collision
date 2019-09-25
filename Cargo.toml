@@ -5,7 +5,7 @@ members = [
     "cc_cli",
     "map_controllers",
     "panic_handler",
-    "runtime_state_upgrader"
+    "package_upgrader"
 ]
 
 [profile.release]

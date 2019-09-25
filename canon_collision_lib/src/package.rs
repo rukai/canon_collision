@@ -2,11 +2,10 @@ use std::collections::{HashSet, HashMap};
 use std::fs;
 use std::mem;
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use sha2::{Sha256, Digest};
 use reqwest::Url;
-use reqwest::UrlError;
 use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
@@ -15,44 +14,15 @@ use crate::files::{self, engine_version};
 use crate::rules::Rules;
 use crate::stage::Stage;
 
-fn get_packages_path() -> PathBuf {
-    let mut path = files::get_path();
-    path.push("packages");
-    path
-}
-
-/// If PF_Sandbox packages path does not exist then generate a stub 'Example' package.
-/// Does not otherwise regenerate this package because the user may wish to delete it.
-pub fn generate_example_stub() {
-    if !get_packages_path().exists() {
-        let mut path = get_packages_path();
-        path.push("example");
-        path.push("package_meta.json");
-
-        let meta = PackageMeta {
-            path:              path.clone(),
-            engine_version:    engine_version(),
-            published_version: 0,
-            title:             "Example Package".to_string(),
-            source:            Some("lucaskent.me/example_package".to_string()),
-            //source:          Some("pfsandbox.net/example_package".to_string()),
-            published:         true,
-            hash:              "".to_string(),
-            fighter_keys:      vec!(),
-            stage_keys:        vec!(),
-        };
-        files::save_struct(path, &meta);
-    }
-}
-
 /// Stores persistent that data that can be modified at runtime.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
-    pub meta:               PackageMeta,
-    pub rules:              Rules,
-    pub stages:             KeyedContextVec<Stage>, // TODO: Can just use a std map here
-    pub fighters:           KeyedContextVec<Fighter>,
-        package_updates:    Vec<PackageUpdate>,
+    pub meta:            PackageMeta,
+    pub rules:           Rules,
+    pub stages:          KeyedContextVec<Stage>, // TODO: Can just use a std map here
+    pub fighters:        KeyedContextVec<Fighter>,
+        path:            PathBuf,
+        package_updates: Vec<PackageUpdate>,
 }
 
 impl Default for Package {
@@ -66,51 +36,18 @@ impl Package {
         !self.package_updates.is_empty()
     }
 
-    fn inner_blank() -> Package {
-        Package {
+    /// Loads and returns the package with the specified name.
+    /// Returns None if the package doesnt exist or is broken.
+    pub fn open(path: PathBuf) -> Option<Package> {
+        let mut package = Package {
+            path,
             meta:            PackageMeta::new(),
             rules:           Rules::default(),
             stages:          KeyedContextVec::new(),
             fighters:        KeyedContextVec::new(),
             package_updates: vec!(),
-        }
-    }
-
-    /// Creates a new blank package with the specified name.
-    /// DANGER: If a package with the same name does exist, saving the returned package will overwrite the existing package.
-    pub fn blank(name: &str) -> Package {
-        let path = get_packages_path().join(name);
-
-        let meta = PackageMeta {
-            path:              path,
-            engine_version:    engine_version(),
-            published_version: 0,
-            title:             name.to_string(),
-            source:            None,
-            published:         false,
-            hash:              "".to_string(),
-            fighter_keys:      vec!(),
-            stage_keys:        vec!(),
         };
 
-        Package {
-            meta,
-            .. Package::inner_blank()
-        }
-    }
-
-    /// Loads and returns the package with the specified name.
-    /// Returns None if the package doesnt exist or is broken.
-    pub fn open(name: &str) -> Option<Package> { // TODO
-        let path = get_packages_path().join(name);
-
-        let mut package = Package {
-            meta:            PackageMeta { path, .. PackageMeta::new() },
-            rules:           Rules::default(),
-            stages:          KeyedContextVec::new(),
-            fighters:        KeyedContextVec::new(),
-            package_updates: vec!(),
-        };
         if let Ok(_) = package.load() {
             Some(package)
         } else {
@@ -118,19 +55,27 @@ impl Package {
         }
     }
 
-    pub fn file_name(&self) -> String {
-        self.meta.path.file_name().unwrap().to_str().unwrap().to_string()
+    pub fn find_package_in_parent_dirs() -> Option<PathBuf> {
+        let path = std::env::current_dir().unwrap();
+        Package::find_package_in_parent_dirs_core(&path)
     }
 
-    fn generate_base(name: &str) -> Package {
-        let path = get_packages_path().join(name);
+    fn find_package_in_parent_dirs_core(path: &Path) -> Option<PathBuf> {
+        let package_path = path.join("package");
+        match fs::metadata(&package_path) {
+            Ok(_) => {
+                Some(package_path.to_path_buf())
+            }
+            Err(_) => {
+                Package::find_package_in_parent_dirs_core(path.parent()?)
+            }
+        }
+    }
 
+    pub fn generate_base(path: PathBuf) -> Package {
         let meta = PackageMeta {
-            path:              path,
             engine_version:    engine_version(),
             published_version: 0,
-            title:             name.to_string(),
-            source:            None,
             published:         false,
             hash:              "".to_string(),
             fighter_keys:      vec!(),
@@ -138,6 +83,7 @@ impl Package {
         };
 
         let mut package = Package {
+            path,
             meta:            meta,
             rules:           Rules::default(),
             stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
@@ -147,19 +93,6 @@ impl Package {
         package.save();
         package.load().unwrap();
         package
-    }
-
-    /// Opens a package if it exists
-    /// Creates and opens it if it doesn't
-    /// However if it does exist but is broken in some way it returns None
-    pub fn open_or_generate(name: &str) -> Option<Package> {
-        let path = get_packages_path().join(name);
-
-        // if a package does not already exist create a new one
-        match fs::metadata(path) {
-            Ok(_)  => Package::open(name),
-            Err(_) => Some(Package::generate_base(name)),
-        }
     }
 
     // Write to a new folder first, in case there is a panic in between deleting and writing data.
@@ -174,13 +107,7 @@ impl Package {
         self.meta.hash = self.compute_hash();
 
         // setup new directory to save to
-        let mut name = if let Some(name) = self.meta.path.file_name() {
-            name.to_os_string()
-        } else {
-            return String::from("Save FAILED! Failed to retrieve file_name from path");
-        };
-        name.push("_name_conflict_avoiding_temp_string");
-        let new_path = self.meta.path.with_file_name(name);
+        let new_path = self.path.with_file_name("package_temp_path");
         if let Err(_) = fs::create_dir(&new_path) {
             if let Err(_) = fs::remove_dir_all(&new_path) {
                 return String::from("Save FAILED! Failed to delete an existing *_name_conflict_avoiding_temp_string folder");
@@ -203,8 +130,8 @@ impl Package {
         }
 
         // replace old directory with new directory
-        fs::remove_dir_all(&self.meta.path).ok();
-        if let Err(_) = fs::rename(new_path, &self.meta.path) {
+        fs::remove_dir_all(&self.path).ok();
+        if let Err(_) = fs::rename(new_path, &self.path) {
             return String::from("Save FAILED! Failed to rename temp package");
         }
 
@@ -214,18 +141,16 @@ impl Package {
     pub fn load(&mut self) -> Result<(), String> {
         // load the meta file if exists otherwise generate one.
         // if the meta file exists but is invalid fail the package load
-        let path = self.meta.path.clone(); // path is only set at runtime, back it up
-        self.meta = match File::open(self.meta.path.join("package_meta.json")) {
+        self.meta = match File::open(self.path.join("package_meta.json")) {
             Ok (reader) => {
                 serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
             }
             Err (_) => PackageMeta::default()
         };
-        self.meta.path = path; // restore the backed up path
 
         // load the rules file if exists otherwise generate one.
         // if the rules file exists but is invalid fail the package load
-        self.rules = match File::open(self.meta.path.join("rules.json")) {
+        self.rules = match File::open(self.path.join("rules.json")) {
             Ok (reader) => {
                 serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
             }
@@ -234,7 +159,7 @@ impl Package {
 
         // Get paths to the fighters
         let mut fighter_paths: HashMap<String, PathBuf> = HashMap::new();
-        if let Ok (dir) = fs::read_dir(self.meta.path.join("Fighters")) {
+        if let Ok (dir) = fs::read_dir(self.path.join("Fighters")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
@@ -261,7 +186,7 @@ impl Package {
 
         // Get paths to the stages
         let mut stage_paths: HashMap<String, PathBuf> = HashMap::new();
-        if let Ok (dir) = fs::read_dir(self.meta.path.join("Stages")) {
+        if let Ok (dir) = fs::read_dir(self.path.join("Stages")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
@@ -731,15 +656,10 @@ pub enum PackageUpdate {
 /// Also handles updating the Package
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct PackageMeta {
-    #[serde(skip_serializing)]
-    #[serde(skip_deserializing)]
-        path:              PathBuf,
     /// compared with a value incremented by canon collision when there are breaking changes to data structures
     pub engine_version:    u64,
     /// incremented every time the package is published
     pub published_version: u64,
-    pub title:             String,
-    pub source:            Option<String>,
     pub published:         bool,
     pub hash:              String,
     pub fighter_keys:      Vec<String>,
@@ -749,11 +669,8 @@ pub struct PackageMeta {
 impl PackageMeta {
     pub fn new() -> PackageMeta {
         PackageMeta {
-            path:              PathBuf::new(),
             engine_version:    engine_version(),
             published_version: 0,
-            title:             "".to_string(),
-            source:            None,
             published:         false,
             hash:              "".to_string(),
             fighter_keys:      vec!(),
@@ -761,56 +678,8 @@ impl PackageMeta {
         }
     }
 
-    pub fn url(&self, path: &str) -> Option<Url> {
-        if let Some(ref source) = self.source {
-            let mut url = match Url::parse(source) {
-                Ok(mut url) => {
-                    if let Err(_) = url.set_scheme("https") {
-                        return None;
-                    }
-                    url
-                }
-                Err(UrlError::RelativeUrlWithoutBase) => { // occurs when scheme is missing
-                    if let Ok(url) = Url::parse(format!("https://{}", source).as_str()) {
-                        url
-                    } else {
-                        return None;
-                    }
-                }
-                _ => { return None; }
-            };
-
-            // cant use source.join(path) because it relies on a trailing '/'
-            if let Ok(mut segments) = url.path_segments_mut() {
-                segments.push(path);
-            }
-            else {
-                return None;
-            }
-            return Some(url);
-        }
-        None
-    }
-
     pub fn download_latest_meta(&self) -> Option<PackageMeta> {
-        if let Some(url) = self.url("package_meta.json") {
-            files::load_struct_from_url(url)
-        } else {
-            None
-        }
-    }
-
-    pub fn folder_name(&self) -> String {
-        self.path.file_name().unwrap().to_str().unwrap().to_string()
-    }
-
-    /// consume self into a Package
-    pub fn load(self) -> Result<Package, String> {
-        let mut package = Package {
-            meta: self,
-            .. Package::inner_blank()
-        };
-        package.load()?;
-        Ok(package)
+        let url = Url::parse("https://pfsandbox.net/latest_meta").unwrap();
+        files::load_struct_from_url(url)
     }
 }

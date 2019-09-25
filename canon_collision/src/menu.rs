@@ -2,7 +2,7 @@ use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
 use canon_collision_lib::input::PlayerInput;
 use canon_collision_lib::network::{Netplay, NetplayState};
-use canon_collision_lib::package::{Package, Verify};
+use canon_collision_lib::package::Package;
 use crate::game::{GameSetup, GameState, PlayerSetup};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::graphics;
@@ -105,14 +105,14 @@ impl Menu {
                     self.state = MenuState::NetplayWait { message: String::from("") };
                 }
                 2 => {
-                    self.state = MenuState::replay_select(package);
+                    self.state = MenuState::replay_select();
                 }
                 _ => unreachable!()
             }
         }
     }
 
-    pub fn step_replay_select(&mut self, package: &Package, player_inputs: &[PlayerInput]) {
+    pub fn step_replay_select(&mut self, player_inputs: &[PlayerInput]) {
         let back = if let &mut MenuState::ReplaySelect (ref replays, ref mut ticker) = &mut self.state {
             if player_inputs.iter().any(|x| x[0].stick_y > 0.4 || x[0].up) {
                 ticker.up();
@@ -126,7 +126,7 @@ impl Menu {
 
             if (player_inputs.iter().any(|x| x.start.press || x.a.press)) && replays.len() > 0 {
                 let name = &replays[ticker.cursor];
-                match replays::load_replay(name, package) {
+                match replays::load_replay(name) {
                     Ok(replay) => {
                         self.game_setup = Some(GameSetup {
                             init_seed:      replay.init_seed,
@@ -530,7 +530,7 @@ impl Menu {
         });
     }
 
-    fn step_results(&mut self, package: &Package, config: &Config, player_inputs: &[PlayerInput]) {
+    fn step_results(&mut self, config: &Config, player_inputs: &[PlayerInput]) {
         if player_inputs.iter().any(|x| x.start.press || x.a.press) {
             self.state = self.prev_state.take().unwrap();
         }
@@ -543,7 +543,7 @@ impl Menu {
         if let &mut MenuState::GameResults { ref mut replay_saved, .. } = &mut self.state {
             if !*replay_saved {
                 if config.auto_save_replay || player_inputs.iter().any(|x| x.l.press && x.r.press) {
-                    replays::save_replay(&self.game_results.as_ref().unwrap().replay, package);
+                    replays::save_replay(&self.game_results.as_ref().unwrap().replay);
                     *replay_saved = true;
                 }
             }
@@ -628,10 +628,10 @@ impl Menu {
                 if frame > 1 {
                     match self.state {
                         MenuState::GameSelect           => self.step_game_select   (package, config, &player_inputs, netplay),
-                        MenuState::ReplaySelect (_, _)  => self.step_replay_select (package, &player_inputs),
+                        MenuState::ReplaySelect (_, _)  => self.step_replay_select (&player_inputs),
                         MenuState::CharacterSelect {..} => self.step_fighter_select(package, &player_inputs, netplay),
                         MenuState::StageSelect          => self.step_stage_select  (package, &player_inputs, netplay),
-                        MenuState::GameResults {..}     => self.step_results       (package, config, &player_inputs),
+                        MenuState::GameResults {..}     => self.step_results       (config, &player_inputs),
                         MenuState::NetplayWait {..}     => self.step_netplay_wait  (&player_inputs, netplay),
                     };
                 }
@@ -650,7 +650,7 @@ impl Menu {
     }
 
     #[allow(dead_code)] // Needed for headless build
-    pub fn render(&self, package: &Package) -> RenderMenu {
+    pub fn render(&self) -> RenderMenu {
         RenderMenu {
             state: match self.state {
                 MenuState::GameResults { replay_saved } => RenderMenuState::GameResults { results: self.game_results.as_ref().unwrap().player_results.clone(), replay_saved },
@@ -660,7 +660,6 @@ impl Menu {
                 MenuState::GameSelect  => RenderMenuState::GameSelect  (self.game_ticker.cursor),
                 MenuState::StageSelect => RenderMenuState::StageSelect (self.stage_ticker.as_ref().unwrap().cursor),
             },
-            package_verify: package.verify(),
         }
     }
 
@@ -670,7 +669,7 @@ impl Menu {
 
         let render = Render {
             command_output:  command_line.output(),
-            render_type:     RenderType::Menu (self.render(package)),
+            render_type:     RenderType::Menu (self.render()),
             fullscreen:      config.fullscreen
         };
 
@@ -692,8 +691,8 @@ pub enum MenuState {
 }
 
 impl MenuState {
-    pub fn replay_select(package: &Package) -> MenuState {
-        let replays = replays::get_replay_names(package);
+    pub fn replay_select() -> MenuState {
+        let replays = replays::get_replay_names();
         let ticker = MenuTicker::new(replays.len());
         MenuState::ReplaySelect (replays, ticker)
     }
@@ -892,7 +891,6 @@ impl MenuTicker {
 
 pub struct RenderMenu {
     pub state:          RenderMenuState,
-    pub package_verify: Verify,
 }
 
 /// # Game -> Menu Transitions

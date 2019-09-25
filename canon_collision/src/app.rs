@@ -12,7 +12,6 @@ use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
 use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
-use canon_collision_lib::package;
 use crate::ai;
 use crate::cli::{self, ContinueFrom};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup};
@@ -67,10 +66,16 @@ pub fn run() {
     let mut net_command_line = NetCommandLine::new();
     let mut netplay = Netplay::new();
 
-    let mut package = if let Some(package) = Package::open_or_generate("TODO") {
-        Some(package)
-    } else {
-        println!("Could not load package");
+    let mut package = if let Some(path) = Package::find_package_in_parent_dirs() {
+        if let Some(package) = Package::open(path) {
+            Some(package)
+        } else {
+            println!("Could not load package");
+            return;
+        }
+    }
+    else {
+        println!("Could not find package in current directory or any of its parent directories.");
         return;
     };
 
@@ -78,8 +83,6 @@ pub fn run() {
     let (mut menu, mut game, mut os_input) = {
         #[allow(unused_variables)] // Needed for headless build
         let (os_input, os_input_tx) = OsInput::new();
-
-        package::generate_example_stub();
 
         #[cfg(any(feature = "wgpu_renderer"))]
         {

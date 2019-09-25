@@ -11,7 +11,7 @@ use crate::player::{RenderFighter, RenderPlayer, RenderPlayerFrame, DebugPlayer}
 use crate::results::PlayerResult;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::package::{Package, PackageUpdate, Verify};
+use canon_collision_lib::package::{Package, PackageUpdate};
 
 use std::collections::HashSet;
 use std::sync::mpsc::{Sender, Receiver, channel};
@@ -885,11 +885,11 @@ impl WgpuGraphics {
         match render.state {
             RenderMenuState::GameSelect (selection) => {
                 self.draw_game_selector(selection);
-                self.draw_package_banner(&render.package_verify, command_output);
+                self.command_render(command_output);
             }
             RenderMenuState::ReplaySelect (replay_names, selection) => {
                 self.draw_replay_selector(&replay_names, selection);
-                self.draw_package_banner(&render.package_verify, command_output);
+                self.command_render(command_output);
             }
             RenderMenuState::CharacterSelect (selections, back_counter, back_counter_max) => {
                 let mut plugged_in_selections: Vec<(&PlayerSelect, usize)> = vec!();
@@ -947,11 +947,11 @@ impl WgpuGraphics {
                         });
                     }
                 }
-                self.draw_package_banner(&render.package_verify, command_output);
+                self.command_render(command_output);
             }
             RenderMenuState::StageSelect (selection) => {
                 self.draw_stage_selector(&mut entities, selection);
-                self.draw_package_banner(&render.package_verify, command_output);
+                self.command_render(command_output);
             }
             RenderMenuState::GameResults { results, replay_saved } => {
                 let max = results.len() as f32;
@@ -1025,50 +1025,6 @@ impl WgpuGraphics {
                     rpass.draw_indexed(0 .. buffers.index_count, 0, 0 .. 1);
                 }
             }
-        }
-    }
-
-    fn draw_package_banner(&mut self, verify: &Verify, command_output: &[String]) {
-        if command_output.len() == 0 {
-            let package = &self.package.as_ref().unwrap();
-            let color: [f32; 4] = if let &Verify::Ok = verify {
-                [0.0, 1.0, 0.0, 1.0]
-            } else {
-                [1.0, 0.0, 0.0, 1.0]
-            };
-
-            let message = if let Some(ref source) = package.meta.source {
-                match verify {
-                    &Verify::Ok => {
-                        format!("{} - {}", package.meta.title, source)
-                    }
-                    &Verify::IncorrectHash => {
-                        format!("{} - {} - The computed hash did not match the hash given by the host", package.meta.title, source)
-                    }
-                    &Verify::UpdateAvailable => {
-                        format!("{} - {} - There is an update available from the host", package.meta.title, source)
-                    }
-                    &Verify::CannotConnect => {
-                        format!("{} - {} - Cannot connect to package host", package.meta.title, source)
-                    }
-                    &Verify::None => {
-                        unreachable!();
-                    }
-                }
-            } else {
-                package.meta.title.clone()
-            };
-
-            self.glyph_brush.queue(Section {
-                text: message.as_str(),
-                color,
-                screen_position: (30.0, self.height as f32 - 60.0),
-                scale: GlyphScale::uniform(30.0),
-                .. Section::default()
-            });
-        }
-        else {
-            self.command_render(command_output);
         }
     }
 

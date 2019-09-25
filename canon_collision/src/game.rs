@@ -121,7 +121,7 @@ impl Game {
         }
 
         if self.save_replay {
-            replays::save_replay(&Replay::new(self, input), &self.package);
+            replays::save_replay(&Replay::new(self, input));
             self.save_replay = false;
         }
 

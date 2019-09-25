@@ -6,16 +6,15 @@ use chrono::{Local, DateTime};
 
 use canon_collision_lib::files;
 use canon_collision_lib::input::ControllerInput;
-use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Stage;
 use crate::game::{Game, PlayerSetup};
 use crate::input::Input;
 use crate::player::Player;
 
-pub fn get_replay_names(package: &Package) -> Vec<String> {
+pub fn get_replay_names() -> Vec<String> {
     let mut result: Vec<String> = vec!();
     
-    if let Ok(files) = fs::read_dir(get_replays_dir_path(package)) {
+    if let Ok(files) = fs::read_dir(get_replays_dir_path()) {
         for file in files {
             if let Ok(file) = file {
                 let file_name = file.file_name().into_string().unwrap();
@@ -54,26 +53,25 @@ pub fn get_replay_names(package: &Package) -> Vec<String> {
     result
 }
 
-fn get_replays_dir_path(package: &Package) -> PathBuf {
+fn get_replays_dir_path() -> PathBuf {
     let mut replays_path = files::get_path();
     replays_path.push("replays");
-    replays_path.push(package.file_name());
     replays_path
 }
 
-fn get_replay_path(package: &Package, name: &str) -> PathBuf {
-    let mut replay_path = get_replays_dir_path(package);
+fn get_replay_path(name: &str) -> PathBuf {
+    let mut replay_path = get_replays_dir_path();
     replay_path.push(format!("{}.zip", name));
     replay_path
 }
 
-pub fn load_replay(name: &str, package: &Package) -> Result<Replay, String> {
-    let replay_path = get_replay_path(package, name);
+pub fn load_replay(name: &str) -> Result<Replay, String> {
+    let replay_path = get_replay_path(name);
     files::load_struct_bincode(replay_path)
 }
 
-pub fn save_replay(replay: &Replay, package: &Package) {
-    let replay_path = get_replay_path(package, replay.timestamp.to_rfc2822().as_ref()); // TODO: could still collide under strange circumstances: check and handle
+pub fn save_replay(replay: &Replay) {
+    let replay_path = get_replay_path(replay.timestamp.to_rfc2822().as_ref()); // TODO: could still collide under strange circumstances: check and handle
     files::save_struct_bincode(replay_path, &replay)
 }
 

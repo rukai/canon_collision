@@ -1,5 +1,5 @@
 [package]
-name = "runtime_state_upgrader"
+name = "package_upgrader"
 version = "0.0.1"
 license = "GPL-3.0"
 authors = ["Rukai <rubickent@gmail.com>"]

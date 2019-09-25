@@ -1672,6 +1672,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "package_upgrader"
+version = "0.0.1"
+dependencies = [
+ "canon_collision_lib 0.0.1",
+ "serde_cbor 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "pango"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2087,14 +2095,6 @@ dependencies = [
  "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "winreg 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "runtime_state_upgrader"
-version = "0.0.1"
-dependencies = [
- "canon_collision_lib 0.0.1",
- "serde_cbor 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
