@@ -59,6 +59,7 @@ impl VertexConstructor<FillVertex, ColorVertex> for StageVertexConstructor {
 
 #[derive(Clone)]
 pub struct Buffers {
+    // TODO: Arc is needed for derive(Clone) but I have no idea why I cloned it instead of borrowing, so try that sometime.
     pub vertex: Arc<Buffer>,
     pub index:  Arc<Buffer>,
     pub index_count: u32,

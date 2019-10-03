@@ -1,14 +1,15 @@
-/// There is a lot of duplicated code between this and the vulkan renderer.
-/// But thats ok because the vulkan renderer will be deleted once the wgpu renderer reaches feature parity.
 mod buffers;
+mod model3d;
 
 use buffers::{ColorVertex, ColorBuffers, Vertex, Buffers};
+use model3d::{Model3D, ModelVertex};
 use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::player::{RenderFighter, RenderPlayer, RenderPlayerFrame, DebugPlayer};
 use crate::results::PlayerResult;
+use crate::assets::Assets;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
@@ -35,6 +36,8 @@ use raw_window_handle::HasRawWindowHandle as _;
 
 pub struct WgpuGraphics {
     package:           Option<Package>,
+    assets:            Assets,
+    stage:             Model3D,
     glyph_brush:       GlyphBrush<'static, ()>,
     hack_font_id:      FontId,
     window:            Window,
@@ -45,6 +48,7 @@ pub struct WgpuGraphics {
     wsd:               WindowSizeDependent,
     pipeline:          RenderPipeline,
     pipeline_surface:  RenderPipeline,
+    pipeline_model3d:  RenderPipeline,
     bind_group_layout: BindGroupLayout,
     prev_fullscreen:   Option<bool>,
     frame_durations:   Vec<Duration>,
@@ -199,7 +203,7 @@ impl WgpuGraphics {
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
-            depth_stencil_state,
+            depth_stencil_state: depth_stencil_state.clone(),
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
                 stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -227,6 +231,45 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
+        let model3d_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-vertex.glsl", kind: vert);
+        let model3d_vs_module = device.create_shader_module(model3d_vs);
+
+        let model3d_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-fragment.glsl", kind: frag);
+        let model3d_fs_module = device.create_shader_module(model3d_fs);
+
+        let pipeline_model3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_layout,
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &model3d_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &model3d_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state,
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                stride: mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    // TODO: uvs
+                ],
+            }],
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+
         let dejavu: &[u8] = include_bytes!("../fonts/DejaVuSans.ttf");
         let hack: &[u8] = include_bytes!("../fonts/Hack-Regular.ttf");
 
@@ -238,8 +281,14 @@ impl WgpuGraphics {
         let height = size.height.round() as u32;
         let wsd = WindowSizeDependent::new(&device, &surface, width, height);
 
+        let mut assets = Assets::new().unwrap();
+        let data = assets.get_model("BeatMesa").unwrap();
+        let stage = Model3D::from_gltf(&device, &data);
+
         WgpuGraphics {
             package: None,
+            assets,
+            stage,
             glyph_brush,
             hack_font_id,
             window,
@@ -250,6 +299,7 @@ impl WgpuGraphics {
             wsd,
             pipeline,
             pipeline_surface,
+            pipeline_model3d,
             bind_group_layout,
             prev_fullscreen: None,
             frame_durations: vec!(),
@@ -263,6 +313,12 @@ impl WgpuGraphics {
         match event {
             Event::EventsCleared => {
                 let frame_start = Instant::now();
+
+                for reload in self.assets.models_reloads() {
+                    if reload.name == "BeatMesa" {
+                        self.stage = Model3D::from_gltf(&self.device, &reload.data);
+                    }
+                }
 
                 if self.force_send_window_events() {
                     *control_flow = ControlFlow::Exit;
@@ -564,6 +620,44 @@ impl WgpuGraphics {
         rpass.draw_indexed(0 .. buffers.index_count, 0, 0 .. 1);
     }
 
+    fn render_model3d(
+        &self,
+        pipeline: &RenderPipeline,
+        rpass:    &mut RenderPass,
+        render:   &RenderGame,
+        model:    &Model3D,
+        entity:   &Matrix4<f32>,
+    ) {
+        let zoom = render.camera.zoom.recip();
+        let aspect_ratio = self.aspect_ratio();
+        let camera = Matrix4::from_nonuniform_scale(zoom, zoom * aspect_ratio, 1.0);
+        let transformation = camera * entity;
+        let transformation = Matrix4::identity();
+        let uniform = ColorUniform { transformation: transformation.into() };
+
+        let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
+            .fill_from_slice(&[uniform]);
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.bind_group_layout,
+            bindings: &[wgpu::Binding {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer {
+                    buffer: &uniform_buffer,
+                    range: 0..mem::size_of::<ColorUniform>() as u64,
+                }
+            }]
+        });
+
+        for mesh in &model.meshes {
+            rpass.set_pipeline(pipeline);
+            rpass.set_bind_group(0, &bind_group, &[]);
+            rpass.set_index_buffer(&mesh.index, 0);
+            rpass.set_vertex_buffers(0, &[(&mesh.vertex, 0)]);
+            rpass.draw_indexed(0 .. mesh.index_count, 0, 0 .. 1);
+        }
+    }
+
     fn render_surface_buffers(
         &self,
         pipeline: &RenderPipeline,
@@ -641,6 +735,9 @@ impl WgpuGraphics {
             }
             _ => { }
         }
+
+        let stage_transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6001));
+        self.render_model3d(&self.pipeline_model3d, rpass, &render, &self.stage, &stage_transformation);
 
         if let Some(buffers) = ColorBuffers::new_surfaces(&self.device, &render.surfaces) {
             let transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6001));

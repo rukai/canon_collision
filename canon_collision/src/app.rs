@@ -55,10 +55,6 @@ pub fn run() {
         return;
     }
 
-    let mut _assets = Assets::new();
-    //assets.get_model("beatmesa");
-    //let _foo = assets.models_reloads();
-
     let mut context = Context::new().unwrap();
     let mut input = Input::new(&mut context);
     #[cfg(any(feature = "wgpu_renderer"))]
@@ -75,7 +71,16 @@ pub fn run() {
         }
     }
     else {
-        println!("Could not find package in current directory or any of its parent directories.");
+        println!("Could not find package/ in current directory or any of its parent directories.");
+        return;
+    };
+
+    // package has better file missing error handling so load assets after package
+    let mut _assets = if let Some(assets) = Assets::new() {
+        assets
+    }
+    else {
+        println!("Could not find assets/ in current directory or any of its parent directories.");
         return;
     };
 
