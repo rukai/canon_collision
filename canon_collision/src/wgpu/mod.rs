@@ -628,28 +628,26 @@ impl WgpuGraphics {
         model:    &Model3D,
         entity:   &Matrix4<f32>,
     ) {
-        let zoom = render.camera.zoom.recip();
-        let aspect_ratio = self.aspect_ratio();
-        let camera = Matrix4::from_nonuniform_scale(zoom, zoom * aspect_ratio, 1.0);
-        let transformation = camera * entity;
-        let transformation = Matrix4::identity();
-        let uniform = ColorUniform { transformation: transformation.into() };
-
-        let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
-            .fill_from_slice(&[uniform]);
-
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.bind_group_layout,
-            bindings: &[wgpu::Binding {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &uniform_buffer,
-                    range: 0..mem::size_of::<ColorUniform>() as u64,
-                }
-            }]
-        });
+        let camera = render.camera.transform();
 
         for mesh in &model.meshes {
+            let transformation = camera * entity * mesh.transform;
+            let uniform = ColorUniform { transformation: transformation.into() };
+
+            let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
+                .fill_from_slice(&[uniform]);
+
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.bind_group_layout,
+                bindings: &[wgpu::Binding {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &uniform_buffer,
+                        range: 0..mem::size_of::<ColorUniform>() as u64,
+                    }
+                }]
+            });
+
             rpass.set_pipeline(pipeline);
             rpass.set_bind_group(0, &bind_group, &[]);
             rpass.set_index_buffer(&mesh.index, 0);
@@ -736,7 +734,7 @@ impl WgpuGraphics {
             _ => { }
         }
 
-        let stage_transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6001));
+        let stage_transformation = Matrix4::identity();
         self.render_model3d(&self.pipeline_model3d, rpass, &render, &self.stage, &stage_transformation);
 
         if let Some(buffers) = ColorBuffers::new_surfaces(&self.device, &render.surfaces) {

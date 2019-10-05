@@ -16,6 +16,6 @@ def main():
             bpy.ops.wm.open_mainfile(filepath=str(blend_path))
 
             gltf_path = out_dir.joinpath(filename)
-            bpy.ops.export_scene.gltf(filepath=str(gltf_path))
+            bpy.ops.export_scene.gltf(filepath=str(gltf_path),export_apply=True)
 
 main()

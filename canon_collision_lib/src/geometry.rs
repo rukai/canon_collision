@@ -41,7 +41,7 @@ fn point_on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
     q.1 <= p.1.max(r.1) && q.1 >= p.1.min(r.1)
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Rect {
     pub x1: f32,
     pub y1: f32,

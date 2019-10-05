@@ -1,7 +1,9 @@
 use gltf::Gltf;
 use gltf::mesh::Mode;
 use gltf::buffer::Source;
+use gltf::scene::{Node, Transform};
 use wgpu::{Device, Buffer, Texture};
+use cgmath::{Matrix4, Quaternion};
 
 use std::convert::TryInto;
 
@@ -12,13 +14,14 @@ pub struct ModelVertex {
 }
 
 pub struct Mesh {
-    pub vertex: Buffer,
-    pub index:  Buffer,
+    pub transform:   Matrix4<f32>,
+    pub vertex:      Buffer,
+    pub index:       Buffer,
     pub index_count: u32,
 }
 
 impl Mesh {
-    fn new(device: &Device, vertices: &[ModelVertex], indices: &[u16]) -> Mesh {
+    fn new(device: &Device, vertices: &[ModelVertex], indices: &[u16], transform: Matrix4<f32>) -> Mesh {
         let vertex = device
             .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
             .fill_from_slice(&vertices);
@@ -29,7 +32,7 @@ impl Mesh {
 
         let index_count = indices.len() as u32;
 
-        Mesh { vertex, index, index_count }
+        Mesh { transform, vertex, index, index_count }
     }
 }
 
@@ -41,12 +44,27 @@ pub struct Model3D {
 
 impl Model3D {
     pub fn from_gltf(device: &Device, data: &[u8]) -> Model3D {
+        let gltf = Gltf::from_slice(&data).unwrap();
+        let blob = gltf.blob.as_ref().unwrap();
+        let scene = gltf.default_scene().unwrap();
+
+        let mut meshes = vec!();
+        let _textures = vec!();
+        for node in scene.nodes() {
+            let child_model = Model3D::from_gltf_node(device, &node, blob);
+            for mesh in child_model.meshes {
+                meshes.push(mesh);
+            }
+        }
+
+        Model3D { meshes, _textures }
+    }
+
+    fn from_gltf_node(device: &Device, node: &Node, blob: &[u8]) -> Model3D {
         let mut meshes = vec!();
         let _textures = vec!();
 
-        let gltf = Gltf::from_slice(&data).unwrap();
-        let blob = gltf.blob.as_ref().unwrap();
-        for mesh in gltf.meshes() {
+        if let Some(mesh) = node.mesh() {
             for primitive in mesh.primitives() {
                 match primitive.mode() {
                     Mode::Triangles => { }
@@ -72,7 +90,23 @@ impl Model3D {
                     .map(|x| x.try_into().unwrap())
                     .collect();
 
-                meshes.push(Mesh::new(device, &vertices, &indices));
+                let transform = match node.transform() {
+                    Transform::Matrix { .. } => unimplemented!("It is assumed that gltf node transforms only use decomposed form."),
+                    Transform::Decomposed { translation, rotation, scale } => {
+                        let translation = Matrix4::from_translation(translation.into());
+                        let rotation: Matrix4<f32> = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
+                        let scale = Matrix4::from_nonuniform_scale(scale[0], scale[1], scale[2]);
+                        translation * rotation * scale
+                    }
+                };
+
+                meshes.push(Mesh::new(device, &vertices, &indices, transform));
+            }
+        }
+        for child in node.children() {
+            let child_model = Model3D::from_gltf_node(device, &child, blob);
+            for mesh in child_model.meshes {
+                meshes.push(mesh);
             }
         }
 
