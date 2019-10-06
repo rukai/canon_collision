@@ -73,6 +73,11 @@ pub struct Game {
 impl Game {
     pub fn new(package: Package, setup: GameSetup) -> Game {
         let stage = package.stages[setup.stage.as_ref()].clone();
+        let debug_stage = if setup.debug {
+            DebugStage::all()
+        } else {
+            DebugStage::default()
+        };
 
         // generate players
         let mut players:       Vec<Player>      = vec!();
@@ -83,22 +88,22 @@ impl Game {
                 let fighter = player.fighter.clone();
                 let team = player.team;
                 players.push(Player::new(fighter, team, i, &stage, &package));
-                debug_players.push(Default::default());
+                if setup.debug {
+                    debug_players.push(DebugPlayer::all());
+                }
+                else {
+                    debug_players.push(Default::default());
+                }
             }
         }
 
         Game {
-            package:                package,
             init_seed:              setup.init_seed,
             state:                  setup.state,
             player_history:         setup.player_history,
             stage_history:          setup.stage_history,
             current_frame:          0,
             saved_frame:            0,
-            stage:                  stage,
-            players:                players,
-            debug_stage:            Default::default(),
-            debug_players:          debug_players,
             selected_controllers:   setup.controllers,
             selected_ais:           setup.ais,
             selected_stage:         setup.stage,
@@ -111,6 +116,11 @@ impl Game {
             tas:                    vec!(),
             save_replay:            false,
             reset_deadzones:        false,
+            package,
+            stage,
+            players,
+            debug_stage,
+            debug_players,
         }
     }
 
@@ -1470,6 +1480,7 @@ pub struct GameSetup {
     pub ais:            Vec<usize>,
     pub stage:          String,
     pub state:          GameState,
+    pub debug:          bool,
 }
 
 impl GameSetup {

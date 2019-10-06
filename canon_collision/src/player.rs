@@ -3009,23 +3009,27 @@ impl DebugPlayer {
             self.cam_area = !self.cam_area;
         }
         if os_input.key_pressed(VirtualKeyCode::F11) {
-            *self = DebugPlayer {
-                physics:        true,
-                input:          true,
-                input_diff:     true,
-                action:         true,
-                frame:          true,
-                stick_vector:   true,
-                c_stick_vector: true,
-                di_vector:      true,
-                hitbox_vectors: true,
-                ecb:            true,
-                fighter:        RenderFighter::NormalAndDebug,
-                cam_area:       true,
-            }
+            *self = DebugPlayer::all();
         }
         if os_input.key_pressed(VirtualKeyCode::F12) {
             *self = DebugPlayer::default();
+        }
+    }
+
+    pub fn all() -> Self {
+        DebugPlayer {
+            physics:        true,
+            input:          true,
+            input_diff:     true,
+            action:         true,
+            frame:          true,
+            stick_vector:   true,
+            c_stick_vector: true,
+            di_vector:      true,
+            hitbox_vectors: true,
+            ecb:            true,
+            fighter:        RenderFighter::NormalAndDebug,
+            cam_area:       true,
         }
     }
 }

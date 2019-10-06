@@ -194,6 +194,7 @@ pub fn run() {
                     controllers,
                     players,
                     ais,
+                    debug: cli_results.debug,
                 };
                 (
                     Menu::new(MenuState::character_select()),

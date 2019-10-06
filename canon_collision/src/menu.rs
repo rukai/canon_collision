@@ -138,6 +138,7 @@ impl Menu {
                             ais:            replay.selected_ais,
                             stage:          replay.selected_stage,
                             state:          GameState::ReplayForwards,
+                            debug:          false,
                         });
                     }
                     Err(error) => {
@@ -527,6 +528,7 @@ impl Menu {
             players,
             stage,
             state,
+            debug: false,
         });
     }
 

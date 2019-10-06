@@ -328,7 +328,9 @@ impl WgpuGraphics {
 
         let mut glyph_brush_builder = GlyphBrushBuilder::using_font_bytes(dejavu);
         let hack_font_id = glyph_brush_builder.add_font_bytes(hack);
-        let glyph_brush = glyph_brush_builder.build(&mut device, wgpu::TextureFormat::Bgra8Unorm);
+        let glyph_brush = glyph_brush_builder
+            .initial_cache_size((512, 512))
+            .build(&mut device, wgpu::TextureFormat::Bgra8Unorm);
 
         let width = size.width.round() as u32;
         let height = size.height.round() as u32;

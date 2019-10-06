@@ -384,16 +384,20 @@ impl DebugStage {
             self.render_stage_mode.step();
         }
         if os_input.key_pressed(VirtualKeyCode::F11) {
-            *self = DebugStage {
-                blast:             true,
-                camera:            true,
-                spawn_points:      true,
-                respawn_points:    true,
-                render_stage_mode: RenderStageMode::NormalAndDebug,
-            }
+            *self = DebugStage::all();
         }
         if os_input.key_pressed(VirtualKeyCode::F12) {
             *self = DebugStage::default();
+        }
+    }
+
+    pub fn all() -> Self {
+        DebugStage {
+            blast:             true,
+            camera:            true,
+            spawn_points:      true,
+            respawn_points:    true,
+            render_stage_mode: RenderStageMode::NormalAndDebug,
         }
     }
 }

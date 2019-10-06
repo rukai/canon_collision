@@ -12,15 +12,15 @@ pub fn cli() -> CLIResults {
     let program = &args[0];
 
     let mut opts = Options::new();
-    opts.optflag("l", "list", "List available packages and close");
-    opts.optopt("s", "stage",          "Use the stage specified", "NAME");
-    opts.optopt("f", "fighters",       "Use the fighters specified", "NAME1,NAME2,NAME3...");
-    opts.optopt("h", "humanplayers",   "Number of human players in the game", "NUM_HUMAN_PLAYERS");
-    opts.optopt("c", "cpuplayers",     "Number of CPU players in the game", "NUM_CPU_PLAYERS");
-    opts.optopt("a", "address",        "IP Address of other client to start netplay with", "IP_ADDRESS");
-    opts.optopt("n", "netplayplayers", "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
-    opts.optopt("r", "netplayregion",  "Search for a netplay game with the specified region", "REGION");
-    opts.optopt("g", "graphics",       "Graphics backend to use",
+    opts.optflag("d", "debug",          "Start the game with every debug tool turned on");
+    opts.optopt("s",  "stage",          "Use the stage specified", "NAME");
+    opts.optopt("f",  "fighters",       "Use the fighters specified", "NAME1,NAME2,NAME3...");
+    opts.optopt("h",  "humanplayers",   "Number of human players in the game", "NUM_HUMAN_PLAYERS");
+    opts.optopt("c",  "cpuplayers",     "Number of CPU players in the game", "NUM_CPU_PLAYERS");
+    opts.optopt("a",  "address",        "IP Address of other client to start netplay with", "IP_ADDRESS");
+    opts.optopt("n",  "netplayplayers", "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
+    opts.optopt("r",  "netplayregion",  "Search for a netplay game with the specified region", "REGION");
+    opts.optopt("g",  "graphics",       "Graphics backend to use",
         if cfg!(feature = "wgpu_renderer") {
             "[wgpu|none]"
         } else {
@@ -47,6 +47,11 @@ pub fn cli() -> CLIResults {
     else if matches.free.len() == 1 {
         results.continue_from = ContinueFrom::Game;
         results.package = Some(matches.free[0].clone());
+    }
+
+    if matches.opt_present("d") {
+        results.continue_from = ContinueFrom::Game;
+        results.debug = true;
     }
 
     if let Some(players) = matches.opt_str("h") {
@@ -140,6 +145,7 @@ pub struct CLIResults {
     pub continue_from:     ContinueFrom,
     pub netplay_players:   Option<u8>,
     pub netplay_region:    Option<String>,
+    pub debug:             bool,
 }
 
 impl CLIResults {
@@ -155,6 +161,7 @@ impl CLIResults {
             continue_from:     ContinueFrom::Menu,
             netplay_players:   None,
             netplay_region:    None,
+            debug:             false,
         }
     }
 }
