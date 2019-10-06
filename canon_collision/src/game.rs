@@ -16,7 +16,7 @@ use canon_collision_lib::input::{PlayerInput, ControllerInput};
 use canon_collision_lib::network::Netplay;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::rules::Goal;
-use canon_collision_lib::stage::{Stage, DebugStage, SpawnPoint, Surface, Floor};
+use canon_collision_lib::stage::{Stage, DebugStage, SpawnPoint, Surface, Floor, RenderStageMode};
 
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaChaRng;
@@ -1224,6 +1224,7 @@ impl Game {
             seed:              self.get_seed(),
             surfaces:          self.stage.surfaces.to_vec(),
             selected_surfaces: self.selector.surfaces.clone(),
+            render_stage_mode: self.debug_stage.render_stage_mode.clone(),
             entities:          entities,
             state:             self.state.clone(),
             camera:            self.camera.clone(),
@@ -1410,6 +1411,7 @@ pub struct RenderGame {
     pub seed:              [u8; 32],
     pub surfaces:          Vec<Surface>,
     pub selected_surfaces: HashSet<SurfaceSelection>,
+    pub render_stage_mode: RenderStageMode,
     pub entities:          Vec<RenderEntity>,
     pub state:             GameState,
     pub camera:            Camera,

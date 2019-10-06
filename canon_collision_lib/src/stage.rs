@@ -359,10 +359,11 @@ impl SpawnPoint {
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct DebugStage {
-    pub blast:          bool,
-    pub camera:         bool,
-    pub spawn_points:   bool,
-    pub respawn_points: bool,
+    pub blast:             bool,
+    pub camera:            bool,
+    pub spawn_points:      bool,
+    pub respawn_points:    bool,
+    pub render_stage_mode: RenderStageMode,
 }
 
 impl DebugStage {
@@ -379,16 +380,72 @@ impl DebugStage {
         if os_input.key_pressed(VirtualKeyCode::F4) {
             self.respawn_points = !self.respawn_points;
         }
+        if os_input.key_pressed(VirtualKeyCode::F9) {
+            self.render_stage_mode.step();
+        }
         if os_input.key_pressed(VirtualKeyCode::F11) {
             *self = DebugStage {
-                blast:          true,
-                camera:         true,
-                spawn_points:   true,
-                respawn_points: true,
+                blast:             true,
+                camera:            true,
+                spawn_points:      true,
+                respawn_points:    true,
+                render_stage_mode: RenderStageMode::NormalAndDebug,
             }
         }
         if os_input.key_pressed(VirtualKeyCode::F12) {
             *self = DebugStage::default();
         }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Node)]
+pub enum RenderStageMode {
+    Normal,
+    NormalAndDebug,
+    Debug,
+    DebugOnionSkin,
+}
+
+impl RenderStageMode {
+    pub fn step(&mut self) {
+        *self = match self {
+            RenderStageMode::Normal         => RenderStageMode::NormalAndDebug,
+            RenderStageMode::NormalAndDebug => RenderStageMode::Debug,
+            RenderStageMode::Debug          => RenderStageMode::DebugOnionSkin,
+            RenderStageMode::DebugOnionSkin => RenderStageMode::Normal,
+        };
+    }
+
+    pub fn normal(&self) -> bool {
+        match self {
+            RenderStageMode::Normal         => true,
+            RenderStageMode::NormalAndDebug => true,
+            RenderStageMode::Debug          => false,
+            RenderStageMode::DebugOnionSkin => false,
+        }
+    }
+
+    pub fn debug(&self) -> bool {
+        match self {
+            RenderStageMode::Normal         => false,
+            RenderStageMode::NormalAndDebug => true,
+            RenderStageMode::Debug          => true,
+            RenderStageMode::DebugOnionSkin => true,
+        }
+    }
+
+    pub fn onion_skin(&self) -> bool {
+        match self {
+            RenderStageMode::Normal         => false,
+            RenderStageMode::NormalAndDebug => false,
+            RenderStageMode::Debug          => false,
+            RenderStageMode::DebugOnionSkin => true,
+        }
+    }
+}
+
+impl Default for RenderStageMode {
+    fn default() -> Self {
+        RenderStageMode::Normal
     }
 }

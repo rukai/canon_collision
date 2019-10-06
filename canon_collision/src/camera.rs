@@ -70,11 +70,10 @@ impl Camera {
                     // pan camera
                     if os_input.mouse_held(2) {
                         let mouse_diff = os_input.mouse_diff();
-                        self.rect.x1 += mouse_diff.0 as f32;
-                        self.rect.x2 += mouse_diff.0 as f32;
+                        self.rect.x1 -= mouse_diff.0 as f32;
+                        self.rect.x2 -= mouse_diff.0 as f32;
                         self.rect.y1 += mouse_diff.1 as f32;
                         self.rect.y2 += mouse_diff.1 as f32;
-                        println!("x1 {} mouse_diff.0 {}", self.rect.x1, mouse_diff.0);
 
                         self.pan.0 += mouse_diff.0 as f32;
                         self.pan.1 -= mouse_diff.1 as f32;
@@ -104,11 +103,7 @@ impl Camera {
                 None => {
                     self.pan = (0.0, 0.0);
                     self.zoom = 100.0;
-                    self.rect = Rect { x1: -10.0, y1: -10.0, x2: 10.0, y2: 10.0 };
-                    // TODO: I can use this to debug a specific camera state
-                    //self.rect = Rect { x1: -100.0, y1: -100.0, x2: 100.0, y2: 100.0 };
-                    //self.rect = Rect { x1: -100.0, y1: -200.0, x2: 100.0, y2: 0.0 };
-                    //self.rect = Rect { x1: -100.0, y1: -150.0, x2: 100.0, y2: 50.0 };
+                    self.rect = Rect { x1: -200.0, y1: -200.0, x2: 200.0, y2: 200.0 };
                     return;
                 }
             };

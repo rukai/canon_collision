@@ -5,7 +5,7 @@ use canon_collision_lib::stage::Surface;
 use crate::player::RenderShield;
 use crate::graphics;
 use crate::player::RenderPlayer;
-use crate::game::SurfaceSelection;
+use crate::game::{SurfaceSelection, RenderRect};
 
 use wgpu::{Device, Buffer};
 
@@ -26,23 +26,15 @@ pub struct Vertex {
     pub render_id: u32,
 }
 
-fn vertex(x: f32, y: f32) -> Vertex {
-    Vertex {
-        position: [x, y],
-        edge: 1.0,
-        render_id: 0,
-    }
-}
-
 #[derive(Default, Debug, Clone, Copy)]
 pub struct ColorVertex {
-    pub position:  [f32; 2],
+    pub position:  [f32; 4],
     pub color:     [f32; 4],
 }
 
 fn colorvertex(x: f32, y: f32, color: [f32; 4]) -> ColorVertex {
     ColorVertex {
-        position: [x, y],
+        position: [x, y, 0.0, 1.0],
         color
     }
 }
@@ -51,7 +43,7 @@ struct StageVertexConstructor;
 impl VertexConstructor<FillVertex, ColorVertex> for StageVertexConstructor {
     fn new_vertex(&mut self, vertex: FillVertex) -> ColorVertex {
         ColorVertex {
-            position: vertex.position.to_array(),
+            position: [vertex.position.x, vertex.position.y, 0.0, 1.0],
             color:    [0.16, 0.16, 0.16, 1.0]
         }
     }
@@ -60,15 +52,15 @@ impl VertexConstructor<FillVertex, ColorVertex> for StageVertexConstructor {
 #[derive(Clone)]
 pub struct Buffers {
     // TODO: Arc is needed for derive(Clone) but I have no idea why I cloned it instead of borrowing, so try that sometime.
-    pub vertex: Arc<Buffer>,
-    pub index:  Arc<Buffer>,
+    pub vertex:      Arc<Buffer>,
+    pub index:       Arc<Buffer>,
     pub index_count: u32,
 }
 
 #[derive(Clone)]
 pub struct ColorBuffers {
-    pub vertex: Arc<Buffer>,
-    pub index:  Arc<Buffer>,
+    pub vertex:      Arc<Buffer>,
+    pub index:       Arc<Buffer>,
     pub index_count: u32,
 }
 
@@ -89,217 +81,6 @@ impl Buffers {
         let index_count = indices.len() as u32;
 
         Buffers { vertex, index, index_count }
-    }
-
-    /// Creates a single circle with radius 1 around the origin
-    pub fn new_circle(device: &Device) -> Buffers {
-        let mut vertices: Vec<Vertex> = vec!();
-        let mut indices: Vec<u16> = vec!();
-
-        let iterations = 40;
-
-        vertices.push(Vertex { position: [0.0, 0.0], edge: 0.0, render_id: 0});
-        for i in 0..iterations {
-            let angle = i as f32 * 2.0 * consts::PI / (iterations as f32);
-            let (sin, cos) = angle.sin_cos();
-            vertices.push(Vertex { position: [cos, sin], edge: 1.0, render_id: 0});
-            indices.push(0);
-            indices.push(i + 1);
-            indices.push((i + 1) % iterations + 1);
-        }
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    /// Creates a single triangle with sides of length 1
-    pub fn new_triangle(device: &Device) -> Buffers {
-        let h = ((3.0/4.0) as f32).sqrt();
-        let vertices = [
-            Vertex { position: [0.0,    h  ], edge: 0.0, render_id: 0 },
-            Vertex { position: [h/-2.0, 0.0], edge: 0.0, render_id: 0 },
-            Vertex { position: [h/2.0,  0.0], edge: 0.0, render_id: 0 }
-        ];
-
-        let indices = [0, 1, 2];
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn new_shield(device: &Device, shield: &RenderShield) -> Buffers {
-        let mut vertices: Vec<Vertex> = vec!();
-        let mut indices: Vec<u16> = vec!();
-
-        let triangles = match shield.distort {
-            0 => 100,
-            1 => 20,
-            2 => 10,
-            3 => 8,
-            4 => 7,
-            5 => 6,
-            _ => 5
-        };
-
-        // triangles are drawn meeting at the centre, forming a circle
-        vertices.push(Vertex { position: [0.0, 0.0], edge: 0.0, render_id: 0});
-        for i in 0..triangles {
-            let angle = i as f32 * 2.0 * consts::PI / (triangles as f32);
-            let (sin, cos) = angle.sin_cos();
-            let x = cos * shield.radius;
-            let y = sin * shield.radius;
-            vertices.push(Vertex { position: [x, y], edge: 1.0, render_id: 0});
-            indices.push(0);
-            indices.push(i + 1);
-            indices.push((i + 1) % triangles + 1);
-        }
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn new_spawn_point(device: &Device) -> Buffers {
-        let vertices: [Vertex; 11] = [
-            // vertical bar
-            vertex(-0.15, -4.0),
-            vertex( 0.15, -4.0),
-            vertex(-0.15,  4.0),
-            vertex( 0.15,  4.0),
-
-            // horizontal bar
-            vertex(-4.0, -0.15),
-            vertex(-4.0,  0.15),
-            vertex( 4.0, -0.15),
-            vertex( 4.0,  0.15),
-
-            // arrow head
-            vertex(4.2, 0.0),
-            vertex(3.0, -1.0),
-            vertex(3.0, 1.0),
-        ];
-
-        let indices: [u16; 15] = [
-            // vertical bar
-            0, 1, 2,
-            3, 2, 1,
-
-            // horizontal bar
-            4, 5, 6,
-            7, 6, 5,
-
-            // arrow head
-            8, 9, 10
-        ];
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn new_arrow(device: &Device) -> Buffers {
-        let vertices: [Vertex; 7] = [
-            // stick
-            vertex(-0.7, 0.0),
-            vertex(0.7, 0.0),
-            vertex(-0.7, 10.0),
-            vertex(0.7, 10.0),
-
-            // head
-            vertex(0.0, 12.0),
-            vertex(-2.2, 10.0),
-            vertex(2.2, 10.0),
-        ];
-
-        let indices: [u16; 9] = [
-            // stick
-            0, 1, 2,
-            1, 2, 3,
-
-            //head
-            4, 5, 6
-        ];
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn rect_buffers(device: &Device, rect: Rect) -> Buffers {
-        let left  = rect.left();
-        let right = rect.right();
-        let bot   = rect.bot();
-        let top   = rect.top();
-
-        let vertices: [Vertex; 4] = [
-            vertex(left,  bot),
-            vertex(right, bot),
-            vertex(right, top),
-            vertex(left,  top),
-        ];
-
-        let indices: [u16; 6] = [
-            0, 1, 2,
-            0, 2, 3
-        ];
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn rect_outline_buffers(device: &Device, rect: &Rect) -> Buffers {
-        let width = 0.5;
-        let left  = rect.left();
-        let right = rect.right();
-        let bot   = rect.bot();
-        let top   = rect.top();
-
-        let vertices: [Vertex; 8] = [
-            // outer rectangle
-            vertex(left,  bot),
-            vertex(right, bot),
-            vertex(right, top),
-            vertex(left,  top),
-
-            // inner rectangle
-            vertex(left+width,  bot+width),
-            vertex(right-width, bot+width),
-            vertex(right-width, top-width),
-            vertex(left+width,  top-width),
-        ];
-
-        let indices: [u16; 24] = [
-            0, 4, 1, 1, 4, 5, // bottom edge
-            1, 5, 2, 2, 5, 6, // right edge
-            2, 6, 3, 3, 7, 6, // top edge
-            3, 7, 0, 0, 4, 7, // left edge
-        ];
-
-        Buffers::new(device, &vertices, &indices)
-    }
-
-    pub fn new_player(device: &Device, player: &RenderPlayer) -> Buffers {
-        let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
-        let vertices: [Vertex; 12] = [
-            // ecb
-            vertex(0.0,                        player.frames[0].ecb.bottom),
-            vertex(player.frames[0].ecb.left,  mid_y),
-            vertex(player.frames[0].ecb.right, mid_y),
-            vertex(0.0,                        player.frames[0].ecb.top),
-
-            // horizontal bps
-            vertex(-4.0, -0.15),
-            vertex(-4.0,  0.15),
-            vertex( 4.0, -0.15),
-            vertex( 4.0,  0.15),
-
-            // vertical bps
-            vertex(-0.15, -4.0),
-            vertex( 0.15, -4.0),
-            vertex(-0.15,  4.0),
-            vertex( 0.15,  4.0),
-        ];
-
-        let indices: [u16; 18] = [
-            1,  2,  0,
-            1,  2,  3,
-            4,  5,  6,
-            7,  6,  5,
-            8,  9,  10,
-            11, 10, 9,
-        ];
-
-        Buffers::new(device, &vertices, &indices)
     }
 
     pub fn gen_colbox(vertices: &mut Vec<Vertex>, indices: &mut Vec<u16>, colbox: &CollisionBox, index_count: &mut u16, render_id: u32) {
@@ -661,5 +442,218 @@ impl ColorBuffers {
         ).unwrap();
 
         Some(ColorBuffers::new(device, &mesh.vertices, &mesh.indices))
+    }
+
+    /// TODO: Set individual corner vertex colours to show which points of the ecb are selected
+    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> ColorBuffers {
+        let color = [1.0, 1.0, 1.0, 1.0];
+        let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
+        let vertices: [ColorVertex; 12] = [
+            // ecb
+            colorvertex(0.0,                        player.frames[0].ecb.bottom, color),
+            colorvertex(player.frames[0].ecb.left,  mid_y, color),
+            colorvertex(player.frames[0].ecb.right, mid_y, color),
+            colorvertex(0.0,                        player.frames[0].ecb.top, color),
+
+            // horizontal bps
+            colorvertex(-4.0, -0.15, color),
+            colorvertex(-4.0,  0.15, color),
+            colorvertex( 4.0, -0.15, color),
+            colorvertex( 4.0,  0.15, color),
+
+            // vertical bps
+            colorvertex(-0.15, -4.0, color),
+            colorvertex( 0.15, -4.0, color),
+            colorvertex(-0.15,  4.0, color),
+            colorvertex( 0.15,  4.0, color),
+        ];
+
+        let indices: [u16; 18] = [
+            1,  2,  0,
+            1,  2,  3,
+            4,  5,  6,
+            7,  6,  5,
+            8,  9,  10,
+            11, 10, 9,
+        ];
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    pub fn new_arrow(device: &Device, color: [f32; 4]) -> ColorBuffers {
+        let vertices: [ColorVertex; 7] = [
+            // stick
+            colorvertex(-0.7, 0.0, color),
+            colorvertex(0.7, 0.0, color),
+            colorvertex(-0.7, 10.0, color),
+            colorvertex(0.7, 10.0, color),
+
+            // head
+            colorvertex(0.0, 12.0, color),
+            colorvertex(-2.2, 10.0, color),
+            colorvertex(2.2, 10.0, color),
+        ];
+
+        let indices: [u16; 9] = [
+            // stick
+            0, 1, 2,
+            1, 2, 3,
+
+            //head
+            4, 5, 6
+        ];
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    pub fn rect_buffers(device: &Device, rect: Rect, color: [f32; 4]) -> ColorBuffers {
+        let left  = rect.left();
+        let right = rect.right();
+        let bot   = rect.bot();
+        let top   = rect.top();
+
+        let vertices: [ColorVertex; 4] = [
+            colorvertex(left,  bot, color),
+            colorvertex(right, bot, color),
+            colorvertex(right, top, color),
+            colorvertex(left,  top, color),
+        ];
+
+        let indices: [u16; 6] = [
+            0, 1, 2,
+            0, 2, 3
+        ];
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    pub fn rect_outline_buffers(device: &Device, rect: &RenderRect) -> ColorBuffers {
+        let width = 0.5;
+        let left  = rect.rect.left();
+        let right = rect.rect.right();
+        let bot   = rect.rect.bot();
+        let top   = rect.rect.top();
+
+        let vertices: [ColorVertex; 8] = [
+            // outer rectangle
+            colorvertex(left,  bot, rect.color),
+            colorvertex(right, bot, rect.color),
+            colorvertex(right, top, rect.color),
+            colorvertex(left,  top, rect.color),
+
+            // inner rectangle
+            colorvertex(left+width,  bot+width, rect.color),
+            colorvertex(right-width, bot+width, rect.color),
+            colorvertex(right-width, top-width, rect.color),
+            colorvertex(left+width,  top-width, rect.color),
+        ];
+
+        let indices: [u16; 24] = [
+            0, 4, 1, 1, 4, 5, // bottom edge
+            1, 5, 2, 2, 5, 6, // right edge
+            2, 6, 3, 3, 7, 6, // top edge
+            3, 7, 0, 0, 4, 7, // left edge
+        ];
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    /// Creates a single triangle with sides of length 1
+    pub fn new_triangle(device: &Device, color: [f32; 4]) -> ColorBuffers {
+        let h = ((3.0/4.0) as f32).sqrt();
+        let vertices = [
+            colorvertex(0.0,    h  , color),
+            colorvertex(h/-2.0, 0.0, color),
+            colorvertex(h/2.0,  0.0, color)
+        ];
+
+        let indices = [0, 1, 2];
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> ColorBuffers {
+        let mut vertices: Vec<ColorVertex> = vec!();
+        let mut indices: Vec<u16> = vec!();
+
+        let triangles = match shield.distort {
+            0 => 100,
+            1 => 20,
+            2 => 10,
+            3 => 8,
+            4 => 7,
+            5 => 6,
+            _ => 5
+        };
+
+        // triangles are drawn meeting at the centre, forming a circle
+        vertices.push(colorvertex(0.0, 0.0, color));
+        for i in 0..triangles {
+            let angle = i as f32 * 2.0 * consts::PI / (triangles as f32);
+            let (sin, cos) = angle.sin_cos();
+            let x = cos * shield.radius;
+            let y = sin * shield.radius;
+            vertices.push(colorvertex(x, y, color));
+            indices.push(0);
+            indices.push(i + 1);
+            indices.push((i + 1) % triangles + 1);
+        }
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    pub fn new_spawn_point(device: &Device, color: [f32; 4]) -> ColorBuffers {
+        let vertices: [ColorVertex; 11] = [
+            // vertical bar
+            colorvertex(-0.15, -4.0, color),
+            colorvertex( 0.15, -4.0, color),
+            colorvertex(-0.15,  4.0, color),
+            colorvertex( 0.15,  4.0, color),
+
+            // horizontal bar
+            colorvertex(-4.0, -0.15, color),
+            colorvertex(-4.0,  0.15, color),
+            colorvertex( 4.0, -0.15, color),
+            colorvertex( 4.0,  0.15, color),
+
+            // arrow head
+            colorvertex(4.2, 0.0, color),
+            colorvertex(3.0, -1.0, color),
+            colorvertex(3.0, 1.0, color),
+        ];
+
+        let indices: [u16; 15] = [
+            // vertical bar
+            0, 1, 2,
+            3, 2, 1,
+
+            // horizontal bar
+            4, 5, 6,
+            7, 6, 5,
+
+            // arrow head
+            8, 9, 10
+        ];
+
+        ColorBuffers::new(device, &vertices, &indices)
+    }
+
+    /// Creates a single circle with radius 1 around the origin
+    pub fn new_circle(device: &Device, color: [f32; 4]) -> ColorBuffers {
+        let mut vertices: Vec<ColorVertex> = vec!();
+        let mut indices: Vec<u16> = vec!();
+
+        let iterations = 40;
+
+        vertices.push(colorvertex(0.0, 0.0, color));
+        for i in 0..iterations {
+            let angle = i as f32 * 2.0 * consts::PI / (iterations as f32);
+            let (sin, cos) = angle.sin_cos();
+            vertices.push(colorvertex(cos, sin, color));
+            indices.push(0);
+            indices.push(i + 1);
+            indices.push((i + 1) % iterations + 1);
+        }
+
+        ColorBuffers::new(device, &vertices, &indices)
     }
 }

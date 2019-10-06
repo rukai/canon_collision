@@ -2905,13 +2905,51 @@ pub struct VectorArrow {
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum RenderFighter {
     Normal,
-    OnionSkin,
+    NormalAndDebug,
     Debug,
-    None,
+    DebugOnionSkin,
+}
+
+impl RenderFighter {
+    pub fn step(&mut self) {
+        *self = match self {
+            RenderFighter::Normal         => RenderFighter::NormalAndDebug,
+            RenderFighter::NormalAndDebug => RenderFighter::Debug,
+            RenderFighter::Debug          => RenderFighter::DebugOnionSkin,
+            RenderFighter::DebugOnionSkin => RenderFighter::Normal,
+        };
+    }
+
+    pub fn normal(&self) -> bool {
+        match self {
+            RenderFighter::Normal         => true,
+            RenderFighter::NormalAndDebug => true,
+            RenderFighter::Debug          => false,
+            RenderFighter::DebugOnionSkin => false,
+        }
+    }
+
+    pub fn debug(&self) -> bool {
+        match self {
+            RenderFighter::Normal         => false,
+            RenderFighter::NormalAndDebug => true,
+            RenderFighter::Debug          => true,
+            RenderFighter::DebugOnionSkin => true,
+        }
+    }
+
+    pub fn onion_skin(&self) -> bool {
+        match self {
+            RenderFighter::Normal         => false,
+            RenderFighter::NormalAndDebug => false,
+            RenderFighter::Debug          => false,
+            RenderFighter::DebugOnionSkin => true,
+        }
+    }
 }
 
 impl Default for RenderFighter {
-    fn default() -> RenderFighter {
+    fn default() -> Self {
         RenderFighter::Normal
     }
 }
@@ -2965,20 +3003,7 @@ impl DebugPlayer {
             self.ecb = !self.ecb;
         }
         if os_input.key_pressed(VirtualKeyCode::F9) {
-            self.fighter = match self.fighter {
-                RenderFighter::Normal => {
-                    RenderFighter::OnionSkin
-                }
-                RenderFighter::OnionSkin=> {
-                    RenderFighter::Debug
-                }
-                RenderFighter::Debug => {
-                    RenderFighter::None
-                }
-                RenderFighter::None => {
-                    RenderFighter::Normal
-                }
-            };
+            self.fighter.step();
         }
         if os_input.key_pressed(VirtualKeyCode::F10) {
             self.cam_area = !self.cam_area;
@@ -2995,7 +3020,7 @@ impl DebugPlayer {
                 di_vector:      true,
                 hitbox_vectors: true,
                 ecb:            true,
-                fighter:        RenderFighter::Debug,
+                fighter:        RenderFighter::NormalAndDebug,
                 cam_area:       true,
             }
         }

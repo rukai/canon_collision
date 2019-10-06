@@ -7,7 +7,7 @@ use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
-use crate::player::{RenderFighter, RenderPlayer, RenderPlayerFrame, DebugPlayer};
+use crate::player::{RenderPlayer, RenderPlayerFrame, DebugPlayer};
 use crate::results::PlayerResult;
 use crate::assets::Assets;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
@@ -46,8 +46,9 @@ pub struct WgpuGraphics {
     device:            Device,
     surface:           Surface,
     wsd:               WindowSizeDependent,
-    pipeline:          RenderPipeline,
-    pipeline_surface:  RenderPipeline,
+    pipeline_color:    RenderPipeline,
+    pipeline_hitbox:   RenderPipeline,
+    pipeline_debug:    RenderPipeline,
     pipeline_model3d:  RenderPipeline,
     bind_group_layout: BindGroupLayout,
     prev_fullscreen:   Option<bool>,
@@ -99,11 +100,11 @@ impl WgpuGraphics {
             limits: wgpu::Limits::default(),
         });
 
-        let surface_vs = vk_shader_macros::include_glsl!("src/shaders/surface-vertex.glsl", kind: vert);
-        let surface_vs_module = device.create_shader_module(surface_vs);
+        let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
+        let color_vs_module = device.create_shader_module(color_vs);
 
-        let surface_fs = vk_shader_macros::include_glsl!("src/shaders/surface-fragment.glsl", kind: frag);
-        let surface_fs_module = device.create_shader_module(surface_fs);
+        let color_fs = vk_shader_macros::include_glsl!("src/shaders/color-fragment.glsl", kind: frag);
+        let color_fs_module = device.create_shader_module(color_fs);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { bindings: &[
             wgpu::BindGroupLayoutBinding {
@@ -148,14 +149,14 @@ impl WgpuGraphics {
             stencil_write_mask: 0,
         });
 
-        let pipeline_surface = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline_color = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &surface_vs_module,
+                module: &color_vs_module,
                 entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &surface_fs_module,
+                module: &color_fs_module,
                 entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
@@ -168,13 +169,13 @@ impl WgpuGraphics {
                 step_mode: wgpu::InputStepMode::Vertex,
                 attributes: &[
                     wgpu::VertexAttributeDescriptor {
-                        format: wgpu::VertexFormat::Float2,
+                        format: wgpu::VertexFormat::Float4,
                         offset: 0,
                         shader_location: 0,
                     },
                     wgpu::VertexAttributeDescriptor {
                         format: wgpu::VertexFormat::Float4,
-                        offset: 4 * 2,
+                        offset: 4 * 4,
                         shader_location: 1,
                     },
                 ],
@@ -184,26 +185,78 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
-        let vs = vk_shader_macros::include_glsl!("src/shaders/generic-vertex.glsl", kind: vert);
-        let vs_module = device.create_shader_module(vs);
-
-        let fs = vk_shader_macros::include_glsl!("src/shaders/generic-fragment.glsl", kind: frag);
-        let fs_module = device.create_shader_module(fs);
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline_debug = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &vs_module,
+                module: &color_vs_module,
                 entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &fs_module,
+                module: &color_fs_module,
                 entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
-            depth_stencil_state: depth_stencil_state.clone(),
+            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_read_mask: 0,
+                stencil_write_mask: 0,
+            }),
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 4 * 4,
+                        shader_location: 1,
+                    },
+                ],
+            }],
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        let hitbox_vs = vk_shader_macros::include_glsl!("src/shaders/hitbox-vertex.glsl", kind: vert);
+        let hitbox_vs_module = device.create_shader_module(hitbox_vs);
+
+        let hitbox_fs = vk_shader_macros::include_glsl!("src/shaders/hitbox-fragment.glsl", kind: frag);
+        let hitbox_fs_module = device.create_shader_module(hitbox_fs);
+
+        let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_layout,
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &hitbox_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &hitbox_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil_read_mask: 0,
+                stencil_write_mask: 0,
+            }),
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
                 stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -297,8 +350,9 @@ impl WgpuGraphics {
             surface,
             device,
             wsd,
-            pipeline,
-            pipeline_surface,
+            pipeline_color,
+            pipeline_hitbox,
+            pipeline_debug,
             pipeline_model3d,
             bind_group_layout,
             prev_fullscreen: None,
@@ -323,7 +377,6 @@ impl WgpuGraphics {
                 if self.force_send_window_events() {
                     *control_flow = ControlFlow::Exit;
                 }
-
 
                 // get the most recent render
                 let mut render = if let Ok(message) = self.render_rx.recv() {
@@ -579,9 +632,8 @@ impl WgpuGraphics {
         }
     }
 
-    fn render_buffers(
+    fn render_hitbox_buffers(
         &self,
-        pipeline:   &RenderPipeline,
         rpass:      &mut RenderPass,
         render:     &RenderGame,
         buffers:    Buffers,
@@ -589,9 +641,7 @@ impl WgpuGraphics {
         edge_color: [f32; 4],
         color:      [f32; 4]
     ) {
-        let zoom = render.camera.zoom.recip();
-        let aspect_ratio = self.aspect_ratio();
-        let camera = Matrix4::from_nonuniform_scale(zoom, zoom * aspect_ratio, 1.0);
+        let camera = render.camera.transform();
         let transformation = camera * entity;
         let uniform = Uniform {
             edge_color,
@@ -613,7 +663,7 @@ impl WgpuGraphics {
             }]
         });
 
-        rpass.set_pipeline(pipeline);
+        rpass.set_pipeline(&self.pipeline_hitbox);
         rpass.set_bind_group(0, &bind_group, &[]);
         rpass.set_index_buffer(&buffers.index, 0);
         rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
@@ -622,7 +672,6 @@ impl WgpuGraphics {
 
     fn render_model3d(
         &self,
-        pipeline: &RenderPipeline,
         rpass:    &mut RenderPass,
         render:   &RenderGame,
         model:    &Model3D,
@@ -648,7 +697,7 @@ impl WgpuGraphics {
                 }]
             });
 
-            rpass.set_pipeline(pipeline);
+            rpass.set_pipeline(&self.pipeline_model3d);
             rpass.set_bind_group(0, &bind_group, &[]);
             rpass.set_index_buffer(&mesh.index, 0);
             rpass.set_vertex_buffers(0, &[(&mesh.vertex, 0)]);
@@ -656,17 +705,14 @@ impl WgpuGraphics {
         }
     }
 
-    fn render_surface_buffers(
+    fn render_color_buffers(
         &self,
-        pipeline: &RenderPipeline,
         rpass:    &mut RenderPass,
         render:   &RenderGame,
         buffers:  ColorBuffers,
         entity:   &Matrix4<f32>,
     ) {
-        let zoom = render.camera.zoom.recip();
-        let aspect_ratio = self.aspect_ratio();
-        let camera = Matrix4::from_nonuniform_scale(zoom, zoom * aspect_ratio, 1.0);
+        let camera = render.camera.transform();
         let transformation = camera * entity;
         let uniform = ColorUniform { transformation: transformation.into() };
 
@@ -684,7 +730,39 @@ impl WgpuGraphics {
             }]
         });
 
-        rpass.set_pipeline(pipeline);
+        rpass.set_pipeline(&self.pipeline_color);
+        rpass.set_bind_group(0, &bind_group, &[]);
+        rpass.set_index_buffer(&buffers.index, 0);
+        rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
+        rpass.draw_indexed(0 .. buffers.index_count, 0, 0 .. 1);
+    }
+
+    fn render_debug_buffers(
+        &self,
+        rpass:    &mut RenderPass,
+        render:   &RenderGame,
+        buffers:  ColorBuffers,
+        entity:   &Matrix4<f32>,
+    ) {
+        let camera = render.camera.transform();
+        let transformation = camera * entity;
+        let uniform = ColorUniform { transformation: transformation.into() };
+
+        let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
+            .fill_from_slice(&[uniform]);
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.bind_group_layout,
+            bindings: &[wgpu::Binding {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer {
+                    buffer: &uniform_buffer,
+                    range: 0..mem::size_of::<ColorUniform>() as u64,
+                }
+            }]
+        });
+
+        rpass.set_pipeline(&self.pipeline_debug);
         rpass.set_bind_group(0, &bind_group, &[]);
         rpass.set_index_buffer(&buffers.index, 0);
         rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
@@ -720,8 +798,6 @@ impl WgpuGraphics {
             self.command_render(command_output);
         }
 
-        let pan = render.camera.pan;
-
         match render.state {
             GameState::Local  => { }
             GameState::Paused => {
@@ -735,126 +811,112 @@ impl WgpuGraphics {
         }
 
         let stage_transformation = Matrix4::identity();
-        self.render_model3d(&self.pipeline_model3d, rpass, &render, &self.stage, &stage_transformation);
-
-        if let Some(buffers) = ColorBuffers::new_surfaces(&self.device, &render.surfaces) {
-            let transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6001));
-            self.render_surface_buffers(&self.pipeline_surface, rpass, &render, buffers, &transformation);
+        if render.render_stage_mode.normal() {
+            self.render_model3d(rpass, &render, &self.stage, &stage_transformation);
         }
 
-        if let Some(buffers) = ColorBuffers::new_surfaces_fill(&self.device, &render.surfaces) {
-            let transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6002));
-            self.render_surface_buffers(&self.pipeline_surface, rpass, &render, buffers, &transformation);
+        if render.render_stage_mode.debug() {
+            if let Some(buffers) = ColorBuffers::new_surfaces(&self.device, &render.surfaces) {
+                self.render_debug_buffers(rpass, &render, buffers, &stage_transformation);
+            }
+
+            if let Some(buffers) = ColorBuffers::new_surfaces_fill(&self.device, &render.surfaces) {
+                self.render_debug_buffers(rpass, &render, buffers, &stage_transformation);
+            }
+
+            if let Some(buffers) = ColorBuffers::new_selected_surfaces(&self.device, &render.surfaces, &render.selected_surfaces) {
+                self.render_debug_buffers(rpass, &render, buffers, &stage_transformation);
+            }
         }
 
-        if let Some(buffers) = ColorBuffers::new_selected_surfaces(&self.device, &render.surfaces, &render.selected_surfaces) {
-            let transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.6));
-            self.render_surface_buffers(&self.pipeline_surface, rpass, &render, buffers, &transformation);
-        }
-
-        for (i, entity) in render.entities.iter().enumerate() {
-            let z_debug        = 0.1  - i as f32 * 0.00001;
-            let z_particle_fg  = 0.2  - i as f32 * 0.00001;
-            //let z_shield     = 0.4  - i as f32 * 0.00001; // used in transparent pass below
-            let z_respawn_plat = 0.45 - i as f32 * 0.00001;
-            let z_player       = 0.5  - i as f32 * 0.00001;
-            let z_particle_bg  = 0.8  - i as f32 * 0.00001;
+        for entity in render.entities.iter() {
             match entity {
                 &RenderEntity::Player(ref player) => {
                     // draw player ecb
                     if player.debug.ecb {
-                        let buffers = Buffers::new_player(&self.device, &player);
-                        let edge_color = [0.0, 1.0, 0.0, 1.0];
-                        let color = if player.fighter_selected {
-                            [0.0, 1.0, 0.0, 1.0]
-                        } else {
-                            [1.0, 1.0, 1.0, 1.0]
-                        };
+                        // TODO: Set individual corner vertex colours to show which points of the ecb are selected
+                        let buffers = ColorBuffers::new_ecb(&self.device, &player);
                         let dir      = Matrix4::from_nonuniform_scale(if player.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0 + pan.0, player.frames[0].bps.1 + pan.1, z_player));
+                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                         let transformation = position * dir;
 
-                        self.render_buffers(&self.pipeline, rpass, &render, buffers, &transformation, edge_color, color);
+                        self.render_debug_buffers(rpass, &render, buffers, &transformation);
                     }
 
-                    fn player_matrix(frame: &RenderPlayerFrame, pan: (f32, f32), z_player: f32) -> Matrix4<f32> {
+                    fn player_matrix(frame: &RenderPlayerFrame) -> Matrix4<f32> {
                         let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
                         let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
-                        let position = Matrix4::from_translation(Vector3::new(frame.bps.0 + pan.0, frame.bps.1 + pan.1, z_player));
+                        let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
                         position * rotate * dir
                     }
 
-                    let transformation = player_matrix(&player.frames[0], pan, z_player);
+                    let transformation = player_matrix(&player.frames[0]);
 
-                    // draw fighter
-                    match player.debug.fighter {
-                        RenderFighter::Normal | RenderFighter::Debug | RenderFighter::OnionSkin => {
-                            if let RenderFighter::OnionSkin = player.debug.fighter {
-                                if let Some(frame) = player.frames.get(2) {
-                                    if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
-                                        let transformation = player_matrix(frame, pan, z_player);
-                                        let onion_color = [0.4, 0.4, 0.4, 0.4];
-                                        self.render_buffers(&self.pipeline, rpass, &render, buffers.clone(), &transformation, onion_color, onion_color);
-                                    }
-                                }
-
-                                if let Some(frame) = player.frames.get(1) {
-                                    if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
-                                        let transformation = player_matrix(frame, pan, z_player);
-                                        let onion_color = [0.80, 0.80, 0.80, 0.9];
-                                        self.render_buffers(&self.pipeline, rpass, &render, buffers.clone(), &transformation, onion_color, onion_color);
-                                    }
+                    // draw fighter debug overlay
+                    if player.debug.fighter.debug() {
+                        if player.debug.fighter.onion_skin() {
+                            if let Some(frame) = player.frames.get(2) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
+                                    let transformation = player_matrix(frame);
+                                    let onion_color = [0.4, 0.4, 0.4, 0.4];
+                                    self.render_hitbox_buffers(rpass, &render, buffers.clone(), &transformation, onion_color, onion_color);
                                 }
                             }
 
-                            // draw fighter
-                            if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &player.frames[0].fighter, player.frames[0].action, player.frames[0].frame) {
-                                let color = if let RenderFighter::Debug = player.debug.fighter {
-                                    [0.0, 0.0, 0.0, 0.0]
-                                } else {
-                                    [0.9, 0.9, 0.9, 1.0]
-                                };
-                                let edge_color = if player.fighter_selected {
-                                    [0.0, 1.0, 0.0, 1.0]
-                                } else {
-                                    let c = player.fighter_color.clone();
-                                    [c[0], c[1], c[2], 1.0]
-                                };
-                                self.render_buffers(&self.pipeline, rpass, &render, buffers.clone(), &transformation, edge_color, color);
-                            }
-                            else {
-                                 // TODO: Give some indication that we are rendering a deleted or otherwise nonexistent frame
+                            if let Some(frame) = player.frames.get(1) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
+                                    let transformation = player_matrix(frame);
+                                    let onion_color = [0.80, 0.80, 0.80, 0.9];
+                                    self.render_hitbox_buffers(rpass, &render, buffers.clone(), &transformation, onion_color, onion_color);
+                                }
                             }
                         }
-                        RenderFighter::None => { }
+
+                        // draw fighter
+                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &player.frames[0].fighter, player.frames[0].action, player.frames[0].frame) {
+                            let color = [0.9, 0.9, 0.9, 1.0];
+                            let edge_color = if player.fighter_selected {
+                                [0.0, 1.0, 0.0, 1.0]
+                            } else {
+                                let c = player.fighter_color.clone();
+                                [c[0], c[1], c[2], 1.0]
+                            };
+                            self.render_hitbox_buffers(rpass, &render, buffers.clone(), &transformation, edge_color, color);
+                        }
+                        else {
+                             // TODO: Give some indication that we are rendering a deleted or otherwise nonexistent frame
+                        }
+                    }
+
+                    // draw fighter
+                    if player.debug.fighter.normal() {
+                        // TODO: Render player model
                     }
 
                     // draw selected colboxes
                     if player.selected_colboxes.len() > 0 {
                         let color = [0.0, 1.0, 0.0, 1.0];
                         let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &player.frames[0].fighter, player.frames[0].action, player.frames[0].frame, &player.selected_colboxes);
-                        self.render_buffers(&self.pipeline, rpass, &render, buffers, &transformation, color, color);
+                        self.render_hitbox_buffers(rpass, &render, buffers, &transformation, color, color);
                     }
-
-                    let arrow_buffers = Buffers::new_arrow(&self.device);
 
                     // draw hitbox debug arrows
                     if player.debug.hitbox_vectors {
-                        let kbg_color = [1.0,  1.0,  1.0, 1.0];
-                        let bkb_color = [0.17, 0.17, 1.0, 1.0];
+                        let kbg_arrow = ColorBuffers::new_arrow(&self.device, [1.0,  1.0,  1.0, 1.0]);
+                        let bkb_arrow = ColorBuffers::new_arrow(&self.device, [0.17, 0.17, 1.0, 1.0]);
                         for colbox in player.frame_data.colboxes.iter() {
                             if let CollisionBoxRole::Hit(ref hitbox) = colbox.role {
                                 let kb_squish = 0.5;
                                 let squish_kbg = Matrix4::from_nonuniform_scale(0.6, hitbox.kbg * kb_squish, 1.0);
                                 let squish_bkb = Matrix4::from_nonuniform_scale(0.3, (hitbox.bkb / 100.0) * kb_squish, 1.0); // divide by 100 so the arrows are comparable if the hit fighter is on 100%
                                 let rotate = Matrix4::from_angle_z(Rad(hitbox.angle.to_radians() - f32::consts::PI / 2.0));
-                                let x = player.frames[0].bps.0 + pan.0 + colbox.point.0;
-                                let y = player.frames[0].bps.1 + pan.1 + colbox.point.1;
-                                let position = Matrix4::from_translation(Vector3::new(x, y, z_debug));
+                                let x = player.frames[0].bps.0 + colbox.point.0;
+                                let y = player.frames[0].bps.1 + colbox.point.1;
+                                let position = Matrix4::from_translation(Vector3::new(x, y, 0.0));
                                 let transformation_bkb = position * rotate * squish_bkb;
                                 let transformation_kbg = position * rotate * squish_kbg;
-                                self.render_buffers(&self.pipeline, rpass, &render, arrow_buffers.clone(), &transformation_kbg, kbg_color.clone(), kbg_color.clone());
-                                self.render_buffers(&self.pipeline, rpass, &render, arrow_buffers.clone(), &transformation_bkb, bkb_color.clone(), bkb_color.clone());
+                                self.render_debug_buffers(rpass, &render, kbg_arrow.clone(), &transformation_kbg);
+                                self.render_debug_buffers(rpass, &render, bkb_arrow.clone(), &transformation_bkb);
                             }
                         }
                     }
@@ -862,53 +924,50 @@ impl WgpuGraphics {
                     // draw debug vector arrows
                     let num_arrows = player.vector_arrows.len() as f32;
                     for (i, arrow) in player.vector_arrows.iter().enumerate() {
+                        let arrow_buffers = ColorBuffers::new_arrow(&self.device, arrow.color.clone());
                         let squish = Matrix4::from_nonuniform_scale((num_arrows - i as f32) / num_arrows, 1.0, 1.0); // consecutive arrows are drawn slightly thinner so we can see arrows behind
                         let rotate = Matrix4::from_angle_z(Rad(arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0));
-                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0 + pan.0, player.frames[0].bps.1 + pan.1, z_debug));
+                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                         let transformation = position * rotate * squish;
-                        self.render_buffers(&self.pipeline, rpass, &render, arrow_buffers.clone(), &transformation, arrow.color.clone(), arrow.color.clone());
+                        self.render_debug_buffers(rpass, &render, arrow_buffers, &transformation);
                     }
 
                     // draw particles
-                    let triangle_buffers = Buffers::new_triangle(&self.device);
-                    let jump_buffers = Buffers::new_circle(&self.device);
                     for particle in &player.particles {
                         let c = particle.color.clone();
                         match &particle.p_type {
-                            &ParticleType::Spark { size, background, .. } => {
+                            &ParticleType::Spark { size, .. } => {
                                 let rotate = Matrix4::from_angle_z(Rad(particle.angle));
                                 let size = size * (1.0 - particle.counter_mult());
                                 let size = Matrix4::from_nonuniform_scale(size, size, 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(
-                                    particle.x + pan.0,
-                                    particle.y + pan.1,
-                                    if background { z_particle_bg } else { z_particle_fg }
-                                ));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
                                 let transformation = position * rotate * size;
                                 let color = [c[0], c[1], c[2], 1.0];
-                                let pipeline = if c[0] == 1.0 && c[1] == 1.0 && c[2] == 1.0 {
-                                    //self.pipelines.wireframe // TODO
-                                    &self.pipeline
+                                if c[0] == 1.0 && c[1] == 1.0 && c[2] == 1.0 {
+                                    // TODO: wireframe
                                 } else {
-                                    &self.pipeline
+                                    // TODO: not wireframe
                                 };
-                                self.render_buffers(pipeline, rpass, &render, triangle_buffers.clone(), &transformation, color, color)
+                                let triangle_buffers = ColorBuffers::new_triangle(&self.device, color);
+                                self.render_debug_buffers(rpass, &render, triangle_buffers, &transformation)
                             }
                             &ParticleType::AirJump => {
                                 let size = Matrix4::from_nonuniform_scale(3.0 + particle.counter_mult(), 1.15 + particle.counter_mult(), 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(particle.x + pan.0, particle.y + pan.1, z_particle_bg));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
                                 let transformation = position * size;
                                 let color = [c[0], c[1], c[2], (1.0 - particle.counter_mult()) * 0.7];
-                                self.render_buffers(&self.pipeline, rpass, &render, jump_buffers.clone(), &transformation, color, color)
+                                let jump_buffers = ColorBuffers::new_circle(&self.device, color);
+                                self.render_debug_buffers(rpass, &render, jump_buffers, &transformation)
                             }
                             &ParticleType::Hit { knockback, damage } => {
                                 // needs to rendered last to ensure we dont have anything drawn on top of the inversion
                                 let size = Matrix4::from_nonuniform_scale(0.2 * knockback, 0.08 * damage, 1.0);
                                 let rotate = Matrix4::from_angle_z(Rad(particle.angle - f32::consts::PI / 2.0));
-                                let position = Matrix4::from_translation(Vector3::new(particle.x + pan.0, particle.y + pan.1, z_particle_fg));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
                                 let transformation = position * rotate * size;
                                 let color = [0.5, 0.5, 0.5, 1.5];
-                                self.render_buffers(&self.pipeline, rpass, &render, jump_buffers.clone(), &transformation, color, color) // TODO: Invert
+                                let hit_buffers = ColorBuffers::new_circle(&self.device, color);
+                                self.render_debug_buffers(rpass, &render, hit_buffers, &transformation) // TODO: Invert
                             }
                         }
                     }
@@ -922,50 +981,48 @@ impl WgpuGraphics {
                             let scale = Matrix4::from_nonuniform_scale(width, -height, 1.0); // negative y to point triangle downwards.
                             let rotate = Matrix4::from_angle_z(Rad(player.frames[0].angle));
                             let bps = &player.frames[0].bps;
-                            let position = Matrix4::from_translation(Vector3::new(bps.0 + pan.0, bps.1 + pan.1, z_respawn_plat));
+                            let position = Matrix4::from_translation(Vector3::new(bps.0, bps.1, 0.0));
                             let transformation = position * rotate * scale;
 
                             let c = player.fighter_color.clone();
                             let color = [c[0], c[1], c[2], 1.0];
+                            let triangle_buffers = ColorBuffers::new_triangle(&self.device, color);
 
-                            self.render_buffers(&self.pipeline, rpass, &render, triangle_buffers.clone(), &transformation, color, color)
+                            self.render_debug_buffers(rpass, &render, triangle_buffers, &transformation)
                         }
                         _ => { }
                     }
                 }
                 &RenderEntity::RectOutline (ref render_rect) => {
-                    let transformation = Matrix4::from_translation(Vector3::new(pan.0, pan.1, 0.0));
-                    let color = render_rect.color;
-                    let buffers = Buffers::rect_outline_buffers(&self.device, &render_rect.rect);
-                    self.render_buffers(&self.pipeline, rpass, &render, buffers, &transformation, color, color);
+                    let transformation = Matrix4::identity();
+                    let buffers = ColorBuffers::rect_outline_buffers(&self.device, &render_rect);
+                    self.render_debug_buffers(rpass, &render, buffers, &transformation);
                 }
-
                 &RenderEntity::SpawnPoint (ref render_point) => {
-                    let buffers = Buffers::new_spawn_point(&self.device);
+                    let buffers = ColorBuffers::new_spawn_point(&self.device, render_point.color);
                     let flip = Matrix4::from_nonuniform_scale(if render_point.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                    let position = Matrix4::from_translation(Vector3::new(render_point.x + pan.0, render_point.y + pan.1, z_debug));
+                    let position = Matrix4::from_translation(Vector3::new(render_point.x, render_point.y, 0.0));
                     let transformation = position * flip;
-                    self.render_buffers(&self.pipeline, rpass, &render, buffers, &transformation, render_point.color.clone(), render_point.color.clone())
+                    self.render_debug_buffers(rpass, &render, buffers, &transformation)
                 }
             }
         }
 
         // Some things need to be rendered after everything else as they are transparent
-        for (i, entity) in render.entities.iter().enumerate() {
-            let z_shield = 0.4 - i as f32 * 0.00001;
+        for entity in render.entities.iter() {
             match entity {
                 &RenderEntity::Player(ref player) => {
                     // draw shield
                     if let &Some(ref shield) = &player.shield {
-                        let position = Matrix4::from_translation(Vector3::new(shield.pos.0 + pan.0, shield.pos.1 + pan.1, z_shield));
-                        let buffers = Buffers::new_shield(&self.device, shield);
+                        let position = Matrix4::from_translation(Vector3::new(shield.pos.0, shield.pos.1, 0.0));
                         let color = if shield.distort > 0 {
                             let c = shield.color;
                             [c[0] * rng.gen_range(0.75, 1.25), c[1] * rng.gen_range(0.75, 1.25), c[2] * rng.gen_range(0.75, 1.25), c[3] * rng.gen_range(0.8, 1.2)]
                         } else {
                             shield.color
                         };
-                        self.render_buffers(&self.pipeline, rpass, &render, buffers, &position, shield.color, color);
+                        let buffers = ColorBuffers::new_shield(&self.device, shield, color);
+                        self.render_color_buffers(rpass, &render, buffers, &position);
                     }
                 }
                 _ => { }
@@ -1081,7 +1138,7 @@ impl WgpuGraphics {
             match entity.entity {
                 MenuEntity::Fighter { ref fighter, action, frame } => {
                     if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), fighter, action, frame) {
-                        rpass.set_pipeline(&self.pipeline);
+                        rpass.set_pipeline(&self.pipeline_hitbox);
                         rpass.set_bind_group(0, &entity.bind_group, &[]);
                         rpass.set_index_buffer(&buffers.index, 0);
                         rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
@@ -1092,7 +1149,7 @@ impl WgpuGraphics {
                     let stage: &str = stage.as_ref();
                     let stage = &self.package.as_ref().unwrap().stages[stage];
                     if let Some(buffers) = ColorBuffers::new_surfaces(&self.device, &stage.surfaces) {
-                        rpass.set_pipeline(&self.pipeline_surface);
+                        rpass.set_pipeline(&self.pipeline_debug);
                         rpass.set_bind_group(0, &entity.bind_group, &[]);
                         rpass.set_index_buffer(&buffers.index, 0);
                         rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
@@ -1104,7 +1161,7 @@ impl WgpuGraphics {
                     let stage: &str = stage.as_ref();
                     let stage = &self.package.as_ref().unwrap().stages[stage];
                     if let Some(buffers) = ColorBuffers::new_surfaces_fill(&self.device, &stage.surfaces) {
-                        rpass.set_pipeline(&self.pipeline_surface);
+                        rpass.set_pipeline(&self.pipeline_debug);
                         rpass.set_bind_group(0, &entity.bind_group, &[]);
                         rpass.set_index_buffer(&buffers.index, 0);
                         rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
@@ -1112,8 +1169,8 @@ impl WgpuGraphics {
                     }
                 }
                 MenuEntity::Rect (ref rect) => {
-                    let buffers = Buffers::rect_buffers(&self.device, rect.clone());
-                    rpass.set_pipeline(&self.pipeline);
+                    let buffers = ColorBuffers::rect_buffers(&self.device, rect.clone(), [1.0, 1.0, 1.0, 1.0]);
+                    rpass.set_pipeline(&self.pipeline_debug);
                     rpass.set_bind_group(0, &entity.bind_group, &[]);
                     rpass.set_index_buffer(&buffers.index, 0);
                     rpass.set_vertex_buffers(0, &[(&buffers.vertex, 0)]);
