@@ -2617,6 +2617,7 @@ impl Player {
         let fighter = &fighters[self.fighter.as_ref()];
         RenderPlayerFrame {
             fighter:     self.fighter.clone(),
+            model_name:  fighter.name.clone(),
             bps:         self.public_bps_xy(players, fighters, surfaces),
             ecb:         self.ecb.clone(),
             frame:       self.frame as usize,
@@ -2881,6 +2882,7 @@ pub struct RenderPlayer {
 
 pub struct RenderPlayerFrame {
     pub fighter:    String,
+    pub model_name: String,
     pub bps:        (f32, f32),
     pub ecb:        ECB,
     pub frame:      usize,

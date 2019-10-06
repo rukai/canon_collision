@@ -857,6 +857,37 @@ impl WgpuGraphics {
         for entity in render.entities.iter() {
             match entity {
                 &RenderEntity::Player(ref player) => {
+                    fn player_matrix(frame: &RenderPlayerFrame) -> Matrix4<f32> {
+                        let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
+                        let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
+                        let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
+                        position * rotate * dir
+                    }
+
+                    let transformation = player_matrix(&player.frames[0]);
+
+                    // draw fighter
+                    let fighter_model_name = player.frames[0].model_name.replace(" ", "");
+                    // TODO: The game code should notify the graphics code what fighters and stages it will need.
+                    // Maybe load fighters immediately when selected on the CSS.
+                    if player.debug.fighter.normal() {
+                        let dir      = Matrix4::from_angle_y(if player.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+                        let rotate   = Matrix4::from_angle_z(Rad(player.frames[0].angle));
+                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
+                        let transformation = position * rotate * dir;
+
+                        if render.render_stage_mode.normal() {
+                            if let Some(fighter) = self.models.get(&fighter_model_name) {
+                                self.render_model3d(rpass, &render, &fighter, &transformation);
+                            }
+                            else {
+                                // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
+                                if let Some(data) = self.assets.get_model(&fighter_model_name) {
+                                    self.models.insert(fighter_model_name.clone(), Model3D::from_gltf(&self.device, &data));
+                                }
+                            }
+                        }
+                    }
                     // draw player ecb
                     if player.debug.ecb {
                         // TODO: Set individual corner vertex colours to show which points of the ecb are selected
@@ -867,15 +898,6 @@ impl WgpuGraphics {
 
                         self.render_debug_buffers(rpass, &render, buffers, &transformation);
                     }
-
-                    fn player_matrix(frame: &RenderPlayerFrame) -> Matrix4<f32> {
-                        let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
-                        let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
-                        position * rotate * dir
-                    }
-
-                    let transformation = player_matrix(&player.frames[0]);
 
                     // draw fighter debug overlay
                     if player.debug.fighter.debug() {
@@ -911,11 +933,6 @@ impl WgpuGraphics {
                         else {
                              // TODO: Give some indication that we are rendering a deleted or otherwise nonexistent frame
                         }
-                    }
-
-                    // draw fighter
-                    if player.debug.fighter.normal() {
-                        // TODO: Render player model
                     }
 
                     // draw selected colboxes
@@ -1390,6 +1407,7 @@ impl WgpuGraphics {
 
                     let frames = vec!(RenderPlayerFrame {
                         fighter:    fighter_key.clone(),
+                        model_name: "TODO".into(),
                         bps:        (0.0, 0.0),
                         ecb:        ECB::default(),
                         face_right: start_x < 0.0,
