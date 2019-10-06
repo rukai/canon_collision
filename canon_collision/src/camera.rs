@@ -94,9 +94,9 @@ impl Camera {
                 self.aspect_ratio = width as f32 / height as f32;
             }
 
-            // initialise cam_area using only the first player
+            // initialise new_rect using only the first player
             let mut player_iter = players.iter();
-            let mut cam_area = match player_iter.next() {
+            let mut new_rect = match player_iter.next() {
                 Some(player) => player.cam_area(&stage.camera, players, fighters, &stage.surfaces),
                 None => {
                     self.rect = Rect { x1: -200.0, y1: -200.0, x2: 200.0, y2: 200.0 };
@@ -104,60 +104,65 @@ impl Camera {
                 }
             };
 
-            // grow cam_area to cover all other players
+            // grow new_rect to cover all other players
             for player in player_iter {
                 let next_area = player.cam_area(&stage.camera, players, fighters, &stage.surfaces);
-                cam_area.x1 = cam_area.x1.min(next_area.left());
-                cam_area.x2 = cam_area.x2.max(next_area.right());
-                cam_area.y1 = cam_area.y1.min(next_area.bot());
-                cam_area.y2 = cam_area.y2.max(next_area.top());
+                new_rect.x1 = new_rect.x1.min(next_area.left());
+                new_rect.x2 = new_rect.x2.max(next_area.right());
+                new_rect.y1 = new_rect.y1.min(next_area.bot());
+                new_rect.y2 = new_rect.y2.max(next_area.top());
             }
 
-            // grow cam_area to fill aspect ratio
-            let mut width  = (cam_area.x1 - cam_area.x2).abs();
-            let mut height = (cam_area.y1 - cam_area.y2).abs();
+            // grow new_rect to fill aspect ratio
+            let mut width  = (new_rect.x1 - new_rect.x2).abs();
+            let mut height = (new_rect.y1 - new_rect.y2).abs();
             if width / height > self.aspect_ratio {
                 height = width / self.aspect_ratio;
 
-                let avg_vertical = (cam_area.y2 + cam_area.y1) / 2.0;
-                cam_area.y2 = avg_vertical + height / 2.0;
-                cam_area.y1 = avg_vertical - height / 2.0;
+                let avg_vertical = (new_rect.y2 + new_rect.y1) / 2.0;
+                new_rect.y2 = avg_vertical + height / 2.0;
+                new_rect.y1 = avg_vertical - height / 2.0;
             }
             else {
                 width = height * self.aspect_ratio;
 
-                let avg_horizontal = (cam_area.x2 + cam_area.x1) / 2.0;
-                cam_area.x2 = avg_horizontal + width / 2.0;
-                cam_area.x1 = avg_horizontal - width / 2.0;
+                let avg_horizontal = (new_rect.x2 + new_rect.x1) / 2.0;
+                new_rect.x2 = avg_horizontal + width / 2.0;
+                new_rect.x1 = avg_horizontal - width / 2.0;
             }
 
             // push aspect_ratio changes back so it doesnt go past the stage camera area
             let cam_max = &stage.camera;
-            if cam_area.x1 < cam_max.left() {
-                let diff = cam_area.x1 - cam_max.left();
-                cam_area.x1 -= diff;
-                cam_area.x2 -= diff;
+            if new_rect.x1 < cam_max.left() {
+                let diff = new_rect.x1 - cam_max.left();
+                new_rect.x1 -= diff;
+                new_rect.x2 -= diff;
             }
-            else if cam_area.x2 > cam_max.right() {
-                let diff = cam_area.x2 - cam_max.right();
-                cam_area.x1 -= diff;
-                cam_area.x2 -= diff;
+            else if new_rect.x2 > cam_max.right() {
+                let diff = new_rect.x2 - cam_max.right();
+                new_rect.x1 -= diff;
+                new_rect.x2 -= diff;
             }
-            if cam_area.y1 < cam_max.bot() {
-                let diff = cam_area.y1 - cam_max.bot();
-                cam_area.y1 -= diff;
-                cam_area.y2 -= diff;
+            if new_rect.y1 < cam_max.bot() {
+                let diff = new_rect.y1 - cam_max.bot();
+                new_rect.y1 -= diff;
+                new_rect.y2 -= diff;
             }
-            else if cam_area.y2 > cam_max.top() {
-                let diff = cam_area.y2 - cam_max.top();
-                cam_area.y1 -= diff;
-                cam_area.y2 -= diff;
+            else if new_rect.y2 > cam_max.top() {
+                let diff = new_rect.y2 - cam_max.top();
+                new_rect.y1 -= diff;
+                new_rect.y2 -= diff;
             }
 
             // set new camera values
-            // TODO: interpolation
-
-            self.rect = cam_area;
+            let diff_x1 = new_rect.x1 - self.rect.x1;
+            let diff_x2 = new_rect.x2 - self.rect.x2;
+            let diff_y1 = new_rect.y1 - self.rect.y1;
+            let diff_y2 = new_rect.y2 - self.rect.y2;
+            self.rect.x1 += diff_x1 / 10.0;
+            self.rect.x2 += diff_x2 / 10.0;
+            self.rect.y1 += diff_y1 / 10.0;
+            self.rect.y2 += diff_y2 / 10.0;
         }
     }
 
