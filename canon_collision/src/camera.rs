@@ -3,17 +3,16 @@ use canon_collision_lib::stage::Stage;
 use canon_collision_lib::geometry::Rect;
 use crate::player::Player;
 
-use cgmath::{Matrix4, Point3, Vector3};
+use cgmath::{Matrix4, Point3, Vector3, Transform};
 use winit::event::VirtualKeyCode;
-use winit_input_helper::Camera as CameraWinitInputHelper;
 use winit_input_helper::WinitInputHelper;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Camera {
     aspect_ratio:       f32,
-    pub zoom:           f32,
-    pub pan:            (f32, f32),
+    window_width:       f32,
+    window_height:      f32,
     pub rect:           Rect,
     pub control_state:  CameraControlState,
     pub transform_mode: TransformMode,
@@ -47,8 +46,8 @@ impl Camera {
     pub fn new() -> Camera {
         Camera {
             aspect_ratio:   1.0,
-            zoom:           100.0,
-            pan:            (0.0, 0.0),
+            window_width:   1.0,
+            window_height:  1.0,
             rect:           Rect { x1: -10.0, y1: -10.0, x2: 10.0, y2: 10.0 },
             control_state:  CameraControlState::Auto,
             transform_mode: TransformMode::Dev,
@@ -74,9 +73,6 @@ impl Camera {
                         self.rect.x2 -= mouse_diff.0 as f32;
                         self.rect.y1 += mouse_diff.1 as f32;
                         self.rect.y2 += mouse_diff.1 as f32;
-
-                        self.pan.0 += mouse_diff.0 as f32;
-                        self.pan.1 -= mouse_diff.1 as f32;
                     }
 
                     // zoom camera
@@ -93,6 +89,8 @@ impl Camera {
     pub fn update(&mut self, os_input: &WinitInputHelper<()>, players: &[Player], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
         if let CameraControlState::Auto = self.control_state {
             if let Some((width, height)) = os_input.resolution() {
+                self.window_width = width as f32;
+                self.window_height = height as f32;
                 self.aspect_ratio = width as f32 / height as f32;
             }
 
@@ -101,8 +99,6 @@ impl Camera {
             let mut cam_area = match player_iter.next() {
                 Some(player) => player.cam_area(&stage.camera, players, fighters, &stage.surfaces),
                 None => {
-                    self.pan = (0.0, 0.0);
-                    self.zoom = 100.0;
                     self.rect = Rect { x1: -200.0, y1: -200.0, x2: 200.0, y2: 200.0 };
                     return;
                 }
@@ -159,17 +155,7 @@ impl Camera {
             }
 
             // set new camera values
-            let dest_pan_x = -((cam_area.x1 + cam_area.x2) / 2.0);
-            let dest_pan_y = -((cam_area.y1 + cam_area.y2) / 2.0);
-            let dest_zoom = width / 2.0;
-
-            let diff_pan_x = dest_pan_x - self.pan.0;
-            let diff_pan_y = dest_pan_y - self.pan.1;
-            let diff_zoom = dest_zoom - self.zoom;
-
-            self.pan.0 += diff_pan_x / 10.0;
-            self.pan.1 += diff_pan_y / 10.0;
-            self.zoom += diff_zoom / 10.0;
+            // TODO: interpolation
 
             self.rect = cam_area;
         }
@@ -199,10 +185,13 @@ impl Camera {
         }
     }
 
-    pub fn for_winit_helper(&self) -> CameraWinitInputHelper {
-        CameraWinitInputHelper {
-            zoom: self.zoom,
-            pan:  self.pan,
-        }
+    /// Convert a mouse point to the corresponding in game point
+    pub fn mouse_to_game(&self, mouse_point: (f32, f32)) -> Option<(f32, f32)> {
+        let normalized_x = mouse_point.0 / self.window_width * 2.0 - 1.0;
+        let normalized_y = mouse_point.1 / self.window_height * -2.0 + 1.0;
+        self.transform()
+            .inverse_transform()
+            .map(|x| x.transform_point(Point3::new(normalized_x, normalized_y, 0.0)))
+            .map(|v| (v.x, v.y))
     }
 }

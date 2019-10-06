@@ -63,6 +63,7 @@ pub struct Game {
     pub tas:                    Vec<ControllerInput>,
     save_replay:                bool,
     reset_deadzones:            bool,
+    prev_mouse_point:           Option<(f32, f32)>,
 }
 
 /// Frame 0 refers to the initial state of the game.
@@ -116,6 +117,7 @@ impl Game {
             tas:                    vec!(),
             save_replay:            false,
             reset_deadzones:        false,
+            prev_mouse_point:       None,
             package,
             stage,
             players,
@@ -161,6 +163,7 @@ impl Game {
                     GameState::StepForwardThenPause | GameState::StepBackwardThenPause => { }
                 }
                 self.camera.update_os_input(os_input);
+                self.prev_mouse_point = os_input.mouse();
             }
             self.camera.update(os_input, &self.players, &self.package.fighters, &self.stage);
 
@@ -171,6 +174,20 @@ impl Game {
 
         debug!("current_frame: {}", self.current_frame);
         self.state.clone()
+    }
+
+    fn game_mouse(&self, os_input: &WinitInputHelper<()>) -> Option<(f32, f32)> {
+        os_input.mouse().and_then(|point| self.camera.mouse_to_game(point))
+    }
+
+    fn game_mouse_diff(&self, os_input: &WinitInputHelper<()>) -> (f32, f32) {
+        if let (Some(cur), Some(prev)) = (os_input.mouse(), self.prev_mouse_point) {
+            if let (Some(cur), Some(prev)) = (self.camera.mouse_to_game(cur), self.camera.mouse_to_game(prev)) {
+                return (cur.0 - prev.0, cur.1 - prev.1)
+            }
+        }
+
+        (0.0, 0.0)
     }
 
     pub fn save_replay(&mut self) -> String {
@@ -395,7 +412,7 @@ impl Game {
                 // move collisionboxes
                 if self.selector.moving {
                     // undo the operations used to render the player
-                    let (raw_d_x, raw_d_y) = os_input.game_mouse_diff(self.camera.for_winit_helper());
+                    let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
                     let angle = -self.players[player].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
                     let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                     let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
@@ -467,7 +484,7 @@ impl Game {
                     }
                     // add collisionbox
                     if os_input.key_pressed(VirtualKeyCode::F) {
-                        if let Some((m_x, m_y)) = os_input.game_mouse(self.camera.for_winit_helper()) {
+                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             let selected = {
                                 let player = &self.players[player];
                                 let (p_x, p_y) = player.public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
@@ -512,7 +529,7 @@ impl Game {
                     }
                     // set hitbox angle
                     if os_input.key_pressed(VirtualKeyCode::Q) {
-                        if let Some((m_x, m_y)) = os_input.game_mouse(self.camera.for_winit_helper()) {
+                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             let player = &self.players[player];
                             let (p_x, p_y) = player.public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
 
@@ -579,7 +596,7 @@ impl Game {
             Edit::Stage => {
                 self.debug_stage.step(os_input);
                 if self.selector.moving {
-                    let (d_x, d_y) = os_input.game_mouse_diff(self.camera.for_winit_helper());
+                    let (d_x, d_y) = self.game_mouse_diff(os_input);
                     for (i, spawn) in self.stage.spawn_points.iter_mut().enumerate() {
                         if self.selector.spawn_points.contains(&i) {
                             spawn.x += d_x;
@@ -673,14 +690,14 @@ impl Game {
                     }
                     // add spawn point
                     if os_input.key_pressed(VirtualKeyCode::Z) {
-                        if let Some((m_x, m_y)) = os_input.game_mouse(self.camera.for_winit_helper()) {
+                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             self.stage.spawn_points.push(SpawnPoint::new(m_x, m_y));
                             self.update_frame();
                         }
                     }
                     // add respawn point
                     if os_input.key_pressed(VirtualKeyCode::X) {
-                        if let Some((m_x, m_y)) = os_input.game_mouse(self.camera.for_winit_helper()) {
+                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             self.stage.respawn_points.push(SpawnPoint::new(m_x, m_y));
                             self.update_frame();
                         }
@@ -844,11 +861,11 @@ impl Game {
                 }
             }
         }
-        self.selector.mouse = os_input.game_mouse(self.camera.for_winit_helper()); // hack to access mouse during render call, dont use this otherwise
+        self.selector.mouse = self.game_mouse(os_input); // hack to access mouse during render call, dont use this otherwise
     }
 
     fn add_surface(&mut self, surface: Surface, os_input: &WinitInputHelper<()>) {
-        if let Some((m_x, m_y)) = os_input.game_mouse(self.camera.for_winit_helper()) {
+        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
             if self.selector.surfaces.len() == 1 {
                 // create new surface, p1 is selected surface, p2 is current mouse
                 let (x1, y1) = match self.selector.surfaces.iter().next().unwrap() {
@@ -1363,15 +1380,16 @@ impl Selector {
 
     /// Returns a selection rect iff a multiple selection is finished.
     fn step_multiple_selection(&mut self, os_input: &WinitInputHelper<()>, camera: &Camera) -> Option<Rect> {
+        let game_mouse = os_input.mouse().and_then(|point| camera.mouse_to_game(point));
         // start selection
         if os_input.mouse_pressed(1) {
-            if let Some(mouse) = os_input.game_mouse(camera.for_winit_helper()) {
+            if let Some(mouse) = game_mouse {
                 self.start(mouse);
             }
         }
 
         // finish selection
-        if let (Some(p1), Some(p2)) = (self.point, os_input.game_mouse(camera.for_winit_helper())) {
+        if let (Some(p1), Some(p2)) = (self.point, game_mouse) {
             if os_input.mouse_released(1) {
                 if !(os_input.held_shift() || os_input.held_alt()) {
                     self.clear();
@@ -1385,7 +1403,7 @@ impl Selector {
     /// Returns a selection point iff a single selection is made.
     fn step_single_selection(&mut self, os_input: &WinitInputHelper<()>, camera: &Camera) -> Option<(f32, f32)> {
         if os_input.mouse_pressed(0) {
-            if let point @ Some(_) = os_input.game_mouse(camera.for_winit_helper()) {
+            if let point @ Some(_) = os_input.mouse().and_then(|point| camera.mouse_to_game(point)) {
                 if !(os_input.held_shift() || os_input.held_alt()) {
                     self.clear();
                 }
