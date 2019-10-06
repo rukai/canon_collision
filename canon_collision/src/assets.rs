@@ -59,12 +59,11 @@ impl Assets {
     /// On failure to read from disk, logs the error and returns None
     pub fn get_model(&mut self, name: &str) -> Option<Vec<u8>> {
         let path = self.path.join("models").join(format!("{}.glb", name));
-        println!("{:?}", path);
-
         let tx = self.models_reload_tx.clone();
         let reload_name = name.to_string();
         let reload_path = path.clone();
-        self.hotwatch.watch(&path, move |event: Event| {
+
+        let result = self.hotwatch.watch(&path, move |event: Event| {
             let path = reload_path.clone();
             let name = reload_name.clone();
             if let Event::Write(_) = event {
@@ -72,9 +71,15 @@ impl Assets {
                     tx.send(Reload { name, data }).unwrap();
                 }
             }
-        }).unwrap();
+        });
 
-        Assets::load_file(path)
+        match result {
+            Ok(_)  => Assets::load_file(path),
+            Err(err) => {
+                error!("Failed to load or setup hotreloading for '{}'. You will need to restart the game to reattempt loading this file. error: {}", path.to_str().unwrap(), err);
+                None
+            }
+        }
     }
 
     /// On failure to read from disk, logs the error and returns None
@@ -82,14 +87,14 @@ impl Assets {
         let mut file = match File::open(&path) {
             Ok(file) => file,
             Err(err) => {
-                error!("Failed to open file: {} because: {}", path.to_str().unwrap(), err);
+                error!("Failed to open file: '{}' because: {}", path.to_str().unwrap(), err);
                 return None;
             }
         };
 
         let mut contents = Vec::<u8>::new();
         if let Err(err) = file.read_to_end(&mut contents) {
-            error!("Failed to read file {} because: {}", path.to_str().unwrap(), err);
+            error!("Failed to read file '{}' because: {}", path.to_str().unwrap(), err);
             return None;
         };
         Some(contents)

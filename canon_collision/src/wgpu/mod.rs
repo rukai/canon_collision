@@ -14,7 +14,7 @@ use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::time::{Duration, Instant};
 use std::{thread, mem, f32};
@@ -37,7 +37,8 @@ use raw_window_handle::HasRawWindowHandle as _;
 pub struct WgpuGraphics {
     package:           Option<Package>,
     assets:            Assets,
-    stage:             Model3D,
+    models:            HashMap<String, Model3D>,
+    stage_model_name:  Option<String>,
     glyph_brush:       GlyphBrush<'static, ()>,
     hack_font_id:      FontId,
     window:            Window,
@@ -336,14 +337,15 @@ impl WgpuGraphics {
         let height = size.height.round() as u32;
         let wsd = WindowSizeDependent::new(&device, &surface, width, height);
 
-        let mut assets = Assets::new().unwrap();
-        let data = assets.get_model("BeatMesa").unwrap();
-        let stage = Model3D::from_gltf(&device, &data);
+        let assets = Assets::new().unwrap();
+        let models = HashMap::new();
+        let stage_model_name = None;
 
         WgpuGraphics {
             package: None,
             assets,
-            stage,
+            models,
+            stage_model_name,
             glyph_brush,
             hack_font_id,
             window,
@@ -371,8 +373,9 @@ impl WgpuGraphics {
                 let frame_start = Instant::now();
 
                 for reload in self.assets.models_reloads() {
-                    if reload.name == "BeatMesa" {
-                        self.stage = Model3D::from_gltf(&self.device, &reload.data);
+                    // only reload if its still in memory
+                    if self.models.contains_key(&reload.name) {
+                        self.models.insert(reload.name.clone(), Model3D::from_gltf(&self.device, &reload.data));
                     }
                 }
 
@@ -787,6 +790,12 @@ impl WgpuGraphics {
         })
     }
 
+    fn load_stage(&mut self, new_name: String) {
+        if let Some(data) = self.assets.get_model(&new_name) {
+            self.models.insert(new_name.clone(), Model3D::from_gltf(&self.device, &data));
+        }
+        self.stage_model_name = Some(new_name);
+    }
 
     fn game_render(&mut self, render: RenderGame, rpass: &mut RenderPass, command_output: &[String]) {
         let mut rng = StdRng::from_seed(render.seed);
@@ -812,9 +821,23 @@ impl WgpuGraphics {
             _ => { }
         }
 
+        // if a new stage is used, unload old stage and load new stage
+        let new_name = render.stage_model_name.replace(" ", "");
+        if let Some(ref old_name) = self.stage_model_name {
+            if old_name != &new_name {
+                self.models.remove(old_name);
+                self.load_stage(new_name);
+            }
+        }
+        else {
+            self.load_stage(new_name);
+        }
+
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
-            self.render_model3d(rpass, &render, &self.stage, &stage_transformation);
+            if let Some(stage) = self.stage_model_name.as_ref().and_then(|x| self.models.get(x)) {
+                self.render_model3d(rpass, &render, &stage, &stage_transformation);
+            }
         }
 
         if render.render_stage_mode.debug() {
