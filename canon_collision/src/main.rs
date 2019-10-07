@@ -28,8 +28,5 @@ use canon_collision_lib::logger;
 fn main() {
     canon_collision_lib::setup_panic_handler!();
     logger::init();
-
-    let foo = std::env::current_dir();
-    println!("{:?}", foo);
     run();
 }

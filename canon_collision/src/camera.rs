@@ -171,7 +171,8 @@ impl Camera {
             TransformMode::Dev => {
                 let width = (self.rect.x1 - self.rect.x2).abs();
                 let height = (self.rect.x1 - self.rect.x2).abs();
-                let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -1000000.0, 1000000.0);
+                // TODO: Apparently the near z plane should be positive, but that breaks things :/
+                let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -1000.0, 1000.0);
                 let camera_target = Point3::new(
                     (self.rect.x1 + self.rect.x2) / 2.0,
                     (self.rect.y1 + self.rect.y2) / 2.0,
@@ -180,7 +181,7 @@ impl Camera {
                 let camera_location = Point3::new(
                     (self.rect.x1 + self.rect.x2) / 2.0,
                     (self.rect.y1 + self.rect.y2) / 2.0,
-                    1.0
+                    10.0
                 );
                 let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
                 let aspect_ratio = Matrix4::from_nonuniform_scale(1.0, self.aspect_ratio, 1.0);

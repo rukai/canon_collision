@@ -2,19 +2,18 @@ mod buffers;
 mod model3d;
 
 use buffers::{ColorVertex, ColorBuffers, Vertex, Buffers};
-use model3d::{Model3D, ModelVertex};
+use model3d::{Models, Model3D, ModelVertex};
 use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::player::{RenderPlayer, RenderPlayerFrame, DebugPlayer};
 use crate::results::PlayerResult;
-use crate::assets::Assets;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::time::{Duration, Instant};
 use std::{thread, mem, f32};
@@ -25,7 +24,7 @@ use cgmath::{Matrix4, Vector3};
 use num_traits::{FromPrimitive, ToPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use wgpu::{Device, Surface, SwapChain, BindGroup, BindGroupLayout, RenderPipeline, RenderPass, TextureView};
+use wgpu::{Device, Surface, SwapChain, BindGroup, BindGroupLayout, RenderPipeline, RenderPass, TextureView, Sampler};
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Scale as GlyphScale};
 
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -35,28 +34,28 @@ use winit::window::Fullscreen;
 use raw_window_handle::HasRawWindowHandle as _;
 
 pub struct WgpuGraphics {
-    package:           Option<Package>,
-    assets:            Assets,
-    models:            HashMap<String, Model3D>,
-    stage_model_name:  Option<String>,
-    glyph_brush:       GlyphBrush<'static, ()>,
-    hack_font_id:      FontId,
-    window:            Window,
-    os_input_tx:       Sender<Event<()>>,
-    render_rx:         Receiver<GraphicsMessage>,
-    device:            Device,
-    surface:           Surface,
-    wsd:               WindowSizeDependent,
-    pipeline_color:    RenderPipeline,
-    pipeline_hitbox:   RenderPipeline,
-    pipeline_debug:    RenderPipeline,
-    pipeline_model3d:  RenderPipeline,
-    bind_group_layout: BindGroupLayout,
-    prev_fullscreen:   Option<bool>,
-    frame_durations:   Vec<Duration>,
-    fps:               String,
-    width:             u32,
-    height:            u32,
+    package:                   Option<Package>,
+    models:                    Models,
+    glyph_brush:               GlyphBrush<'static, ()>,
+    hack_font_id:              FontId,
+    window:                    Window,
+    os_input_tx:               Sender<Event<()>>,
+    render_rx:                 Receiver<GraphicsMessage>,
+    device:                    Device,
+    surface:                   Surface,
+    wsd:                       WindowSizeDependent,
+    pipeline_color:            RenderPipeline,
+    pipeline_hitbox:           RenderPipeline,
+    pipeline_debug:            RenderPipeline,
+    pipeline_model3d:          RenderPipeline,
+    bind_group_layout_generic: BindGroupLayout,
+    bind_group_layout_model3d: BindGroupLayout,
+    sampler:                   Sampler,
+    prev_fullscreen:           Option<bool>,
+    frame_durations:           Vec<Duration>,
+    fps:                       String,
+    width:                     u32,
+    height:                    u32,
 }
 
 const SAMPLE_COUNT: u32 = 4;
@@ -107,15 +106,19 @@ impl WgpuGraphics {
         let color_fs = vk_shader_macros::include_glsl!("src/shaders/color-fragment.glsl", kind: frag);
         let color_fs_module = device.create_shader_module(color_fs);
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { bindings: &[
-            wgpu::BindGroupLayoutBinding {
-                binding:    0,
-                visibility: wgpu::ShaderStage::all(),
-                ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+        let bind_group_layout_generic = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                bindings: &[
+                    wgpu::BindGroupLayoutBinding {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::all(),
+                        ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                    },
+                ]
             }
-        ] });
+        );
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout_generic],
         });
 
         let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
@@ -291,8 +294,36 @@ impl WgpuGraphics {
         let model3d_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-fragment.glsl", kind: frag);
         let model3d_fs_module = device.create_shader_module(model3d_fs);
 
+        let bind_group_layout_model3d = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                bindings: &[
+                    wgpu::BindGroupLayoutBinding {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::all(),
+                        ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                    },
+                    wgpu::BindGroupLayoutBinding {
+                        binding: 1,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::SampledTexture {
+                            multisampled: false,
+                            dimension: wgpu::TextureViewDimension::D2,
+                        },
+                    },
+                    wgpu::BindGroupLayoutBinding {
+                        binding: 2,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler,
+                    },
+                ]
+            }
+        );
+        let pipeline_model3d_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            bind_group_layouts: &[&bind_group_layout_model3d],
+        });
+
         let pipeline_model3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: &pipeline_model3d_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_vs_module,
                 entry_point: "main",
@@ -310,12 +341,18 @@ impl WgpuGraphics {
                 stride: mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
                 step_mode: wgpu::InputStepMode::Vertex,
                 attributes: &[
+                    // position
                     wgpu::VertexAttributeDescriptor {
                         format: wgpu::VertexFormat::Float4,
                         offset: 0,
                         shader_location: 0,
                     },
-                    // TODO: uvs
+                    //uv
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 4 * 4,
+                        shader_location: 1,
+                    },
                 ],
             }],
             sample_count: SAMPLE_COUNT,
@@ -323,6 +360,17 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: -100.0,
+            lod_max_clamp: 100.0,
+            compare_function: wgpu::CompareFunction::Always,
+        });
 
         let dejavu: &[u8] = include_bytes!("../fonts/DejaVuSans.ttf");
         let hack: &[u8] = include_bytes!("../fonts/Hack-Regular.ttf");
@@ -337,15 +385,11 @@ impl WgpuGraphics {
         let height = size.height.round() as u32;
         let wsd = WindowSizeDependent::new(&device, &surface, width, height);
 
-        let assets = Assets::new().unwrap();
-        let models = HashMap::new();
-        let stage_model_name = None;
+        let models = Models::new();
 
         WgpuGraphics {
             package: None,
-            assets,
             models,
-            stage_model_name,
             glyph_brush,
             hack_font_id,
             window,
@@ -358,7 +402,9 @@ impl WgpuGraphics {
             pipeline_hitbox,
             pipeline_debug,
             pipeline_model3d,
-            bind_group_layout,
+            bind_group_layout_generic,
+            bind_group_layout_model3d,
+            sampler,
             prev_fullscreen: None,
             frame_durations: vec!(),
             fps: "".into(),
@@ -371,13 +417,6 @@ impl WgpuGraphics {
         match event {
             Event::EventsCleared => {
                 let frame_start = Instant::now();
-
-                for reload in self.assets.models_reloads() {
-                    // only reload if its still in memory
-                    if self.models.contains_key(&reload.name) {
-                        self.models.insert(reload.name.clone(), Model3D::from_gltf(&self.device, &reload.data));
-                    }
-                }
 
                 if self.force_send_window_events() {
                     *control_flow = ControlFlow::Exit;
@@ -487,6 +526,11 @@ impl WgpuGraphics {
         self.window.set_cursor_visible(!render.fullscreen || in_game_paused);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { todo: 0 });
+
+        if let RenderType::Game(render) = &render.render_type {
+            self.models.load(&self.device, &mut encoder, render);
+        }
+
         let mut swap_chain = self.wsd.swap_chain.take().unwrap();
         {
             let frame = swap_chain.get_next_texture();
@@ -658,14 +702,16 @@ impl WgpuGraphics {
             .fill_from_slice(&[uniform]);
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.bind_group_layout,
-            bindings: &[wgpu::Binding {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &uniform_buffer,
-                    range: 0..mem::size_of::<Uniform>() as wgpu::BufferAddress,
-                }
-            }]
+            layout: &self.bind_group_layout_generic,
+            bindings: &[
+                wgpu::Binding {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &uniform_buffer,
+                        range: 0..mem::size_of::<Uniform>() as wgpu::BufferAddress,
+                    }
+                },
+            ]
         });
 
         rpass.set_pipeline(&self.pipeline_hitbox);
@@ -677,10 +723,10 @@ impl WgpuGraphics {
 
     fn render_model3d(
         &self,
-        rpass:    &mut RenderPass,
-        render:   &RenderGame,
-        model:    &Model3D,
-        entity:   &Matrix4<f32>,
+        rpass:  &mut RenderPass,
+        render: &RenderGame,
+        model:  &Model3D,
+        entity: &Matrix4<f32>,
     ) {
         let camera = render.camera.transform();
 
@@ -691,22 +737,36 @@ impl WgpuGraphics {
             let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
                 .fill_from_slice(&[uniform]);
 
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.bind_group_layout,
-                bindings: &[wgpu::Binding {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: &uniform_buffer,
-                        range: 0..mem::size_of::<ColorUniform>() as u64,
-                    }
-                }]
-            });
+            if let Some(texture) = mesh.texture.and_then(|x| model.textures.get(x)) {
+                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &self.bind_group_layout_model3d,
+                    bindings: &[
+                        wgpu::Binding {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &uniform_buffer,
+                                range: 0..mem::size_of::<ColorUniform>() as u64,
+                            }
+                        },
+                        wgpu::Binding {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                        },
+                        wgpu::Binding {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        },
+                    ]
+                });
 
-            rpass.set_pipeline(&self.pipeline_model3d);
-            rpass.set_bind_group(0, &bind_group, &[]);
-            rpass.set_index_buffer(&mesh.index, 0);
-            rpass.set_vertex_buffers(0, &[(&mesh.vertex, 0)]);
-            rpass.draw_indexed(0 .. mesh.index_count, 0, 0 .. 1);
+                rpass.set_pipeline(&self.pipeline_model3d);
+                rpass.set_bind_group(0, &bind_group, &[]);
+                rpass.set_index_buffer(&mesh.index, 0);
+                rpass.set_vertex_buffers(0, &[(&mesh.vertex, 0)]);
+                rpass.draw_indexed(0 .. mesh.index_count, 0, 0 .. 1);
+            } else {
+                error!("Models without textures are not rendered");
+            }
         }
     }
 
@@ -725,7 +785,7 @@ impl WgpuGraphics {
             .fill_from_slice(&[uniform]);
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.bind_group_layout,
+            layout: &self.bind_group_layout_generic,
             bindings: &[wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
@@ -757,7 +817,7 @@ impl WgpuGraphics {
             .fill_from_slice(&[uniform]);
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.bind_group_layout,
+            layout: &self.bind_group_layout_generic,
             bindings: &[wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
@@ -779,7 +839,7 @@ impl WgpuGraphics {
             .fill_from_slice(&[uniform]);
 
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.bind_group_layout,
+            layout: &self.bind_group_layout_generic,
             bindings: &[wgpu::Binding {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
@@ -788,13 +848,6 @@ impl WgpuGraphics {
                 }
             }]
         })
-    }
-
-    fn load_stage(&mut self, new_name: String) {
-        if let Some(data) = self.assets.get_model(&new_name) {
-            self.models.insert(new_name.clone(), Model3D::from_gltf(&self.device, &data));
-        }
-        self.stage_model_name = Some(new_name);
     }
 
     fn game_render(&mut self, render: RenderGame, rpass: &mut RenderPass, command_output: &[String]) {
@@ -821,21 +874,9 @@ impl WgpuGraphics {
             _ => { }
         }
 
-        // if a new stage is used, unload old stage and load new stage
-        let new_name = render.stage_model_name.replace(" ", "");
-        if let Some(ref old_name) = self.stage_model_name {
-            if old_name != &new_name {
-                self.models.remove(old_name);
-                self.load_stage(new_name);
-            }
-        }
-        else {
-            self.load_stage(new_name);
-        }
-
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
-            if let Some(stage) = self.stage_model_name.as_ref().and_then(|x| self.models.get(x)) {
+            if let Some(stage) = self.models.get(&render.stage_model_name) {
                 self.render_model3d(rpass, &render, &stage, &stage_transformation);
             }
         }
@@ -868,26 +909,16 @@ impl WgpuGraphics {
 
                     // draw fighter
                     let fighter_model_name = player.frames[0].model_name.replace(" ", "");
-                    // TODO: The game code should notify the graphics code what fighters and stages it will need.
-                    // Maybe load fighters immediately when selected on the CSS.
                     if player.debug.fighter.normal() {
                         let dir      = Matrix4::from_angle_y(if player.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
                         let rotate   = Matrix4::from_angle_z(Rad(player.frames[0].angle));
                         let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                         let transformation = position * rotate * dir;
-
-                        if render.render_stage_mode.normal() {
-                            if let Some(fighter) = self.models.get(&fighter_model_name) {
-                                self.render_model3d(rpass, &render, &fighter, &transformation);
-                            }
-                            else {
-                                // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
-                                if let Some(data) = self.assets.get_model(&fighter_model_name) {
-                                    self.models.insert(fighter_model_name.clone(), Model3D::from_gltf(&self.device, &data));
-                                }
-                            }
+                        if let Some(fighter) = self.models.get(&fighter_model_name) {
+                            self.render_model3d(rpass, &render, &fighter, &transformation);
                         }
                     }
+
                     // draw player ecb
                     if player.debug.ecb {
                         // TODO: Set individual corner vertex colours to show which points of the ecb are selected
