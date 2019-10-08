@@ -3,10 +3,11 @@ use canon_collision_lib::stage::Stage;
 use canon_collision_lib::geometry::Rect;
 use crate::player::Player;
 
-use cgmath::{Matrix4, Point3, Vector3, Transform};
+use cgmath::{Matrix4, Point3, Vector3, Transform, Rad};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
+use std::f32::consts;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Camera {
@@ -50,7 +51,11 @@ impl Camera {
             window_height:  1.0,
             rect:           Rect { x1: -10.0, y1: -10.0, x2: 10.0, y2: 10.0 },
             control_state:  CameraControlState::Auto,
-            transform_mode: TransformMode::Dev,
+            transform_mode: TransformMode::Play,
+            ///// Only used when TransformMode::Dev and CameraControlState::Manual
+            //freecam_location: Vector3<f32>,
+            ///// Only used when TransformMode::Dev and CameraControlState::Manual
+            //freecam_direction: Vector3<f32>,
         }
     }
 
@@ -61,6 +66,12 @@ impl Camera {
         }
         else if os_input.key_pressed(VirtualKeyCode::Back) {
             self.control_state = CameraControlState::Auto;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Escape) {
+            self.transform_mode = match self.transform_mode {
+                TransformMode::Dev  => TransformMode::Play,
+                TransformMode::Play => TransformMode::Dev,
+            };
         }
 
         if let CameraControlState::Manual = self.control_state {
@@ -81,7 +92,8 @@ impl Camera {
                     self.rect.y1 -= os_input.scroll_diff() * 4.0;
                     self.rect.y2 += os_input.scroll_diff() * 4.0;
                 }
-                TransformMode::Play => unimplemented!(),
+                TransformMode::Play => {
+                }
             }
         }
     }
@@ -96,8 +108,11 @@ impl Camera {
 
             // initialise new_rect using only the first player
             let mut player_iter = players.iter();
-            let mut new_rect = match player_iter.next() {
-                Some(player) => player.cam_area(&stage.camera, players, fighters, &stage.surfaces),
+            let new_rect = player_iter
+                .next()
+                .and_then(|x| x.cam_area(&stage.camera, players, fighters, &stage.surfaces));
+            let mut new_rect = match new_rect {
+                Some(rect) => rect,
                 None => {
                     self.rect = Rect { x1: -200.0, y1: -200.0, x2: 200.0, y2: 200.0 };
                     return;
@@ -106,11 +121,12 @@ impl Camera {
 
             // grow new_rect to cover all other players
             for player in player_iter {
-                let next_area = player.cam_area(&stage.camera, players, fighters, &stage.surfaces);
-                new_rect.x1 = new_rect.x1.min(next_area.left());
-                new_rect.x2 = new_rect.x2.max(next_area.right());
-                new_rect.y1 = new_rect.y1.min(next_area.bot());
-                new_rect.y2 = new_rect.y2.max(next_area.top());
+                if let Some(next_area) = player.cam_area(&stage.camera, players, fighters, &stage.surfaces) {
+                    new_rect.x1 = new_rect.x1.min(next_area.left());
+                    new_rect.x2 = new_rect.x2.max(next_area.right());
+                    new_rect.y1 = new_rect.y1.min(next_area.bot());
+                    new_rect.y2 = new_rect.y2.max(next_area.top());
+                }
             }
 
             // grow new_rect to fill aspect ratio
@@ -167,27 +183,46 @@ impl Camera {
     }
 
     pub fn transform(&self) -> Matrix4<f32> {
+        let width = (self.rect.x1 - self.rect.x2).abs();
+        let height = (self.rect.x1 - self.rect.x2).abs();
+        let middle_x = (self.rect.x1 + self.rect.x2) / 2.0;
+        let middle_y = (self.rect.y1 + self.rect.y2) / 2.0;
+
         match self.transform_mode {
             TransformMode::Dev => {
-                let width = (self.rect.x1 - self.rect.x2).abs();
-                let height = (self.rect.x1 - self.rect.x2).abs();
                 // TODO: Apparently the near z plane should be positive, but that breaks things :/
-                let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -1000.0, 1000.0);
-                let camera_target = Point3::new(
-                    (self.rect.x1 + self.rect.x2) / 2.0,
-                    (self.rect.y1 + self.rect.y2) / 2.0,
-                    0.0
-                );
-                let camera_location = Point3::new(
-                    (self.rect.x1 + self.rect.x2) / 2.0,
-                    (self.rect.y1 + self.rect.y2) / 2.0,
-                    10.0
-                );
+                let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -20000.0, 20000.0);
+                let camera_target   = Point3::new(middle_x, middle_y, 0.0);
+                let camera_location = Point3::new(middle_x, middle_y, 20000.0);
                 let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
                 let aspect_ratio = Matrix4::from_nonuniform_scale(1.0, self.aspect_ratio, 1.0);
                 aspect_ratio * proj * view
             }
-            TransformMode::Play => unimplemented!(),
+            TransformMode::Play => {
+                // projection matrix
+                let fov = 40.0;
+                let fov_rad = fov * consts::PI / 180.0;
+                let proj = cgmath::perspective(Rad(fov_rad), self.aspect_ratio, 1.0, 20000.0);
+
+                // camera distance
+                // TODO: The self.rect values are getting hecked up with aspect stuff so they can be used by the orthographic transform
+                let radius = (self.rect.y2 - middle_y).max(self.rect.x2 - middle_x);
+                let mut camera_distance = radius / (fov_rad / 2.0).tan();
+                let rect_aspect = width / height;
+                // TODO: This logic probably only works because this.pixel_width >= this.pixel_height is always true
+                if rect_aspect > self.aspect_ratio {
+                    camera_distance /= self.aspect_ratio;
+                }
+                else if width > height {
+                    camera_distance /= rect_aspect;
+                }
+
+                // view matrix
+                let camera_target   = Point3::new(middle_x, middle_y, 0.0);
+                let camera_location = Point3::new(middle_x, middle_y, camera_distance);
+                let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
+                proj * view
+            }
         }
     }
 

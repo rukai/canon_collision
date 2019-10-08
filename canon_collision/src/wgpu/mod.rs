@@ -908,14 +908,19 @@ impl WgpuGraphics {
                     let transformation = player_matrix(&player.frames[0]);
 
                     // draw fighter
-                    let fighter_model_name = player.frames[0].model_name.replace(" ", "");
-                    if player.debug.fighter.normal() {
-                        let dir      = Matrix4::from_angle_y(if player.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
-                        let rotate   = Matrix4::from_angle_z(Rad(player.frames[0].angle));
-                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
-                        let transformation = position * rotate * dir;
-                        if let Some(fighter) = self.models.get(&fighter_model_name) {
-                            self.render_model3d(rpass, &render, &fighter, &transformation);
+                    match Action::from_u64(player.frames[0].action as u64) {
+                        Some(Action::Eliminated) => { }
+                        _ => {
+                            let fighter_model_name = player.frames[0].model_name.replace(" ", "");
+                            if player.debug.fighter.normal() {
+                                let dir      = Matrix4::from_angle_y(if player.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+                                let rotate   = Matrix4::from_angle_z(Rad(player.frames[0].angle));
+                                let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
+                                let transformation = position * rotate * dir;
+                                if let Some(fighter) = self.models.get(&fighter_model_name) {
+                                    self.render_model3d(rpass, &render, &fighter, &transformation);
+                                }
+                            }
                         }
                     }
 

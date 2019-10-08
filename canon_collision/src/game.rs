@@ -1195,8 +1195,9 @@ impl Game {
 
             let debug = self.debug_players[i].clone();
             if debug.cam_area {
-                let cam_area = player.cam_area(&self.stage.camera, &self.players, &self.package.fighters, &self.stage.surfaces);
-                entities.push(RenderEntity::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                if let Some(cam_area) = player.cam_area(&self.stage.camera, &self.players, &self.package.fighters, &self.stage.surfaces) {
+                    entities.push(RenderEntity::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                }
             }
 
             let fighters = &self.package.fighters;

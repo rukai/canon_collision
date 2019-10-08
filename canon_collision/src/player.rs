@@ -2355,49 +2355,54 @@ impl Player {
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Rect {
-        let (x, y) = self.public_bps_xy(players, fighters, surfaces);
-        let mut left  = x;
-        let mut right = x;
-        let mut bot   = y - 5.0;
-        let mut top   = y + 25.0;
+    pub fn cam_area(&self, cam_max: &Rect, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+        match Action::from_u64(self.action) {
+            Some(Action::Eliminated) => None,
+            _ => {
+                let (x, y) = self.public_bps_xy(players, fighters, surfaces);
+                let mut left  = x;
+                let mut right = x;
+                let mut bot   = y - 5.0;
+                let mut top   = y + 25.0;
 
-        if self.face_right {
-            left  -= 7.0;
-            right += 40.0;
-        }
-        else {
-            left  -= 40.0;
-            right += 7.0;
-        }
+                if self.face_right {
+                    left  -= 7.0;
+                    right += 40.0;
+                }
+                else {
+                    left  -= 40.0;
+                    right += 7.0;
+                }
 
-        if left < cam_max.left() {
-            let diff = left - cam_max.left();
-            left  -= diff;
-            right -= diff;
-        }
-        else if right > cam_max.right() {
-            let diff = right - cam_max.right();
-            left  -= diff;
-            right -= diff;
-        }
+                if left < cam_max.left() {
+                    let diff = left - cam_max.left();
+                    left  -= diff;
+                    right -= diff;
+                }
+                else if right > cam_max.right() {
+                    let diff = right - cam_max.right();
+                    left  -= diff;
+                    right -= diff;
+                }
 
-        if bot < cam_max.bot() {
-            let diff = bot - cam_max.bot();
-            bot -= diff;
-            top -= diff;
-        }
-        else if top > cam_max.top() {
-            let diff = top - cam_max.top();
-            bot -= diff;
-            top -= diff;
-        }
+                if bot < cam_max.bot() {
+                    let diff = bot - cam_max.bot();
+                    bot -= diff;
+                    top -= diff;
+                }
+                else if top > cam_max.top() {
+                    let diff = top - cam_max.top();
+                    bot -= diff;
+                    top -= diff;
+                }
 
-        Rect {
-            x1: left,
-            x2: right,
-            y1: bot,
-            y2: top,
+                Some(Rect {
+                    x1: left,
+                    x2: right,
+                    y1: bot,
+                    y2: top,
+                })
+            }
         }
     }
 
