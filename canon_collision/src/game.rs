@@ -140,24 +140,24 @@ impl Game {
         {
             let state = self.state.clone();
             match state {
-                GameState::Local                 => { self.step_local(input, netplay); }
-                GameState::Netplay               => { self.step_netplay(input, netplay); }
-                GameState::ReplayForwards        => { self.step_replay_forwards(input, netplay); }
-                GameState::ReplayBackwards       => { self.step_replay_backwards(input); }
+                GameState::Local                 => self.step_local(input, netplay),
+                GameState::Netplay               => self.step_netplay(input, netplay),
+                GameState::ReplayForwards        => self.step_replay_forwards(input, netplay),
+                GameState::ReplayBackwards       => self.step_replay_backwards(input),
                 GameState::StepThenPause         => { self.step_local(input, netplay); self.state = GameState::Paused; }
                 GameState::StepForwardThenPause  => { self.step_replay_forwards(input, netplay); self.state = GameState::Paused; }
                 GameState::StepBackwardThenPause => { self.step_replay_backwards(input); self.state = GameState::Paused; }
-                GameState::Paused                => { self.step_pause(input); }
-                GameState::Quit (_)              => { unreachable!(); }
+                GameState::Paused                => self.step_pause(input),
+                GameState::Quit (_)              => unreachable!(),
             }
 
             if !os_input_blocked {
                 match state {
-                    GameState::Local           => { self.step_local_os_input(os_input); }
-                    GameState::ReplayForwards  => { self.step_replay_forwards_os_input(os_input); }
-                    GameState::ReplayBackwards => { self.step_replay_backwards_os_input(os_input); }
-                    GameState::Paused          => { self.step_pause_os_input(input, os_input, netplay); }
-                    GameState::Quit (_)        => { unreachable!(); }
+                    GameState::Local           => self.step_local_os_input(os_input),
+                    GameState::ReplayForwards  => self.step_replay_forwards_os_input(os_input),
+                    GameState::ReplayBackwards => self.step_replay_backwards_os_input(os_input),
+                    GameState::Paused          => self.step_pause_os_input(input, os_input, netplay),
+                    GameState::Quit (_)        => unreachable!(),
 
                     GameState::Netplay              | GameState::StepThenPause |
                     GameState::StepForwardThenPause | GameState::StepBackwardThenPause => { }
@@ -322,6 +322,38 @@ impl Game {
     }
 
     fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper<()>, netplay: &Netplay) {
+        // game flow control
+        if os_input.key_pressed(VirtualKeyCode::J) {
+            self.step_replay_backwards(input);
+        }
+        else if os_input.key_pressed(VirtualKeyCode::K) {
+            self.step_replay_forwards(input, netplay);
+        }
+        else if os_input.key_pressed(VirtualKeyCode::H) {
+            self.state = GameState::ReplayBackwards;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwards;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Space) {
+            self.step_local(input, netplay);
+        }
+        else if os_input.key_pressed(VirtualKeyCode::U) {
+            self.saved_frame = self.current_frame;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::I) {
+            //self.jump_frame(); // TODO: Fix
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Return) {
+            self.state = GameState::Local;
+        }
+
+        if self.camera.dev_mode() {
+            self.step_editor(input, os_input, netplay);
+        }
+    }
+
+    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper<()>, netplay: &Netplay) {
         let players_len = self.players.len();
 
         // set current edit state
@@ -363,32 +395,6 @@ impl Game {
                 self.edit = Edit::Fighter (3);
             }
             self.update_frame();
-        }
-
-        // game flow control
-        if os_input.key_pressed(VirtualKeyCode::J) {
-            self.step_replay_backwards(input);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::K) {
-            self.step_replay_forwards(input, netplay);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::H) {
-            self.state = GameState::ReplayBackwards;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::L) {
-            self.state = GameState::ReplayForwards;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Space) {
-            self.step_local(input, netplay);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::U) {
-            self.saved_frame = self.current_frame;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::I) {
-            //self.jump_frame(); // TODO: Fix
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Return) {
-            self.state = GameState::Local;
         }
 
         match self.edit {
@@ -1146,7 +1152,8 @@ impl Game {
         let frame = self.current_frame;
         let player_inputs = &input.players_no_log(frame, netplay);
 
-        self.debug_lines = vec!(format!("Frame: {}    state: {}", frame, self.state));
+        self.debug_lines = self.camera.debug_print();
+        self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
         for (i, player) in self.players.iter().enumerate() {
             let fighter = &self.package.fighters[self.players[i].fighter.as_ref()];
             let player_input = &player_inputs[self.selected_controllers[i]];
