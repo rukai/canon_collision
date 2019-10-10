@@ -79,7 +79,7 @@ impl WgpuGraphics {
             let instance = wgpu::Instance::new();
 
             let window = Window::new(&event_loop).unwrap();
-            window.set_title("PF Sandbox");
+            window.set_title("Canon Collision");
             let size = window
                 .inner_size()
                 .to_physical(window.hidpi_factor());

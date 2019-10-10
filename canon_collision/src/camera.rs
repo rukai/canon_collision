@@ -132,7 +132,7 @@ impl Camera {
             // grow new_rect to fill aspect ratio
             let mut width  = (new_rect.x1 - new_rect.x2).abs();
             let mut height = (new_rect.y1 - new_rect.y2).abs();
-            if width / height > self.aspect_ratio {
+            if width / height > self.aspect_ratio { // if new_rect AR is wider than the screen AR
                 height = width / self.aspect_ratio;
 
                 let avg_vertical = (new_rect.y2 + new_rect.y1) / 2.0;
@@ -188,6 +188,8 @@ impl Camera {
         let middle_x = (self.rect.x1 + self.rect.x2) / 2.0;
         let middle_y = (self.rect.y1 + self.rect.y2) / 2.0;
 
+        let aspect_ratio = Matrix4::from_nonuniform_scale(1.0, self.aspect_ratio, 1.0);
+
         match self.transform_mode {
             TransformMode::Dev => {
                 // TODO: Apparently the near z plane should be positive, but that breaks things :/
@@ -195,17 +197,17 @@ impl Camera {
                 let camera_target   = Point3::new(middle_x, middle_y, 0.0);
                 let camera_location = Point3::new(middle_x, middle_y, 20000.0);
                 let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
-                let aspect_ratio = Matrix4::from_nonuniform_scale(1.0, self.aspect_ratio, 1.0);
                 aspect_ratio * proj * view
             }
             TransformMode::Play => {
                 // projection matrix
                 let fov = 40.0;
                 let fov_rad = fov * consts::PI / 180.0;
-                let proj = cgmath::perspective(Rad(fov_rad), self.aspect_ratio, 1.0, 20000.0);
+                // For some reason specifying the aspect ratio as an argument here messes up the logic for fitting the rect in the camera.
+                // So we just implement aspect ratio in a seperate matrix, which doesnt have this issue for some reason
+                let proj = cgmath::perspective(Rad(fov_rad), 1.0, 1.0, 20000.0);
 
                 // camera distance
-                // TODO: The self.rect values are getting hecked up with aspect stuff so they can be used by the orthographic transform
                 let radius = (self.rect.y2 - middle_y).max(self.rect.x2 - middle_x);
                 let mut camera_distance = radius / (fov_rad / 2.0).tan();
                 let rect_aspect = width / height;
@@ -221,7 +223,7 @@ impl Camera {
                 let camera_target   = Point3::new(middle_x, middle_y, 0.0);
                 let camera_location = Point3::new(middle_x, middle_y, camera_distance);
                 let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
-                proj * view
+                aspect_ratio * proj * view
             }
         }
     }
