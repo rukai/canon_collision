@@ -107,8 +107,8 @@ impl Camera {
                         // rotate camera
                         if os_input.mouse_held(2) {
                             let mouse_diff = os_input.mouse_diff();
-                            self.freelook_theta -= mouse_diff.0 / 200.0;
-                            self.freelook_phi   += mouse_diff.1 / 200.0;
+                            self.freelook_theta -= mouse_diff.0 / 300.0;
+                            self.freelook_phi   += mouse_diff.1 / 300.0;
                         }
 
                         // clamp direction

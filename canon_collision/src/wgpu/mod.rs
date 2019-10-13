@@ -2,7 +2,7 @@ mod buffers;
 mod model3d;
 
 use buffers::{ColorVertex, ColorBuffers, Vertex, Buffers};
-use model3d::{Models, Model3D, ModelVertex};
+use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ModelVertexStatic, Joint};
 use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
@@ -47,7 +47,8 @@ pub struct WgpuGraphics {
     pipeline_color:            RenderPipeline,
     pipeline_hitbox:           RenderPipeline,
     pipeline_debug:            RenderPipeline,
-    pipeline_model3d:          RenderPipeline,
+    pipeline_model3d_static:   RenderPipeline,
+    pipeline_model3d_animated: RenderPipeline,
     bind_group_layout_generic: BindGroupLayout,
     bind_group_layout_model3d: BindGroupLayout,
     sampler:                   Sampler,
@@ -288,11 +289,14 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
-        let model3d_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-vertex.glsl", kind: vert);
-        let model3d_vs_module = device.create_shader_module(model3d_vs);
-
         let model3d_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-fragment.glsl", kind: frag);
         let model3d_fs_module = device.create_shader_module(model3d_fs);
+
+        let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
+        let model3d_static_vs_module = device.create_shader_module(model3d_static_vs);
+
+        let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
+        let model3d_animated_vs_module = device.create_shader_module(model3d_animated_vs);
 
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -322,10 +326,10 @@ impl WgpuGraphics {
             bind_group_layouts: &[&bind_group_layout_model3d],
         });
 
-        let pipeline_model3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_model3d_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
-                module: &model3d_vs_module,
+                module: &model3d_static_vs_module,
                 entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
@@ -335,10 +339,10 @@ impl WgpuGraphics {
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
-            depth_stencil_state,
+            depth_stencil_state: depth_stencil_state.clone(),
             index_format: wgpu::IndexFormat::Uint16,
             vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                stride: mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
+                stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                 step_mode: wgpu::InputStepMode::Vertex,
                 attributes: &[
                     // position
@@ -347,11 +351,61 @@ impl WgpuGraphics {
                         offset: 0,
                         shader_location: 0,
                     },
-                    //uv
+                    // uv
                     wgpu::VertexAttributeDescriptor {
                         format: wgpu::VertexFormat::Float4,
                         offset: 4 * 4,
                         shader_location: 1,
+                    },
+                ],
+            }],
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        let pipeline_model3d_animated = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_model3d_layout,
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &model3d_animated_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &model3d_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state: depth_stencil_state.clone(),
+            index_format: wgpu::IndexFormat::Uint16,
+            vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
+                step_mode: wgpu::InputStepMode::Vertex,
+                attributes: &[
+                    // position
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    // uv
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 4 * 4,
+                        shader_location: 1,
+                    },
+                    // joints
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Uint4,
+                        offset: 4 * 4 + 4 * 2,
+                        shader_location: 2,
+                    },
+                    // weights
+                    wgpu::VertexAttributeDescriptor {
+                        format: wgpu::VertexFormat::Float4,
+                        offset: 4 * 4 + 4 * 2 + 4 * 4,
+                        shader_location: 3,
                     },
                 ],
             }],
@@ -401,7 +455,8 @@ impl WgpuGraphics {
             pipeline_color,
             pipeline_hitbox,
             pipeline_debug,
-            pipeline_model3d,
+            pipeline_model3d_static,
+            pipeline_model3d_animated,
             bind_group_layout_generic,
             bind_group_layout_model3d,
             sampler,
@@ -695,7 +750,7 @@ impl WgpuGraphics {
         let uniform = Uniform {
             edge_color,
             color,
-            transformation: transformation.into(),
+            transform: transformation.into(),
         };
 
         let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
@@ -721,6 +776,14 @@ impl WgpuGraphics {
         rpass.draw_indexed(0 .. buffers.index_count, 0, 0 .. 1);
     }
 
+    fn flatten_joint_transforms(joint: &Joint, buffer: &mut [[[f32; 4]; 4]; 500]) {
+        buffer[joint.index] = joint.transform.into();
+
+        for child in &joint.children {
+            WgpuGraphics::flatten_joint_transforms(child, buffer);
+        }
+    }
+
     fn render_model3d(
         &self,
         rpass:  &mut RenderPass,
@@ -732,40 +795,79 @@ impl WgpuGraphics {
 
         for mesh in &model.meshes {
             let transformation = camera * entity * mesh.transform;
-            let uniform = ColorUniform { transformation: transformation.into() };
 
-            let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
-                .fill_from_slice(&[uniform]);
+            let transform_uniform = TransformUniform { transform: transformation.into() };
+            let transform_uniform = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
+                .fill_from_slice(&[transform_uniform]);
 
-            if let Some(texture) = mesh.texture.and_then(|x| model.textures.get(x)) {
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &self.bind_group_layout_model3d,
-                    bindings: &[
-                        wgpu::Binding {
-                            binding: 0,
-                            resource: wgpu::BindingResource::Buffer {
-                                buffer: &uniform_buffer,
-                                range: 0..mem::size_of::<ColorUniform>() as u64,
-                            }
-                        },
-                        wgpu::Binding {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
-                        },
-                        wgpu::Binding {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(&self.sampler),
-                        },
-                    ]
-                });
+            let mut joint_transforms = [Matrix4::identity().into(); 500];
+            if let Some(root_joint) = &mesh.root_joint {
+                WgpuGraphics::flatten_joint_transforms(root_joint, &mut joint_transforms);
+            }
+            let transform = transformation.into();
+            let animated_uniform = AnimatedUniform { transform, joint_transforms };
+            let animated_uniform = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
+                .fill_from_slice(&[animated_uniform]);
 
-                rpass.set_pipeline(&self.pipeline_model3d);
-                rpass.set_bind_group(0, &bind_group, &[]);
-                rpass.set_index_buffer(&mesh.index, 0);
-                rpass.set_vertex_buffers(0, &[(&mesh.vertex, 0)]);
-                rpass.draw_indexed(0 .. mesh.index_count, 0, 0 .. 1);
-            } else {
-                error!("Models without textures are not rendered");
+            for primitive in &mesh.primitives {
+                if let Some(texture) = primitive.texture.and_then(|x| model.textures.get(x)) {
+                    match primitive.vertex_type {
+                        ModelVertexType::Animated => rpass.set_pipeline(&self.pipeline_model3d_animated),
+                        ModelVertexType::Static   => rpass.set_pipeline(&self.pipeline_model3d_static),
+                    }
+
+                    let bind_group = match primitive.vertex_type {
+                        ModelVertexType::Animated =>
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                layout: &self.bind_group_layout_model3d,
+                                bindings: &[
+                                    wgpu::Binding {
+                                        binding: 0,
+                                        resource: wgpu::BindingResource::Buffer {
+                                            buffer: &animated_uniform,
+                                            range: 0..mem::size_of::<AnimatedUniform>() as u64,
+                                        }
+                                    },
+                                    wgpu::Binding {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                    },
+                                    wgpu::Binding {
+                                        binding: 2,
+                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                                    },
+                                ]
+                            }),
+                        ModelVertexType::Static =>
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                layout: &self.bind_group_layout_model3d,
+                                bindings: &[
+                                    wgpu::Binding {
+                                        binding: 0,
+                                        resource: wgpu::BindingResource::Buffer {
+                                            buffer: &transform_uniform,
+                                            range: 0..mem::size_of::<TransformUniform>() as u64,
+                                        }
+                                    },
+                                    wgpu::Binding {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                    },
+                                    wgpu::Binding {
+                                        binding: 2,
+                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                                    },
+                                ]
+                            }),
+                    };
+
+                    rpass.set_bind_group(0, &bind_group, &[]);
+                    rpass.set_index_buffer(&primitive.index, 0);
+                    rpass.set_vertex_buffers(0, &[(&primitive.vertex, 0)]);
+                    rpass.draw_indexed(0 .. primitive.index_count, 0, 0 .. 1);
+                } else {
+                    error!("Models without textures are not rendered");
+                }
             }
         }
     }
@@ -779,7 +881,7 @@ impl WgpuGraphics {
     ) {
         let camera = render.camera.transform();
         let transformation = camera * entity;
-        let uniform = ColorUniform { transformation: transformation.into() };
+        let uniform = TransformUniform { transform: transformation.into() };
 
         let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
             .fill_from_slice(&[uniform]);
@@ -790,7 +892,7 @@ impl WgpuGraphics {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
                     buffer: &uniform_buffer,
-                    range: 0..mem::size_of::<ColorUniform>() as u64,
+                    range: 0..mem::size_of::<TransformUniform>() as u64,
                 }
             }]
         });
@@ -811,7 +913,7 @@ impl WgpuGraphics {
     ) {
         let camera = render.camera.transform();
         let transformation = camera * entity;
-        let uniform = ColorUniform { transformation: transformation.into() };
+        let uniform = TransformUniform { transform: transformation.into() };
 
         let uniform_buffer = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
             .fill_from_slice(&[uniform]);
@@ -822,7 +924,7 @@ impl WgpuGraphics {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
                     buffer: &uniform_buffer,
-                    range: 0..mem::size_of::<ColorUniform>() as u64,
+                    range: 0..mem::size_of::<TransformUniform>() as u64,
                 }
             }]
         });
@@ -1313,7 +1415,7 @@ impl WgpuGraphics {
         let uniform = Uniform {
             edge_color:     [1.0, 1.0, 1.0, 1.0],
             color:          [1.0, 1.0, 1.0, 1.0],
-            transformation: Matrix4::identity().into(),
+            transform: Matrix4::identity().into(),
         };
         let bind_group = self.new_bind_group(uniform);
 
@@ -1481,7 +1583,7 @@ impl WgpuGraphics {
                     let uniform = Uniform {
                         edge_color:     graphics::get_team_color4(selection.team),
                         color:          [0.9, 0.9, 0.9, 1.0],
-                        transformation: transformation.into(),
+                        transform: transformation.into(),
                     };
                     let bind_group = self.new_bind_group(uniform);
 
@@ -1528,7 +1630,7 @@ impl WgpuGraphics {
                 let camera   = Matrix4::from_nonuniform_scale(zoom, zoom * self.aspect_ratio(), 1.0);
                 let position = Matrix4::from_translation(Vector3::new(1.0, y, 0.0));
                 let transformation = camera * position;
-                let uniform = ColorUniform { transformation: transformation.into() };
+                let uniform = TransformUniform { transform: transformation.into() };
 
                 let bind_group = self.new_bind_group(uniform);
                 let entity = MenuEntity::Stage(stage_key.clone());
@@ -1682,14 +1784,22 @@ struct MenuEntityAndBindGroup {
 #[allow(dead_code)]
 #[repr(C)]
 struct Uniform {
-    edge_color:     [f32; 4],
-    color:          [f32; 4],
-    transformation: [[f32; 4]; 4],
+    edge_color: [f32; 4],
+    color:      [f32; 4],
+    transform:  [[f32; 4]; 4],
 }
 
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
 #[repr(C)]
-struct ColorUniform {
-    transformation: [[f32; 4]; 4],
+struct TransformUniform {
+    transform: [[f32; 4]; 4],
+}
+
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+#[repr(C)]
+struct AnimatedUniform {
+    transform: [[f32; 4]; 4],
+    joint_transforms: [[[f32; 4]; 4]; 500],
 }

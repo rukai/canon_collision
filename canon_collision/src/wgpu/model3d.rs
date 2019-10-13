@@ -82,39 +82,53 @@ impl Models {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct ModelVertex {
+pub struct ModelVertexAnimated {
+    pub position: [f32; 4],
+    pub uv:       [f32; 2],
+    pub joints:   [u32; 4],
+    pub weights:  [f32; 4],
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct ModelVertexStatic {
     pub position: [f32; 4],
     pub uv:       [f32; 2],
 }
 
+pub enum ModelVertexType {
+    Animated,
+    Static,
+}
+
+pub struct Model3D {
+    pub meshes: Vec<Mesh>,
+    pub textures: Vec<Texture>,
+    pub animations: HashMap<String, Animation>
+}
+
 pub struct Mesh {
+    pub primitives:  Vec<Primitive>,
     pub transform:   Matrix4<f32>,
+    pub root_joint:   Option<Joint>,
+}
+
+pub struct Primitive {
+    pub vertex_type: ModelVertexType,
     pub vertex:      Buffer,
     pub index:       Buffer,
     pub index_count: u32,
     pub texture:     Option<usize>,
 }
 
-impl Mesh {
-    fn new(device: &Device, vertices: &[ModelVertex], indices: &[u16], transform: Matrix4<f32>, texture: Option<usize>) -> Mesh {
-        let vertex = device
-            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
-            .fill_from_slice(&vertices);
-
-        let index = device
-            .create_buffer_mapped(indices.len(), wgpu::BufferUsage::INDEX)
-            .fill_from_slice(&indices);
-
-        let index_count = indices.len() as u32;
-
-        Mesh { transform, vertex, index, index_count, texture }
-    }
+pub struct Animation {
 }
 
-pub struct Model3D {
-    pub meshes: Vec<Mesh>,
-    pub textures: Vec<Texture>,
-    //animation: Vec<Animation>
+#[derive(Debug, Clone)]
+pub struct Joint {
+    pub name: String,
+    pub index: usize,
+    pub children: Vec<Joint>,
+    pub transform: Matrix4<f32>,
 }
 
 impl Model3D {
@@ -124,14 +138,11 @@ impl Model3D {
         let scene = gltf.default_scene().unwrap();
 
         let mut meshes = vec!();
-        let mut textures = vec!();
         for node in scene.nodes() {
-            let child_model = Model3D::from_gltf_node(device, &node, blob);
-            for mesh in child_model.meshes {
-                meshes.push(mesh);
-            }
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &node));
         }
 
+        let mut textures = vec!();
         for texture in gltf.textures() {
             match texture.source().source() {
                 ImageSource::View { view, mime_type } => {
@@ -195,14 +206,56 @@ impl Model3D {
             }
         }
 
-        Model3D { meshes, textures }
+        let mut animations = HashMap::new();
+        for animation in gltf.animations() {
+            if let Some(name) = animation.name() {
+                //println!("{}", name);
+                for channel in animation.channels() {
+                    let _target = channel.target();
+                    let _sampler = channel.sampler();
+                    //println!("property {:?}", target.property());
+                    //println!("interpolation {:?}", sampler.interpolation());
+                }
+
+                let name = name.to_string();
+                animations.insert(name, Animation { });
+            }
+            else {
+                error!("A gltf animation could not be loaded as it has no name.");
+            }
+        }
+
+        Model3D { meshes, textures, animations }
     }
 
-    fn from_gltf_node(device: &Device, node: &Node, blob: &[u8]) -> Model3D {
+    fn transform_to_matrix4(transform: Transform) -> Matrix4<f32> {
+        match transform {
+            Transform::Matrix { .. } => unimplemented!("It is assumed that gltf node transforms only use decomposed form."),
+            Transform::Decomposed { translation, rotation, scale } => {
+                let translation = Matrix4::from_translation(translation.into());
+                let rotation: Matrix4<f32> = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
+                let scale = Matrix4::from_nonuniform_scale(scale[0], scale[1], scale[2]);
+                translation * rotation * scale
+            }
+        }
+    }
+
+    fn mesh_from_gltf_node(device: &Device, blob: &[u8], node: &Node) -> Vec<Mesh> {
         let mut meshes = vec!();
-        let textures = vec!();
 
         if let Some(mesh) = node.mesh() {
+            let mut root_joint = None;
+            if let Some(skin) = node.skin() {
+                // You might think that skin.skeleton() would return the root_node, but you would be wrong.
+                let joints: Vec<_> = skin.joints().collect();
+                if joints.len() > 0 {
+                    let node_to_joints_lookup: Vec<_> = joints.iter().map(|x| x.index()).collect();
+                    root_joint = Some(Model3D::skeleton_from_gltf_node(device, &joints[0], blob, &node_to_joints_lookup));
+                }
+            }
+            //println!("{:#?}", root_joint);
+
+            let mut primitives = vec!();
             for primitive in mesh.primitives() {
                 match primitive.mode() {
                     Mode::Triangles => { }
@@ -216,23 +269,46 @@ impl Model3D {
                     Some(&blob)
                 });
 
-                let positions = reader.read_positions().unwrap();
-                let vertices: Vec<_> = if let Some(uvs) = reader.read_tex_coords(0) {
-                    positions
-                        .zip(uvs.into_f32())
-                        .map(|(pos, uv)| ModelVertex {
-                            position: [pos[0], pos[1], pos[2], 1.0],
-                            uv
-                        })
-                        .collect()
-                } else {
-                    warn!("Model loaded without uv's.");
-                    positions
-                        .map(|pos| ModelVertex {
-                            position: [pos[0], pos[1], pos[2], 1.0],
-                            uv: [0.0, 0.0]
-                        })
-                        .collect()
+                let positions = reader.read_positions();
+                let uvs = reader.read_tex_coords(0);
+                let joints = reader.read_joints(0);
+                let weights = reader.read_weights(0);
+                let (vertex, vertex_type) = match (positions, uvs, joints, weights) {
+                    (Some(positions), Some(uvs), Some(joints), Some(weights)) => {
+                        let vertices: Vec<_> = positions
+                            .zip(uvs.into_f32())
+                            .zip(joints.into_u16())
+                            .zip(weights.into_f32())
+                            .map(|(((pos, uv), joints), weights)| ModelVertexAnimated {
+                                position: [pos[0], pos[1], pos[2], 1.0],
+                                uv,
+                                joints: [joints[0] as u32, joints[1] as u32, joints[2] as u32, joints[3] as u32],
+                                weights,
+                            })
+                            .collect();
+
+                        let vertex = device
+                            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
+                            .fill_from_slice(&vertices);
+
+                        (vertex, ModelVertexType::Animated)
+                    }
+                    (Some(positions), Some(uvs), None, None) => {
+                        let vertices: Vec<_> = positions
+                            .zip(uvs.into_f32())
+                            .map(|(pos, uv)| ModelVertexStatic {
+                                position: [pos[0], pos[1], pos[2], 1.0],
+                                uv,
+                            })
+                            .collect();
+
+                        let vertex = device
+                            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
+                            .fill_from_slice(&vertices);
+
+                        (vertex, ModelVertexType::Static)
+                    }
+                    (positions, uvs, joints, weights) => unimplemented!("Unexpected combination of vertex data - positions: {:?}, uvs: {:?}, joints: {:?}, weights: {:?}", positions.is_some(), uvs.is_some(), joints.is_some(), weights.is_some()),
                 };
 
                 let indices: Vec<u16> = reader
@@ -241,16 +317,9 @@ impl Model3D {
                     .into_u32()
                     .map(|x| x.try_into().unwrap())
                     .collect();
-
-                let transform = match node.transform() {
-                    Transform::Matrix { .. } => unimplemented!("It is assumed that gltf node transforms only use decomposed form."),
-                    Transform::Decomposed { translation, rotation, scale } => {
-                        let translation = Matrix4::from_translation(translation.into());
-                        let rotation: Matrix4<f32> = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
-                        let scale = Matrix4::from_nonuniform_scale(scale[0], scale[1], scale[2]);
-                        translation * rotation * scale
-                    }
-                };
+                let index = device
+                    .create_buffer_mapped(indices.len(), wgpu::BufferUsage::INDEX)
+                    .fill_from_slice(&indices);
 
                 let texture = primitive
                     .material()
@@ -258,17 +327,36 @@ impl Model3D {
                     .base_color_texture()
                     .map(|x| x.texture().index());
 
-                meshes.push(Mesh::new(device, &vertices, &indices, transform, texture));
+                let index_count = indices.len() as u32;
+
+                primitives.push(Primitive { vertex_type, vertex, index, index_count, texture });
             }
+
+            let transform = Model3D::transform_to_matrix4(node.transform());
+
+            meshes.push(Mesh { primitives, transform, root_joint });
         }
 
         for child in node.children() {
-            let child_model = Model3D::from_gltf_node(device, &child, blob);
-            for mesh in child_model.meshes {
-                meshes.push(mesh);
-            }
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &child));
         }
 
-        Model3D { meshes, textures }
+        meshes
+    }
+
+    fn skeleton_from_gltf_node(device: &Device, node: &Node, blob: &[u8], node_to_joints_lookup: &[usize]) -> Joint {
+        let mut children = vec!();
+        let node_index = node.index();
+        let index = node_to_joints_lookup.iter().enumerate().find(|(_, x)| **x == node_index).unwrap().0;
+        let name = node.name().unwrap_or("").to_string();
+        println!("{:?}", name);
+
+        for child in node.children() {
+            children.push(Model3D::skeleton_from_gltf_node(device, &child, blob, node_to_joints_lookup));
+        }
+
+        let transform = Model3D::transform_to_matrix4(node.transform());
+
+        Joint { index, name, children, transform }
     }
 }
