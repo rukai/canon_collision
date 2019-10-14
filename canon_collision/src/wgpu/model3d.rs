@@ -11,7 +11,7 @@ use gltf::scene::{Node, Transform};
 use png_decoder::png;
 use png_decoder::color::ColorType as PNGColorType;
 use wgpu::{Device, Buffer, Texture, CommandEncoder};
-use cgmath::{Matrix4, Quaternion};
+use cgmath::{Matrix4, Quaternion, SquareMatrix};
 
 use std::convert::TryInto;
 
@@ -139,7 +139,7 @@ impl Model3D {
 
         let mut meshes = vec!();
         for node in scene.nodes() {
-            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &node));
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &node, Matrix4::identity()));
         }
 
         let mut textures = vec!();
@@ -240,8 +240,10 @@ impl Model3D {
         }
     }
 
-    fn mesh_from_gltf_node(device: &Device, blob: &[u8], node: &Node) -> Vec<Mesh> {
+    fn mesh_from_gltf_node(device: &Device, blob: &[u8], node: &Node, parent_transform: Matrix4<f32>) -> Vec<Mesh> {
         let mut meshes = vec!();
+
+        let transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         if let Some(mesh) = node.mesh() {
             let mut root_joint = None;
@@ -249,11 +251,18 @@ impl Model3D {
                 // You might think that skin.skeleton() would return the root_node, but you would be wrong.
                 let joints: Vec<_> = skin.joints().collect();
                 if joints.len() > 0 {
+                    let reader = skin.reader(|buffer| {
+                        match buffer.source() {
+                            BufferSource::Bin => { }
+                            _ => unimplemented!("It is assumed that gltf buffers use only bin source.")
+                        }
+                        Some(&blob)
+                    });
+                    let ibm: Vec<Matrix4<f32>> = reader.read_inverse_bind_matrices().unwrap().map(|x| x.into()).collect();
                     let node_to_joints_lookup: Vec<_> = joints.iter().map(|x| x.index()).collect();
-                    root_joint = Some(Model3D::skeleton_from_gltf_node(device, &joints[0], blob, &node_to_joints_lookup));
+                    root_joint = Some(Model3D::skeleton_from_gltf_node(device, &joints[0], blob, &node_to_joints_lookup, &ibm, Matrix4::identity()));
                 }
             }
-            //println!("{:#?}", root_joint);
 
             let mut primitives = vec!();
             for primitive in mesh.primitives() {
@@ -332,30 +341,30 @@ impl Model3D {
                 primitives.push(Primitive { vertex_type, vertex, index, index_count, texture });
             }
 
-            let transform = Model3D::transform_to_matrix4(node.transform());
-
             meshes.push(Mesh { primitives, transform, root_joint });
         }
 
         for child in node.children() {
-            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &child));
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &child, transform));
         }
 
         meshes
     }
 
-    fn skeleton_from_gltf_node(device: &Device, node: &Node, blob: &[u8], node_to_joints_lookup: &[usize]) -> Joint {
+    fn skeleton_from_gltf_node(device: &Device, node: &Node, blob: &[u8], node_to_joints_lookup: &[usize], ibms: &[Matrix4<f32>], parent_transform: Matrix4<f32>) -> Joint {
         let mut children = vec!();
         let node_index = node.index();
         let index = node_to_joints_lookup.iter().enumerate().find(|(_, x)| **x == node_index).unwrap().0;
         let name = node.name().unwrap_or("").to_string();
-        println!("{:?}", name);
+
+        let ibm = &ibms[index];
+        let pose_transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         for child in node.children() {
-            children.push(Model3D::skeleton_from_gltf_node(device, &child, blob, node_to_joints_lookup));
+            children.push(Model3D::skeleton_from_gltf_node(device, &child, blob, node_to_joints_lookup, ibms, pose_transform.clone()));
         }
 
-        let transform = Model3D::transform_to_matrix4(node.transform());
+        let transform = pose_transform * ibm;
 
         Joint { index, name, children, transform }
     }

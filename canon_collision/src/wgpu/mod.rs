@@ -804,10 +804,12 @@ impl WgpuGraphics {
             if let Some(root_joint) = &mesh.root_joint {
                 WgpuGraphics::flatten_joint_transforms(root_joint, &mut joint_transforms);
             }
-            let transform = transformation.into();
-            let animated_uniform = AnimatedUniform { transform, joint_transforms };
-            let animated_uniform = self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM)
-                .fill_from_slice(&[animated_uniform]);
+            let animated_uniform = {
+                let transform = (camera * entity).into();
+                let uniform = AnimatedUniform { transform, joint_transforms };
+
+                self.device.create_buffer_mapped(1, wgpu::BufferUsage::UNIFORM).fill_from_slice(&[uniform])
+            };
 
             for primitive in &mesh.primitives {
                 if let Some(texture) = primitive.texture.and_then(|x| model.textures.get(x)) {
