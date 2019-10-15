@@ -8,10 +8,12 @@ use gltf::mesh::Mode;
 use gltf::image::Source as ImageSource;
 use gltf::buffer::Source as BufferSource;
 use gltf::scene::{Node, Transform};
+use gltf::animation::{Interpolation};
+use gltf::animation::util::ReadOutputs;
 use png_decoder::png;
 use png_decoder::color::ColorType as PNGColorType;
 use wgpu::{Device, Buffer, Texture, CommandEncoder};
-use cgmath::{Matrix4, Quaternion, SquareMatrix};
+use cgmath::{Matrix4, Quaternion, SquareMatrix, Vector3};
 
 use std::convert::TryInto;
 
@@ -121,14 +123,35 @@ pub struct Primitive {
 }
 
 pub struct Animation {
+    pub channels: Vec<Channel>,
+}
+
+pub struct Channel {
+    pub target_node_index: usize,
+    pub inputs: Vec<f32>,
+    pub outputs: ChannelOutputs,
+    pub interpolation: Interpolation,
+}
+
+pub enum ChannelOutputs {
+    Translations (Vec<Vector3<f32>>),
+    Rotations    (Vec<Quaternion<f32>>),
+    Scales       (Vec<Vector3<f32>>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Joint {
     pub name: String,
+    pub node_index: usize,
     pub index: usize,
     pub children: Vec<Joint>,
-    pub transform: Matrix4<f32>,
+    // TODO: delete this and write to the buffer directly
+    pub transform:   Matrix4<f32>,
+    pub ibm:         Matrix4<f32>,
+    // default transform
+    pub translation: Vector3<f32>,
+    pub rotation:    Quaternion<f32>,
+    pub scale:       Vector3<f32>,
 }
 
 impl Model3D {
@@ -209,16 +232,42 @@ impl Model3D {
         let mut animations = HashMap::new();
         for animation in gltf.animations() {
             if let Some(name) = animation.name() {
-                //println!("{}", name);
+                let mut channels = vec!();
+
                 for channel in animation.channels() {
-                    let _target = channel.target();
-                    let _sampler = channel.sampler();
-                    //println!("property {:?}", target.property());
-                    //println!("interpolation {:?}", sampler.interpolation());
+                    let target = channel.target();
+                    let target_node_index = target.node().index();
+
+                    let sampler = channel.sampler();
+                    let interpolation = sampler.interpolation();
+
+                    let reader = channel.reader(|buffer| {
+                        match buffer.source() {
+                            BufferSource::Bin => { }
+                            _ => unimplemented!("It is assumed that gltf buffers use only bin source.")
+                        }
+                        Some(&blob)
+                    });
+                    let inputs: Vec<_> = reader.read_inputs().unwrap().collect();
+                    let outputs = match reader.read_outputs().unwrap() {
+                        ReadOutputs::Translations (translations) => {
+                            ChannelOutputs::Translations (translations.map(|x| x.into()).collect())
+                        }
+                        ReadOutputs::Rotations (rotations) => {
+                            ChannelOutputs::Rotations (rotations.into_f32().map(|r|
+                                Quaternion::new(r[3], r[0], r[1], r[2])
+                            ).collect())
+                        }
+                        ReadOutputs::Scales (scales) => {
+                            ChannelOutputs::Scales (scales.map(|x| x.into()).collect())
+                        }
+                        ReadOutputs::MorphTargetWeights (_) => unimplemented!("gltf Property::MorphTargetWeights is unimplemented."),
+                    };
+                    channels.push(Channel { target_node_index, inputs, outputs, interpolation });
                 }
 
                 let name = name.to_string();
-                animations.insert(name, Animation { });
+                animations.insert(name, Animation { channels });
             }
             else {
                 error!("A gltf animation could not be loaded as it has no name.");
@@ -365,7 +414,18 @@ impl Model3D {
         }
 
         let transform = pose_transform * ibm;
+        let ibm = ibm.clone();
 
-        Joint { index, name, children, transform }
+        let (translation, rotation, scale) = match node.transform() {
+            Transform::Matrix { .. } => unimplemented!("It is assumed that gltf node transforms only use decomposed form."),
+            Transform::Decomposed { translation, rotation, scale } => {
+                let translation: Vector3<f32> = translation.into();
+                let rotation = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
+                let scale: Vector3<f32> = scale.into();
+                (translation, rotation, scale)
+            }
+        };
+
+        Joint { node_index, index, name, children, transform, ibm, translation, rotation, scale }
     }
 }

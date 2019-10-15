@@ -1,5 +1,6 @@
 mod buffers;
 mod model3d;
+mod animation;
 
 use buffers::{ColorVertex, ColorBuffers, Vertex, Buffers};
 use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ModelVertexStatic, Joint};
@@ -786,10 +787,12 @@ impl WgpuGraphics {
 
     fn render_model3d(
         &self,
-        rpass:  &mut RenderPass,
-        render: &RenderGame,
-        model:  &Model3D,
-        entity: &Matrix4<f32>,
+        rpass:           &mut RenderPass,
+        render:          &RenderGame,
+        model:           &Model3D,
+        entity:          &Matrix4<f32>,
+        animation_name:  &str,
+        animation_frame: f32,
     ) {
         let camera = render.camera.transform();
 
@@ -801,8 +804,11 @@ impl WgpuGraphics {
                 .fill_from_slice(&[transform_uniform]);
 
             let mut joint_transforms = [Matrix4::identity().into(); 500];
-            if let Some(root_joint) = &mesh.root_joint {
-                WgpuGraphics::flatten_joint_transforms(root_joint, &mut joint_transforms);
+            if let Some(mut root_joint) = mesh.root_joint.clone() {
+                if let Some(animation) = model.animations.get(animation_name) {
+                    animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
+                    WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);
+                }
             }
             let animated_uniform = {
                 let transform = (camera * entity).into();
@@ -876,10 +882,10 @@ impl WgpuGraphics {
 
     fn render_color_buffers(
         &self,
-        rpass:    &mut RenderPass,
-        render:   &RenderGame,
-        buffers:  ColorBuffers,
-        entity:   &Matrix4<f32>,
+        rpass:   &mut RenderPass,
+        render:  &RenderGame,
+        buffers: ColorBuffers,
+        entity:  &Matrix4<f32>,
     ) {
         let camera = render.camera.transform();
         let transformation = camera * entity;
@@ -908,10 +914,10 @@ impl WgpuGraphics {
 
     fn render_debug_buffers(
         &self,
-        rpass:    &mut RenderPass,
-        render:   &RenderGame,
-        buffers:  ColorBuffers,
-        entity:   &Matrix4<f32>,
+        rpass:   &mut RenderPass,
+        render:  &RenderGame,
+        buffers: ColorBuffers,
+        entity:  &Matrix4<f32>,
     ) {
         let camera = render.camera.transform();
         let transformation = camera * entity;
@@ -981,7 +987,7 @@ impl WgpuGraphics {
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
             if let Some(stage) = self.models.get(&render.stage_model_name) {
-                self.render_model3d(rpass, &render, &stage, &stage_transformation);
+                self.render_model3d(rpass, &render, &stage, &stage_transformation, "NONE", 0.0);
             }
         }
 
@@ -1022,7 +1028,7 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(&fighter_model_name) {
-                                    self.render_model3d(rpass, &render, &fighter, &transformation);
+                                    self.render_model3d(rpass, &render, &fighter, &transformation, "Idle", player.frames[0].frame as f32);
                                 }
                             }
                         }
