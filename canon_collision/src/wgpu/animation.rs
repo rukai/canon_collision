@@ -7,7 +7,11 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
     let mut translation = root_joint.translation.clone();
     let mut rotation = root_joint.rotation.clone();
     let mut scale = root_joint.scale.clone();
+
     for channel in &animation.channels {
+        for input in &channel.inputs {
+            println!("{}", input);
+        }
         if root_joint.node_index == channel.target_node_index {
             match (&channel.outputs, &channel.interpolation) {
                 (ChannelOutputs::Translations (translations), Interpolation::Linear) => {

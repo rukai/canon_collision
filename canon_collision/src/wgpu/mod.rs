@@ -807,8 +807,8 @@ impl WgpuGraphics {
             if let Some(mut root_joint) = mesh.root_joint.clone() {
                 if let Some(animation) = model.animations.get(animation_name) {
                     animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
-                    WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);
                 }
+                WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);
             }
             let animated_uniform = {
                 let transform = (camera * entity).into();
@@ -960,6 +960,16 @@ impl WgpuGraphics {
         })
     }
 
+    fn action_index_to_string(action_index: usize) -> String {
+        match Action::from_u64(action_index as u64) {
+            Some(action) => {
+                let action: &str = action.into();
+                action.to_string()
+            }
+            None => format!("{}", action_index),
+        }
+    }
+
     fn game_render(&mut self, render: RenderGame, rpass: &mut RenderPass, command_output: &[String]) {
         let mut rng = StdRng::from_seed(render.seed);
         if command_output.len() == 0 {
@@ -1018,7 +1028,8 @@ impl WgpuGraphics {
                     let transformation = player_matrix(&player.frames[0]);
 
                     // draw fighter
-                    match Action::from_u64(player.frames[0].action as u64) {
+                    let action_index = player.frames[0].action;
+                    match Action::from_u64(action_index as u64) {
                         Some(Action::Eliminated) => { }
                         _ => {
                             let fighter_model_name = player.frames[0].model_name.replace(" ", "");
@@ -1028,7 +1039,8 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(&fighter_model_name) {
-                                    self.render_model3d(rpass, &render, &fighter, &transformation, "Idle", player.frames[0].frame as f32);
+                                    let action = WgpuGraphics::action_index_to_string(action_index);
+                                    self.render_model3d(rpass, &render, &fighter, &transformation, &action, player.frames[0].frame as f32);
                                 }
                             }
                         }

@@ -525,7 +525,7 @@ impl Default for LinkType {
 }
 
 #[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, Serialize, Deserialize, Node)]
+#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize, Node)]
 pub enum Action {
     // Idle
     Spawn,
