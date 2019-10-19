@@ -294,6 +294,7 @@ dependencies = [
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
+ "splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "treeflection 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
  "treeflection_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "vk-shader-macros 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2462,6 +2463,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "splines"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cgmath 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "static_assertions"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3491,6 +3500,7 @@ dependencies = [
 "checksum slab 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 "checksum smallvec 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)" = "ab606a9c5e214920bb66c458cd7be8ef094f813f20fe77a54cc7dbfff220d4b7"
 "checksum smithay-client-toolkit 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "93960e8975909fcb14cc755de93af2149d8b8f4eb368315537d40cfd0f324054"
+"checksum splines 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "19661e5f61c8c7e5e980737a63cab7281efdb68ca0de6172d4be86658c7d7114"
 "checksum static_assertions 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "7f3eb36b47e512f8f1c9e3d10c2c1965bc992bd9cdb024fa581e2194501c83d3"
 "checksum stb_truetype 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "824210d6fb52cbc3ad2545270ead6860c7311aa5450642b078da4515937b6f7a"
 "checksum stdweb 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)" = "7ef051599eb0f56b288f95bbae663bbee8b52c434d7645c2a6385d7fd1d1ef02"

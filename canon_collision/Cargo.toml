@@ -33,6 +33,7 @@ winit_input_helper = "0.4.0-alpha3"
 gltf = "0.14"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 hotwatch = "0.4"
+splines =  { version = "2.2", features = ["impl-cgmath"] }
 
 cgmath = { version = "0.17", optional = true }
 
