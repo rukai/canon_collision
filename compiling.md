@@ -1,30 +1,32 @@
 # Setup for Windows
 
-Setup for windows is a bit complicated because we use windows-msvc toolchain but crosscompile to the windows-gnu target.
-We do this because we need windows-gnu for libusb, but windows-msvc seems better supported.
-
-## Workaround
-Currently you will need to also workaround https://github.com/rust-lang/rust/issues/49078
-
-1.  download and extract https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rust-ci-mirror/x86_64-6.3.0-release-posix-seh-rt_v5-rev2.7z
-2.  add the absolute path to mingw64\bin to your PATH environment variable. (This path needs to be before the msys2 path)
-
-## Regular steps
-Install rust via https://www.rustup.rs/ using the default settings. If you already have rustup use the msvc toolchain.
+Install rust via https://www.rustup.rs/ using the default settings. If you already have rustup, ensure it is setup with the msvc toolchain.
 Install [Build Tools for Visual Studio 2017](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2017)
-Run the command `rustup target install x86_64-pc-windows-gnu`
 
-Install [msys2](http://www.msys2.org/), following ALL of the instructions.
+Install ninja, cmake and python 3.
+The recommended way to do this is to install [chocolatey](https://chocolatey.org) then run:
+*   `choco install ninja`
+*   `choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'`
+*   `choco install python`
 
-Then in the msys2 terminal run:
- `pacman --noconfirm -Syu mingw64/mingw-w64-x86_64-pkg-config mingw64/mingw-w64-x86_64-libusb mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk3 mingw-w64-x86_64-cmake mingw-w64-x86_64-make`
-
-Add the msys2 mingw64 binary path to the PATH environment variable.
-In my case this was `C:\msys64\mingw64\bin`
-
-## Setup GDB on Windows (Optional)
-
-TODO
+Install gtk, the recommended way is to run the following commands in cmd:
+```cmd
+git clone https://github.com/Microsoft/vcpkg
+cd vcpkg
+bootstrap-vcpkg.bat
+vcpkg install gtk:x64-windows
+set VCPKGDIR=%CD%\installed\x64-windows
+set PATH=%VCPKGDIR%\bin;%PATH%
+set GTK_LIB_DIR=%VCPKGDIR%\lib
+mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib
+mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib
+mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll
+mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll
+mkdir %VCPKGDIR%\etc
+mkdir %VCPKGDIR%\etc\gtk-3.0
+echo "[Settings]" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
+echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
+```
 
 # Setup for Ubuntu
 
@@ -60,24 +62,15 @@ Need to also install one of the following packages depending on your graphics ca
 *   Nvidia: No extra drivers required
 *   AMD:   vulkan-radeon
 
-# Compile and run PF Sandbox
+# Compile and run the game
 
-In the pf_sandbox directory run:
-*   for windows: `$ENV:PKG_CONFIG_ALLOW_CROSS=1; cargo run --release --target x86_64-pc-windows-gnu`
-*   for linux: `cargo run --release`
+In the canon_collision directory run: `cargo run --release`
 
-# Compile and run PF TAS
+# Compile and run the Controller Mapper
 
-In the pf_tas directory run:
-*   for windows: `$ENV:PKG_CONFIG_ALLOW_CROSS=1; cargo run --release --target x86_64-pc-windows-gnu`
-*   for linux: `cargo run --release`
+In the map_controllers directory run: `cargo run --release`
 
-# Compile and run PF Controller Mapper
+# Setup CLI
 
-In the map_controllers directory run:
-*   for windows: `$ENV:PKG_CONFIG_ALLOW_CROSS=1; cargo run --release --target x86_64-pc-windows-gnu`
-*   for linux: `cargo run --release`
-
-# Setup PF CLI
-To build the CLI tool run `cargo build` in the pf_cli directory, the resulting binary is stored at `target/debug/pf_cli`.
-Copy `pf_cli` to somewhere in your PATH and rename it to `pf`.
+To build the CLI tool run `cargo build` in the cc_cli directory, the resulting binary is stored at `target/debug/cc_cli`.
+Copy `cc_cli` to somewhere in your PATH.

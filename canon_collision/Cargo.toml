@@ -17,7 +17,7 @@ chrono = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 getopts = "0.2"
 gilrs-core = "0.2"
-libusb = "0.3"
+rusb = "0.5"
 log = "0.4"
 lyon = "0.14"
 rand = "0.7.0"

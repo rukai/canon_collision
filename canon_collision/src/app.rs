@@ -16,7 +16,7 @@ use crate::graphics::GraphicsMessage;
 
 use winit::event::Event;
 use winit_input_helper::WinitInputHelper;
-use libusb::Context;
+use rusb::Context;
 use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc::channel;

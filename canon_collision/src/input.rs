@@ -16,22 +16,22 @@ use canon_collision_lib::input::{
 use std::time::Duration;
 
 use gilrs_core::{Gilrs, Event};
-use libusb::{Context, Device, DeviceHandle, Error};
+use rusb::{Context, UsbContext, Device, DeviceHandle, Error};
 
 use canon_collision_lib::network::{Netplay, NetplayState};
 
-enum InputSource<'a> {
-    GCAdapter { handle: DeviceHandle<'a>, deadzones: [Deadzone; 4] },
+enum InputSource {
+    GCAdapter { handle: DeviceHandle<Context>, deadzones: [Deadzone; 4] },
     GenericController { index: usize, state: ControllerInput, deadzone: Deadzone }
 }
 
-pub struct Input<'a> {
+pub struct Input {
     // game past and (potentially) future inputs, frame 0 has index 2
     // structure: frames Vec<controllers Vec<ControllerInput>>
     game_inputs:     Vec<Vec<ControllerInput>>,
     current_inputs:  Vec<ControllerInput>, // inputs for this frame
     prev_start:      bool,
-    input_sources:   Vec<InputSource<'a>>,
+    input_sources:   Vec<InputSource>,
     gilrs:           Gilrs,
     controller_maps: ControllerMaps,
     pub events:      Vec<Event>,
@@ -41,9 +41,9 @@ pub struct Input<'a> {
 // Out means: computer->adapter
 // In means:  adapter->computer
 
-impl<'a> Input<'a> {
-    pub fn new(context: &'a mut  Context) -> Input<'a> {
-        let mut adapter_handles: Vec<DeviceHandle> = Vec::new();
+impl Input {
+    pub fn new(context: & mut  Context) -> Input {
+        let mut adapter_handles: Vec<DeviceHandle<Context>> = Vec::new();
         let devices = context.devices();
         for device in devices.unwrap().iter() {
             if let Ok(device_desc) = device.device_descriptor() {
@@ -355,7 +355,7 @@ impl<'a> Input<'a> {
 }
 
 #[allow(dead_code)]
-fn display_endpoints(device: &mut Device) {
+fn display_endpoints(device: &mut Device<Context>) {
     for interface in device.config_descriptor(0).unwrap().interfaces() {
         println!("interface: {}", interface.number());
         for setting in interface.descriptors() {
@@ -367,7 +367,7 @@ fn display_endpoints(device: &mut Device) {
 }
 
 /// Add 4 GC adapter controllers to inputs
-fn read_gc_adapter(handle: &mut DeviceHandle, deadzones: &mut [Deadzone], inputs: &mut Vec<ControllerInput>) {
+fn read_gc_adapter(handle: &mut DeviceHandle<Context>, deadzones: &mut [Deadzone], inputs: &mut Vec<ControllerInput>) {
     let mut data: [u8; 37] = [0; 37];
     if let Ok(_) = handle.read_interrupt(0x81, &mut data, Duration::new(1, 0)) {
         for port in 0..4 {

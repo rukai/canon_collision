@@ -14,29 +14,39 @@ install:
   #- 7z x ssh-keys-appveyor.zip
   #- rm -r C:/Users/appveyor/.ssh
   #- mv .ssh C:/Users/appveyor/
-  # setup rust
+  #
+  # Setup gtk deps https://gtk-rs.org/docs-src/requirements.html
+  - git clone https://github.com/Microsoft/vcpkg
+  - cd vcpkg
+  - bootstrap-vcpkg.bat
+  - vcpkg install gtk:x64-windows
+  - set VCPKGDIR=%CD%\installed\x64-windows
+  - set PATH=%VCPKGDIR%\bin;%PATH%
+  - set GTK_LIB_DIR=%VCPKGDIR%\lib
+  - mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib
+  - mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib
+  - mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll
+  - mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll
+  - mkdir %VCPKGDIR%\etc
+  - mkdir %VCPKGDIR%\etc\gtk-3.0
+  - echo "[Settings]" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  - echo "gtk-theme-name=win32" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  - cd ..
+    # TODO: instructions say to add settings.ini file, but it doesnt look very important.
+  # Setup shaderc deps
+  - set PATH=C:\Python37;%PATH%
+  - choco install ninja
+  # Setup rust
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
   - rustup-init.exe -y --default-host %TARGET% --default-toolchain %RUST_VERSION%
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
-  - rustup target install x86_64-pc-windows-gnu
   - rustc -V
   - cargo -V
-  # Work around https://github.com/rust-lang/rust/issues/49078
-  #- curl -sSf -o mingw-w64.7z https://s3-us-west-1.amazonaws.com/rust-lang-ci2/rust-ci-mirror/x86_64-6.3.0-release-posix-seh-rt_v5-rev2.7z
-  #- 7z x mingw-w64.7z
-  #- set PATH=%PATH%;C:\projects\pf-sandbox\mingw64\bin
-  # setup msys2
-  - set PATH=%PATH%;C:\msys64\mingw64\bin # access libraries
-  - set PATH=%PATH%;C:\msys64\usr\bin # access pacman
   - echo %PATH%
-  - pacman --noconfirm -Syu --force
-  - pacman --noconfirm -Syu --force
-  - pacman --noconfirm -Syu mingw64/mingw-w64-x86_64-pkg-config mingw64/mingw-w64-x86_64-libusb mingw-w64-x86_64-gcc mingw-w64-x86_64-gtk3 mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-ninja --force
 
 test_script:
-  - set PKG_CONFIG_ALLOW_CROSS=1
-  - cargo test --release --all --target x86_64-pc-windows-gnu
-  - cargo build --release --all --target x86_64-pc-windows-gnu
+  - cargo test --release --all
+  - cargo build --release --all
   # commented out as website is not running for now
   #- mkdir pf
   #- move target\x86_64-pc-windows-gnu\release\pf_sandbox.exe pf
@@ -62,7 +72,7 @@ test_script:
   #- echo put pfsandbox-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip /home/rubic/PF_Sandbox_Website/builds/ | sftp rubic@pfsandbox.net
 
 skip_tags: true
-#cache:
-  #- C:\Users\appveyor\.cargo\registry
+cache:
+  - C:\Users\appveyor\.cargo\registry
 # Building is done in the test phase, so we disable Appveyor's build phase.
 build: false
