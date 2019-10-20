@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use pf_sandbox_lib::panic_handler::Report;
+use canon_collision_lib::panic_handler::Report;
 
 use std::env;
 

@@ -18,7 +18,7 @@ set -ev
 # test and build
 rustup update
 cargo test --release -v --all -j 2
-cd pf_sandbox
+cd canon_collision
 cargo build --release --no-default-features
 cd ..
 cargo build --release --all -j 2
@@ -26,11 +26,10 @@ cargo build --release --all -j 2
 # commented out as website is not running for now
 #if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
 #    # package
-#    mkdir pf
-#    mv target/release/pf_sandbox pf/
-#    mv target/release/pf_tas pf/
-#    mv target/release/pf_cli pf/
-#    mv target/release/pf_map_controllers pf/
+#    mkdir cc
+#    mv target/release/canon_collision cc/
+#    mv target/release/cc_cli cc/
+#    mv target/release/cc_map_controllers cc/
 #    tar -cvzf pfsandbox-${TRAVIS_COMMIT:0:15}-linux.tar.gz pf
 #
 #    # upload

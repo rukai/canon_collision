@@ -22,8 +22,8 @@ use gtk::{
 };
 use gilrs_core::EventType;
 
-use pf_sandbox_lib::input;
-use pf_sandbox_lib::input::maps::{
+use canon_collision_lib::input;
+use canon_collision_lib::input::maps::{
     AnalogDest,
     DigitalDest,
     AnalogMap,
@@ -57,7 +57,7 @@ macro_rules! clone {
 }
 
 fn main() {
-    pf_sandbox_lib::setup_panic_handler!();
+    canon_collision_lib::setup_panic_handler!();
 
     // Need to be careful with the rw lock.
     // It is easy to accidentally create a deadlock by accidentally triggering

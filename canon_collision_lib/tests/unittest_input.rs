@@ -1,4 +1,4 @@
-use pf_sandbox_lib::input::stick_deadzone;
+use canon_collision_lib::input::stick_deadzone;
 
 #[test]
 fn stick_deadzone_test() {
