@@ -22,11 +22,38 @@ pub(crate) mod results;
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;
 
-use app::run;
 use canon_collision_lib::logger;
+#[cfg(feature = "wgpu_renderer")]
+use crate::wgpu::WgpuGraphics;
+use crate::cli::GraphicsBackendChoice;
+
+use winit::event_loop::EventLoop;
 
 fn main() {
     canon_collision_lib::setup_panic_handler!();
     logger::init();
-    run();
+
+    let cli_results = cli::cli();
+    let graphics_backend = cli_results.graphics_backend.clone();
+    let (os_input_tx, render_rx) = app::run_in_thread(cli_results);
+
+    match graphics_backend {
+        #[cfg(feature = "wgpu_renderer")]
+        GraphicsBackendChoice::Wgpu => {
+            let event_loop = EventLoop::new();
+            let mut graphics = WgpuGraphics::new(&event_loop, os_input_tx, render_rx);
+            event_loop.run(move |event, _, control_flow| {
+                graphics.update(event, control_flow);
+            });
+        }
+        GraphicsBackendChoice::Headless => {
+            loop { }
+        }
+    }
+}
+
+pub enum ActualBackend {
+    #[cfg(feature = "wgpu_renderer")]
+    Wgpu,
+    Headless,
 }

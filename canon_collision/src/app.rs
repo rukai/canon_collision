@@ -1,9 +1,3 @@
-#[cfg(feature = "wgpu_renderer")]
-use crate::wgpu::WgpuGraphics;
-#[cfg(any(feature = "wgpu_renderer"))]
-use crate::cli::GraphicsBackendChoice;
-#[cfg(any(feature = "wgpu_renderer"))]
-use crate::graphics::GraphicsMessage;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 use std;
@@ -13,16 +7,19 @@ use canon_collision_lib::config::Config;
 use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use crate::ai;
-use crate::cli::{self, ContinueFrom};
+use crate::cli::{ContinueFrom, CLIResults};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::input::Input;
 use crate::menu::{Menu, MenuState, ResumeMenu};
 use crate::assets::Assets;
+use crate::graphics::GraphicsMessage;
 
 use winit::event::Event;
 use winit_input_helper::WinitInputHelper;
 use libusb::Context;
 use std::time::{Duration, Instant};
+use std::thread;
+use std::sync::mpsc::channel;
 
 #[allow(unused)] // Needed for headless build
 struct OsInput {
@@ -48,8 +45,16 @@ impl OsInput {
     }
 }
 
-pub fn run() {
-    let mut cli_results = cli::cli();
+pub fn run_in_thread(cli_results: CLIResults) -> (Sender<Event<()>>, Receiver<GraphicsMessage>) {
+    let (render_tx, render_rx) = channel();
+    let (os_input, os_input_tx) = OsInput::new();
+    thread::spawn(move || {
+        run(cli_results, os_input, render_tx);
+    });
+    (os_input_tx, render_rx)
+}
+
+fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<GraphicsMessage>) {
     let mut config = Config::load();
     if let ContinueFrom::Close = cli_results.continue_from {
         return;
@@ -57,8 +62,6 @@ pub fn run() {
 
     let mut context = Context::new().unwrap();
     let mut input = Input::new(&mut context);
-    #[cfg(any(feature = "wgpu_renderer"))]
-    let mut graphics_tx: Option<Sender<GraphicsMessage>> = None;
     let mut net_command_line = NetCommandLine::new();
     let mut netplay = Netplay::new();
 
@@ -87,25 +90,6 @@ pub fn run() {
     // CLI options
     let (mut menu, mut game, mut os_input) = {
         #[allow(unused_variables)] // Needed for headless build
-        let (os_input, os_input_tx) = OsInput::new();
-
-        #[cfg(any(feature = "wgpu_renderer"))]
-        {
-            let physical_device_name = config.physical_device_name.clone();
-            match cli_results.graphics_backend {
-                #[cfg(feature = "wgpu_renderer")]
-                GraphicsBackendChoice::Wgpu => {
-                    graphics_tx = Some(WgpuGraphics::init(os_input_tx.clone(), physical_device_name));
-                }
-                GraphicsBackendChoice::Headless => {}
-                GraphicsBackendChoice::Default => {
-                    #[cfg(feature = "wgpu_renderer")]
-                    {
-                        graphics_tx = Some(WgpuGraphics::init(os_input_tx.clone(), physical_device_name));
-                    }
-                }
-            }
-        }
 
         match cli_results.continue_from {
             ContinueFrom::Menu => {
@@ -251,13 +235,8 @@ pub fn run() {
                 if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input.input, command_line.block(), &netplay) {
                     resume_menu = Some(resume_menu_inner)
                 }
-                #[cfg(any(feature = "wgpu_renderer"))]
-                {
-                    if let Some(ref tx) = graphics_tx {
-                        if let Err(_) = tx.send(game.graphics_message(&config, &command_line)) {
-                            return;
-                        }
-                    }
+                if let Err(_) = render_tx.send(game.graphics_message(&config, &command_line)) {
+                    return;
                 }
                 if let NetplayState::Offline = netplay.state() {
                     net_command_line.step(game);
@@ -272,13 +251,8 @@ pub fn run() {
                 game = Some(Game::new(package.take().unwrap(), menu_game_setup));
             }
             else {
-                #[cfg(any(feature = "wgpu_renderer"))]
-                {
-                    if let Some(ref tx) = graphics_tx {
-                        if let Err(_) = tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
-                            return;
-                        }
-                    }
+                if let Err(_) = render_tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
+                    return;
                 }
             }
         }

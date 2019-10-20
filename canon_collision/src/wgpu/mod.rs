@@ -15,9 +15,9 @@ use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
 use std::collections::HashSet;
-use std::sync::mpsc::{Sender, Receiver, channel};
+use std::sync::mpsc::{Sender, Receiver};
 use std::time::{Duration, Instant};
-use std::{thread, mem, f32};
+use std::{mem, f32};
 
 use cgmath::Rad;
 use cgmath::prelude::*;
@@ -25,14 +25,13 @@ use cgmath::{Matrix4, Vector3};
 use num_traits::{FromPrimitive, ToPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use wgpu::{Device, Surface, SwapChain, BindGroup, BindGroupLayout, RenderPipeline, RenderPass, TextureView, Sampler};
+use wgpu::{Device, Queue, Surface, SwapChain, BindGroup, BindGroupLayout, RenderPipeline, RenderPass, TextureView, Sampler};
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Scale as GlyphScale};
 
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 use winit::event::{Event, WindowEvent};
 use winit::window::Fullscreen;
-use raw_window_handle::HasRawWindowHandle as _;
 
 pub struct WgpuGraphics {
     package:                   Option<Package>,
@@ -43,6 +42,7 @@ pub struct WgpuGraphics {
     os_input_tx:               Sender<Event<()>>,
     render_rx:                 Receiver<GraphicsMessage>,
     device:                    Device,
+    queue:                     Queue,
     surface:                   Surface,
     wsd:                       WindowSizeDependent,
     pipeline_color:            RenderPipeline,
@@ -63,43 +63,26 @@ pub struct WgpuGraphics {
 const SAMPLE_COUNT: u32 = 4;
 
 impl WgpuGraphics {
-    pub fn init(os_input_tx: Sender<Event<()>>, device_name: Option<String>) -> Sender<GraphicsMessage> {
-        let (render_tx, render_rx) = channel();
+    pub fn new(event_loop: &EventLoop<()>, os_input_tx: Sender<Event<()>>, render_rx: Receiver<GraphicsMessage>) -> WgpuGraphics {
+        let window = Window::new(&event_loop).unwrap();
+        window.set_title("Canon Collision");
 
-        thread::spawn(move || {
-            let event_loop = EventLoop::new();
-            let mut graphics = WgpuGraphics::new(&event_loop, os_input_tx, render_rx, device_name);
-            event_loop.run(move |event, _, control_flow| {
-                graphics.update(event, control_flow);
-            });
-        });
-        render_tx
-    }
+        let size = window
+            .inner_size()
+            .to_physical(window.hidpi_factor());
 
-    fn new(event_loop: &EventLoop<()>, os_input_tx: Sender<Event<()>>, render_rx: Receiver<GraphicsMessage>, _device_name: Option<String>) -> WgpuGraphics {
-        let (window, instance, size, surface) = {
-            let instance = wgpu::Instance::new();
+        let surface = wgpu::Surface::create(&window);
 
-            let window = Window::new(&event_loop).unwrap();
-            window.set_title("Canon Collision");
-            let size = window
-                .inner_size()
-                .to_physical(window.hidpi_factor());
-
-            let surface = instance.create_surface(window.raw_window_handle());
-
-            (window, instance, size, surface)
-        };
-
-        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
+        let adapter = wgpu::Adapter::request(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::LowPower,
-        });
+            backends: wgpu::BackendBit::PRIMARY,
+        }).unwrap();
 
-        let mut device = adapter.request_device(&wgpu::DeviceDescriptor {
+        let (mut device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
+            limits: wgpu::Limits::default(),
             extensions: wgpu::Extensions {
                 anisotropic_filtering: false,
             },
-            limits: wgpu::Limits::default(),
         });
 
         let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
@@ -452,6 +435,7 @@ impl WgpuGraphics {
             render_rx,
             surface,
             device,
+            queue,
             wsd,
             pipeline_color,
             pipeline_hitbox,
@@ -469,7 +453,7 @@ impl WgpuGraphics {
         }
     }
 
-    fn update(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
+    pub fn update(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
         match event {
             Event::EventsCleared => {
                 let frame_start = Instant::now();
@@ -551,7 +535,7 @@ impl WgpuGraphics {
     fn render(&mut self, render: Render) {
         // TODO: Fullscreen logic should handle the window manager setting fullscreen state.
         // *    Use this instead of self.prev_fullscreen
-        // *    Send new fullscreen state back to the main thread
+        // *    Send new fullscreen state back to the game logic thread
         // Waiting on Window::get_fullscreen() to be added to winit: https://github.com/tomaka/winit/issues/579
 
         if self.prev_fullscreen.is_none() {
@@ -619,7 +603,7 @@ impl WgpuGraphics {
 
             self.glyph_brush.draw_queued(&mut self.device, &mut encoder, &frame.view, self.width, self.height).unwrap();
 
-            self.device.get_queue().submit(&[encoder.finish()]);
+            self.queue.submit(&[encoder.finish()]);
         }
         self.wsd.swap_chain = Some(swap_chain);
     }
@@ -806,6 +790,7 @@ impl WgpuGraphics {
             let mut joint_transforms = [Matrix4::identity().into(); 500];
             if let Some(mut root_joint) = mesh.root_joint.clone() {
                 if let Some(animation) = model.animations.get(animation_name) {
+                    println!("Start set_animated_joints");
                     animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
                 }
                 WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);

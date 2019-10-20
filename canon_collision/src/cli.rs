@@ -151,7 +151,7 @@ pub struct CLIResults {
 impl CLIResults {
     pub fn new() -> CLIResults {
         CLIResults {
-            graphics_backend:  GraphicsBackendChoice::Default,
+            graphics_backend:  GraphicsBackendChoice::default(),
             package:           None,
             max_human_players: None,
             total_cpu_players: None,
@@ -174,9 +174,22 @@ pub enum ContinueFrom {
     Close
 }
 
+#[derive(Clone)]
 pub enum GraphicsBackendChoice {
     #[cfg(feature = "wgpu_renderer")]
     Wgpu,
     Headless,
-    Default,
+}
+
+impl Default for GraphicsBackendChoice {
+    fn default() -> GraphicsBackendChoice {
+        #[cfg(feature = "wgpu_renderer")]
+        {
+            GraphicsBackendChoice::Wgpu
+        }
+        #[cfg(not(feature = "wgpu_renderer"))]
+        {
+            GraphicsBackendChoice::Headless
+        }
+    }
 }
