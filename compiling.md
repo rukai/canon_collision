@@ -64,6 +64,7 @@ Need to also install one of the following packages depending on your graphics ca
 
 # Compile and run the game
 
+In the assets_raw/models directory run: `python export_all_assets.py`
 In the canon_collision directory run: `cargo run --release`
 
 # Compile and run the Controller Mapper
