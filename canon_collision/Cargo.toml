@@ -32,8 +32,6 @@ winit_input_helper = "0.4.0-alpha4"
 gltf = "0.14"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 hotwatch = "0.4"
-splines =  { version = "2.2", features = ["impl-cgmath"], optional = true }
-
 cgmath = { version = "0.17" }
 
 vk-shader-macros = { version = "0.2", optional = true }
@@ -43,4 +41,4 @@ raw-window-handle = "0.3"
 
 [features]
 default = ["wgpu_renderer"]
-wgpu_renderer = ["wgpu", "wgpu_glyph", "vk-shader-macros", "splines"]
+wgpu_renderer = ["wgpu", "wgpu_glyph", "vk-shader-macros"]
