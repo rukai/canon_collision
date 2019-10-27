@@ -237,7 +237,7 @@ impl Player {
             frames_since_ledge: 0,
             ledge_idle_timer:   0,
             fastfalled:         false,
-            air_jumps_left:     0,
+            air_jumps_left:     package.fighters[fighter.as_ref()].air_jumps,
             jumpsquat_button:   false,
             shield_hp:          package.fighters[fighter.as_ref()].shield.as_ref().map_or(60.0, |x| x.hp_max),
             shield_analog:      0.0,

@@ -8,18 +8,23 @@
 import os
 import pathlib
 import subprocess
+import sys
 
 def main():
     if not os.path.isfile("export.py"):
         print("Script needs to be run from the folder it is stored in")
         return
 
+    args = sys.argv[1:]
+
     out_dir = pathlib.Path("../../assets/models")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for filename in os.listdir("."):
-        if os.path.isdir(filename) and filename != 'Shared':
+        if os.path.isdir(filename) and filename != 'Shared' and (len(args) == 0 or filename in args):
             blend_path = pathlib.Path(filename).joinpath(filename + ".blend")
-            subprocess.run(["blender", blend_path, "-b", "-P", "export.py"])
+            #subprocess.run(["blender", blend_path, "-b", "-P", "export.py"])
+            # GLTF exporter in blender 2.8 is buggy, so change this to point to your own daily blender build
+            subprocess.run(["/home/rubic/Bin/blender/blender-2.82-2a3b5dc73038-linux-glibc217-x86_64/blender", blend_path, "-b", "-P", "export.py"])
 
 main()

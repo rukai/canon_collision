@@ -790,7 +790,6 @@ impl WgpuGraphics {
             let mut joint_transforms = [Matrix4::identity().into(); 500];
             if let Some(mut root_joint) = mesh.root_joint.clone() {
                 if let Some(animation) = model.animations.get(animation_name) {
-                    println!("Start set_animated_joints");
                     animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
                 }
                 WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);

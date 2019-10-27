@@ -1,6 +1,6 @@
 use crate::wgpu::model3d::{Animation, Joint, ChannelOutputs, Channel};
 
-use cgmath::{Matrix4, VectorSpace};
+use cgmath::{Matrix4, VectorSpace, InnerSpace};
 use gltf::animation::Interpolation;
 
 // Cubicspline interpolation implemented as per:
@@ -10,7 +10,6 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
     let mut translation = root_joint.translation.clone();
     let mut rotation = root_joint.rotation.clone();
     let mut scale = root_joint.scale.clone();
-    println!("pre  scale: {:?}", scale);
 
     for channel in &animation.channels {
         if root_joint.node_index == channel.target_node_index {
@@ -75,7 +74,8 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
                             (-2.0 * tpow3 + 3.0 * tpow2) * p1 +
                             (tpow3 - tpow2) * m1
                         }
-                    }
+                    };
+                    rotation = rotation.normalize();
                 }
                 (ChannelOutputs::Scales (scales), Interpolation::Linear) => {
                     let (index_pre, index_next, amount) = index_linear(channel, frame);
@@ -107,13 +107,11 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
                             (tpow3 - tpow2) * m1
                         }
                     };
-                    println!("scale: {:?}", scale);
                 }
                 (_, Interpolation::CatmullRomSpline) => unimplemented!("This will be deleted in next gltf version"),
             }
         }
     }
-    println!("post scale: {:?}", scale);
 
     let rotation: Matrix4<f32> = rotation.into();
     let transform: Matrix4<f32> = parent_transform *

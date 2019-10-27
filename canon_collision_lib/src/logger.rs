@@ -6,7 +6,7 @@ use std::env;
 use log::{Record, Level};
 
 pub fn init() {
-    if let Ok(env_var) = env::var("PFS_LOG") {
+    if let Ok(env_var) = env::var("CC_LOG") {
         Builder::new().format(format).parse_filters(&env_var).init()
     }
 }

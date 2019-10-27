@@ -224,7 +224,7 @@ impl Netplay {
                         self.disconnect_with_reason("Package hashes did not match, ensure everyone is using the same package.");
                     }
                     else if init.build_version != local.build_version {
-                        self.disconnect_with_reason("Build versions did not match, ensure everyone is using the same PF Sandbox build.");
+                        self.disconnect_with_reason("Build versions did not match, ensure everyone is using the same Canon Collision build.");
                     }
                     else {
                         self.set_state(NetplayState::PingTest { local_init: local.clone(), pings: [Ping::default(); 255] });

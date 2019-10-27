@@ -13,7 +13,7 @@ use uuid::Uuid;
 use toml;
 
 /// Enables the panic handler.
-/// Only use on PF Sandbox applications with a gui
+/// Only use on Canon Collision applications with a gui
 /// Automatically provides the build_version and crate_name
 #[macro_export]
 macro_rules! setup_panic_handler {
@@ -25,14 +25,14 @@ macro_rules! setup_panic_handler {
 }
 
 /// Enables the panic handler.
-/// Only use on PF Sandbox applications with a gui
+/// Only use on Canon Collision applications with a gui
 pub fn setup(build_version: &'static str, crate_name: &'static str) {
     // only enable if the handler exists, this ensures we get regular panics if run in a dev
     // environment and the panic handler isnt built.
     //
-    // I have considered immediately quitting PF Sandbox if it cant locate the panic handler i.e. the user has moved
+    // I have considered immediately quitting Canon Collision if it cant locate the panic handler i.e. the user has moved
     // the exe to a different folder. However that would break the above case.
-    let pfs_dev_not_true = env::var("PFS_DEV").map(|x| x.to_lowercase() != String::from("true")).unwrap_or(true);
+    let pfs_dev_not_true = env::var("CC_DEV").map(|x| x.to_lowercase() != String::from("true")).unwrap_or(true);
     let handler_exists = path_to_handler().map(|x| x.exists()).unwrap_or(false);
     if pfs_dev_not_true && handler_exists {
         panic::set_hook(Box::new(move |panic_info: &PanicInfo| {
