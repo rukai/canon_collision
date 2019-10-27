@@ -12,7 +12,6 @@ pub(crate) mod cli;
 pub(crate) mod collision;
 pub(crate) mod game;
 pub(crate) mod graphics;
-pub(crate) mod input;
 pub(crate) mod menu;
 pub(crate) mod particle;
 pub(crate) mod player;

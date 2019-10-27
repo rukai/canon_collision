@@ -1,4 +1,4 @@
-use canon_collision_lib::input::ControllerInput;
+use canon_collision_lib::input::state::ControllerInput;
 use crate::game::Game;
 
 pub fn gen_inputs(game: &Game) -> Vec<ControllerInput> {

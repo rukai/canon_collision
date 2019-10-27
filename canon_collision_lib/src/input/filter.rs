@@ -1,4 +1,49 @@
-use canon_collision_lib::input::stick_deadzone;
+/// use the first received stick value to reposition the current stick value around 128
+pub fn stick_deadzone(current: u8, first: u8) -> u8 {
+    if current > first {
+        128u8.saturating_add(current - first)
+    } else {
+        128u8.saturating_sub(first - current)
+    }
+}
+
+pub fn stick_filter(in_stick_x: u8, in_stick_y: u8) -> (f32, f32) {
+    let raw_stick_x = in_stick_x as f32 - 128.0;
+    let raw_stick_y = in_stick_y as f32 - 128.0;
+    let angle = (raw_stick_y).atan2(raw_stick_x);
+
+    let max_x = (angle.cos() * 80.0).trunc();
+    let max_y = (angle.sin() * 80.0).trunc();
+    let stick_x = if in_stick_x == 128 { // avoid raw_stick_x = 0 and thus division by zero in the atan2)
+        0.0
+    } else {
+        abs_min(raw_stick_x, max_x) / 80.0
+    };
+    let stick_y = abs_min(raw_stick_y, max_y) / 80.0;
+
+    let deadzone = 0.28;
+    (
+        if stick_x.abs() < deadzone { 0.0 } else { stick_x },
+        if stick_y.abs() < deadzone { 0.0 } else { stick_y }
+    )
+}
+
+pub fn trigger_filter(trigger: u8) -> f32 {
+    let value = (trigger as f32) / 140.0;
+    if value > 1.0 {
+        1.0
+    } else {
+        value
+    }
+}
+
+fn abs_min(a: f32, b: f32) -> f32 {
+    if (a >= 0.0 && a > b) || (a <= 0.0 && a < b) {
+        b
+    } else {
+        a
+    }
+}
 
 #[test]
 fn stick_deadzone_test() {

@@ -6,7 +6,7 @@ use crate::results::{RawPlayerResult, DeathRecord};
 use canon_collision_lib::fighter::*;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::geometry;
-use canon_collision_lib::input::{PlayerInput};
+use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::rules::Goal;
 use canon_collision_lib::stage::{Stage, Surface};

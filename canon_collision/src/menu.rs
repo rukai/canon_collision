@@ -1,12 +1,12 @@
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::input::PlayerInput;
+use canon_collision_lib::input::Input;
+use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::network::{Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use crate::game::{GameSetup, GameState, PlayerSetup};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::graphics;
-use crate::input::Input;
 use crate::replays;
 use crate::results::{GameResults, PlayerResult};
 

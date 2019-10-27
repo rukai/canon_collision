@@ -4,19 +4,18 @@ use std;
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
+use canon_collision_lib::input::Input;
 use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use crate::ai;
+use crate::assets::Assets;
 use crate::cli::{ContinueFrom, CLIResults};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup};
-use crate::input::Input;
-use crate::menu::{Menu, MenuState, ResumeMenu};
-use crate::assets::Assets;
 use crate::graphics::GraphicsMessage;
+use crate::menu::{Menu, MenuState, ResumeMenu};
 
 use winit::event::Event;
 use winit_input_helper::WinitInputHelper;
-use rusb::Context;
 use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc::channel;
@@ -60,8 +59,7 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
         return;
     }
 
-    let mut context = Context::new().unwrap();
-    let mut input = Input::new(&mut context);
+    let mut input = Input::new();
     let mut net_command_line = NetCommandLine::new();
     let mut netplay = Netplay::new();
 

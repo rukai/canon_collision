@@ -5,10 +5,10 @@ use std::cmp::Ordering;
 use chrono::{Local, DateTime};
 
 use canon_collision_lib::files;
-use canon_collision_lib::input::ControllerInput;
+use canon_collision_lib::input::Input;
+use canon_collision_lib::input::state::ControllerInput;
 use canon_collision_lib::stage::Stage;
 use crate::game::{Game, PlayerSetup};
-use crate::input::Input;
 use crate::player::Player;
 
 pub fn get_replay_names() -> Vec<String> {

@@ -1,7 +1,6 @@
 use crate::camera::Camera;
 use crate::collision::collision_check;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
-use crate::input::Input;
 use crate::menu::ResumeMenu;
 use crate::player::{Player, RenderPlayer, DebugPlayer, StepContext};
 use crate::replays::Replay;
@@ -12,7 +11,8 @@ use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
 use canon_collision_lib::fighter::{ActionFrame, CollisionBox, LinkType, Action};
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::input::{PlayerInput, ControllerInput};
+use canon_collision_lib::input::Input;
+use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
 use canon_collision_lib::network::Netplay;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::rules::Goal;
