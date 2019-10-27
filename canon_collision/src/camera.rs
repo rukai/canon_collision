@@ -160,25 +160,7 @@ impl Camera {
             //
             // This logic is copy pasted from the transform() method.
             CameraControlState::Auto => {
-                let width = (self.rect.x1 - self.rect.x2).abs();
-                let height = (self.rect.x1 - self.rect.x2).abs();
-                let middle_x = (self.rect.x1 + self.rect.x2) / 2.0;
-                let middle_y = (self.rect.y1 + self.rect.y2) / 2.0;
-
-                // camera distance
-                let radius = (self.rect.y2 - middle_y).max(self.rect.x2 - middle_x);
-                let mut camera_distance = radius / (Camera::fov_rad() / 2.0).tan();
-                let rect_aspect = width / height;
-                // TODO: This logic probably only works because this.pixel_width >= this.pixel_height is always true
-                if rect_aspect > self.aspect_ratio {
-                    camera_distance /= self.aspect_ratio;
-                }
-                else if width > height {
-                    camera_distance /= rect_aspect;
-                }
-
-                // camera points
-                let camera_location = Point3::new(middle_x, middle_y, camera_distance);
+                let camera_location = self.get_camera_location();
 
                 // write to freelook state
                 self.freelook_location = (camera_location.x, camera_location.y, camera_location.z);
@@ -186,6 +168,31 @@ impl Camera {
                 self.freelook_theta = consts::PI;
             }
         }
+    }
+
+    fn get_camera_location(&self) -> Point3<f32> {
+        let width = (self.rect.x1 - self.rect.x2).abs();
+        let height = (self.rect.x1 - self.rect.x2).abs();
+        let middle_x = (self.rect.x1 + self.rect.x2) / 2.0;
+        let middle_y = (self.rect.y1 + self.rect.y2) / 2.0;
+
+        // camera distance
+        let radius = (self.rect.y2 - middle_y).max(self.rect.x2 - middle_x);
+        let mut camera_distance = radius / (Camera::fov_rad() / 2.0).tan();
+        let rect_aspect = width / height;
+        if rect_aspect > self.aspect_ratio {
+            if self.aspect_ratio > 1.0 {
+                camera_distance /= self.aspect_ratio;
+            }
+            else {
+                camera_distance *= self.aspect_ratio;
+            }
+        }
+        else if width > height {
+            camera_distance /= rect_aspect;
+        }
+
+        Point3::new(middle_x, middle_y, camera_distance)
     }
 
     pub fn debug_print(&self) -> Vec<String> {
@@ -302,7 +309,7 @@ impl Camera {
                 // TODO: Apparently the near z plane should be positive, but that breaks things :/
                 let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -20000.0, 20000.0);
                 let camera_target   = Point3::new(middle_x, middle_y, 0.0);
-                let camera_location = Point3::new(middle_x, middle_y, 20000.0);
+                let camera_location = Point3::new(middle_x, middle_y, 2000.0);
                 let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
                 aspect_ratio * proj * view
             }
@@ -314,21 +321,9 @@ impl Camera {
 
                 match self.control_state {
                     CameraControlState::Auto => {
-                        // camera distance
-                        let radius = (self.rect.y2 - middle_y).max(self.rect.x2 - middle_x);
-                        let mut camera_distance = radius / (Camera::fov_rad() / 2.0).tan();
-                        let rect_aspect = width / height;
-                        // TODO: This logic probably only works because this.pixel_width >= this.pixel_height is always true
-                        if rect_aspect > self.aspect_ratio {
-                            camera_distance /= self.aspect_ratio;
-                        }
-                        else if width > height {
-                            camera_distance /= rect_aspect;
-                        }
-
                         // camera points
                         let camera_target   = Point3::new(middle_x, middle_y, 0.0);
-                        let camera_location = Point3::new(middle_x, middle_y, camera_distance);
+                        let camera_location = self.get_camera_location();
 
                         // view matrix
                         let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
