@@ -5,7 +5,8 @@ members = [
     "cc_cli",
     "map_controllers",
     "panic_handler",
-    "package_upgrader"
+    "package_upgrader",
+    "generate_hurtboxes",
 ]
 
 [profile.release]

@@ -856,6 +856,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "generate_hurtboxes"
+version = "0.1.0"
+dependencies = [
+ "canon_collision_lib 0.0.1",
+ "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,14 @@
+[package]
+name = "generate_hurtboxes"
+version = "0.1.0"
+authors = ["Rukai <rubickent@gmail.com>"]
+edition = "2018"
+description = "generate hurtboxes from animation data"
+license = "GPL-3.0"
+repository = "https://github.com/rukai/canon_collision"
+keywords = ["platform", "fighter", "game"]
+categories = ["games", "game-engines"]
+
+[dependencies]
+canon_collision_lib = { path = "../canon_collision_lib" }
+getopts = "0.2"
