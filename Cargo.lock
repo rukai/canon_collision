@@ -860,6 +860,7 @@ name = "generate_hurtboxes"
 version = "0.1.0"
 dependencies = [
  "canon_collision_lib 0.0.1",
+ "cgmath 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

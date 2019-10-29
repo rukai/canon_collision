@@ -944,16 +944,6 @@ impl WgpuGraphics {
         })
     }
 
-    fn action_index_to_string(action_index: usize) -> String {
-        match Action::from_u64(action_index as u64) {
-            Some(action) => {
-                let action: &str = action.into();
-                action.to_string()
-            }
-            None => format!("{}", action_index),
-        }
-    }
-
     fn game_render(&mut self, render: RenderGame, rpass: &mut RenderPass, command_output: &[String]) {
         let mut rng = StdRng::from_seed(render.seed);
         if command_output.len() == 0 {
@@ -1023,7 +1013,7 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(&fighter_model_name) {
-                                    let action = WgpuGraphics::action_index_to_string(action_index);
+                                    let action = Action::action_index_to_string(action_index);
                                     self.render_model3d(rpass, &render, &fighter, &transformation, &action, player.frames[0].frame as f32);
                                 }
                             }

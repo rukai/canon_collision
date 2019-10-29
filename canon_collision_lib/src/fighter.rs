@@ -1,6 +1,6 @@
 use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
 use strum::IntoEnumIterator;
-use num_traits::ToPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use std::collections::HashMap;
 
 use crate::files::engine_version;
@@ -669,6 +669,16 @@ impl Action {
             &Action::Land
               => true,
             _ => false
+        }
+    }
+
+    pub fn action_index_to_string(action_index: usize) -> String {
+        match Action::from_u64(action_index as u64) {
+            Some(action) => {
+                let action: &str = action.into();
+                action.to_string()
+            }
+            None => format!("{}", action_index),
         }
     }
 }
