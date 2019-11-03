@@ -9,7 +9,7 @@ use reqwest::Url;
 use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
-use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole, CollisionBoxLink, LinkType, RenderOrder};
+use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole};
 use crate::files::{self, engine_version};
 use crate::rules::Rules;
 use crate::stage::Stage;
@@ -292,37 +292,11 @@ impl Package {
     /// the added collisionbox is linked to the specified collisionboxes
     /// returns the index the collisionbox was added to.
     pub fn append_fighter_colbox(
-        &mut self, fighter: &str, action: usize, frame: usize,
-        new_colbox: CollisionBox, link_to: &HashSet<usize>, link_type: LinkType
+        &mut self, fighter: &str, action: usize, frame: usize, new_colbox: CollisionBox
     ) -> usize {
         let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
         let new_colbox_index = fighter_frame.colboxes.len();
         fighter_frame.colboxes.push(new_colbox);
-
-        // insert links + render orders
-        for colbox_index in link_to {
-            let new_link_index = fighter_frame.colbox_links.len();
-            fighter_frame.colbox_links.push(CollisionBoxLink {
-                one:       *colbox_index,
-                two:       new_colbox_index,
-                link_type: link_type.clone(),
-            });
-            fighter_frame.render_order.push(RenderOrder::Link(new_link_index));
-        }
-
-        // handle render order
-        if link_to.len() == 0 {
-            fighter_frame.render_order.push(RenderOrder::Colbox(new_colbox_index));
-        }
-        else {
-            // remove outdated render order
-            fighter_frame.render_order = fighter_frame.render_order.iter().filter(
-                |x| match x {
-                    &RenderOrder::Colbox (order_colbox_i) => !link_to.contains(&order_colbox_i),
-                    &RenderOrder::Link (_) => true,
-                }
-            ).cloned().collect();
-        }
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
@@ -353,55 +327,6 @@ impl Package {
                 // delete colboxes
                 let delete_colbox_i = *delete_colbox_i;
                 colboxes.remove(delete_colbox_i);
-
-                // construct a new RenderOrder vec that is valid after the colbox deletion
-                let mut new_render_order: Vec<RenderOrder> = vec!();
-                for order in &fighter_frame.render_order {
-                    match order {
-                        &RenderOrder::Colbox (order_colbox_i) => {
-                            if order_colbox_i != delete_colbox_i {
-                                new_render_order.push(order.dec_greater_than(delete_colbox_i));
-                            }
-                        }
-                        &RenderOrder::Link (_) => {
-                            new_render_order.push(order.clone());
-                        }
-                    }
-                }
-                fighter_frame.render_order = new_render_order;
-
-                // construct a new links vec that is valid after the colbox deletion
-                let mut new_links: Vec<CollisionBoxLink> = vec!();
-                let mut deleted_links: Vec<usize> = vec!();
-                for (link_i, link) in fighter_frame.colbox_links.iter().enumerate() {
-                    if link.contains(delete_colbox_i) {
-                        deleted_links.push(link_i);
-                    }
-                    else {
-                        new_links.push(link.dec_greater_than(delete_colbox_i));
-                    }
-                }
-                fighter_frame.colbox_links = new_links;
-
-                // construct a new RenderOrder vec that is valid after the link deletion
-                deleted_links.sort();
-                deleted_links.reverse();
-                for delete_link_i in deleted_links {
-                    let mut new_render_order: Vec<RenderOrder> = vec!();
-                    for order in &fighter_frame.render_order {
-                        match order {
-                            &RenderOrder::Colbox (_) => {
-                                new_render_order.push(order.clone());
-                            }
-                            &RenderOrder::Link (order_link_i) => {
-                                if order_link_i != delete_link_i {
-                                    new_render_order.push(order.dec_greater_than(delete_link_i));
-                                }
-                            }
-                        }
-                    }
-                    fighter_frame.render_order = new_render_order;
-                }
             }
         }
 
@@ -478,36 +403,41 @@ impl Package {
         });
     }
 
-    /// All colboxes or links containing colboxes from reordered_colboxes are sent to the back
-    pub fn fighter_colboxes_send_to_back(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
+    pub fn fighter_colboxes_order_increase(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
         {
-            for reorder_colbox_i in reordered_colboxes {
-                let links = fighter_frame.get_links_containing_colbox(*reorder_colbox_i);
-                let colbox_links_clone = fighter_frame.colbox_links.clone();
-                let render_order = &mut fighter_frame.render_order;
+            let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
+            reordered_colboxes.sort();
+            reordered_colboxes.reverse();
+            for i in reordered_colboxes {
+                let colbox = fighter_frame.colboxes.remove(i);
+                fighter_frame.colboxes.insert(i, colbox);
+            }
+        }
 
-                // delete pre-existing value
-                render_order.retain(|x| -> bool {
-                    match x {
-                        &RenderOrder::Colbox (ref colbox_i) => {
-                            colbox_i != reorder_colbox_i
-                        }
-                        &RenderOrder::Link (link_i) => {
-                            !colbox_links_clone[link_i].contains(*reorder_colbox_i)
-                        }
-                    }
-                });
+        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
+            fighter:     fighter.to_string(),
+            action:      action,
+            frame_index: frame,
+        });
+        self.package_updates.push(PackageUpdate::InsertFighterFrame {
+            fighter:     fighter.to_string(),
+            action:      action,
+            frame_index: frame,
+            frame:       fighter_frame.clone(),
+        });
+    }
 
-                // reinsert value
-                if links.len() == 0 {
-                    render_order.insert(0, RenderOrder::Colbox (*reorder_colbox_i));
-                }
-                else {
-                    for link_i in links {
-                        render_order.insert(0, RenderOrder::Link (link_i));
-                    }
-                }
+    /// All colboxes or links containing colboxes from reordered_colboxes are sent to the back
+    pub fn fighter_colboxes_order_set_last(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        {
+            let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
+            reordered_colboxes.sort();
+            for i in reordered_colboxes {
+                let colbox = fighter_frame.colboxes.remove(i);
+                fighter_frame.colboxes.insert(0, colbox);
             }
         }
 
@@ -525,34 +455,40 @@ impl Package {
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_send_to_front(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_decrease(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
         {
-            for reorder_i in reordered_colboxes {
-                let links = fighter_frame.get_links_containing_colbox(*reorder_i);
-                let render_order = &mut fighter_frame.render_order;
+            let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
+            reordered_colboxes.sort();
+            for i in reordered_colboxes {
+                let colbox = fighter_frame.colboxes.remove(i);
+                fighter_frame.colboxes.insert(i, colbox);
+            }
+        }
 
-                // delete pre-existing value
-                render_order.retain(|x| -> bool {
-                    match x {
-                        &RenderOrder::Colbox (ref colbox_i) => {
-                            colbox_i != reorder_i
-                        }
-                        &RenderOrder::Link (_) => {
-                            true
-                        }
-                    }
-                });
+        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
+            fighter:     fighter.to_string(),
+            action:      action,
+            frame_index: frame,
+        });
+        self.package_updates.push(PackageUpdate::InsertFighterFrame {
+            fighter:     fighter.to_string(),
+            action:      action,
+            frame_index: frame,
+            frame:       fighter_frame.clone(),
+        });
+    }
 
-                // reinsert value
-                if links.len() == 0 {
-                    render_order.push(RenderOrder::Colbox (*reorder_i));
-                }
-                else {
-                    for link_i in links {
-                        render_order.push(RenderOrder::Link (link_i));
-                    }
-                }
+    /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
+    pub fn fighter_colboxes_order_set_first(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        {
+            let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
+            reordered_colboxes.sort();
+            reordered_colboxes.reverse();
+            for i in reordered_colboxes {
+                let colbox = fighter_frame.colboxes.remove(i);
+                fighter_frame.colboxes.insert(0, colbox);
             }
         }
 
@@ -600,7 +536,6 @@ Commands:
 *   help    - display this help
 *   save    - save changes to disc
 *   reload  - reload from disc, all changes are lost
-*   publish - export the package to a zip file in the PF_Sandbox/publish directory
 
 Accessors:
 *   .fighters - KeyedContextVec

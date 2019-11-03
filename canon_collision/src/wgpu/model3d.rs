@@ -1,4 +1,4 @@
-use crate::assets::Assets;
+use canon_collision_lib::assets::Assets;
 use crate::game::{RenderEntity, RenderGame};
 
 use std::collections::HashMap;
@@ -309,7 +309,7 @@ impl Model3D {
                     });
                     let ibm: Vec<Matrix4<f32>> = reader.read_inverse_bind_matrices().unwrap().map(|x| x.into()).collect();
                     let node_to_joints_lookup: Vec<_> = joints.iter().map(|x| x.index()).collect();
-                    root_joint = Some(Model3D::skeleton_from_gltf_node(device, &joints[0], blob, &node_to_joints_lookup, &ibm, Matrix4::identity()));
+                    root_joint = Some(Model3D::skeleton_from_gltf_node(&joints[0], blob, &node_to_joints_lookup, &ibm, Matrix4::identity()));
                 }
             }
 
@@ -400,7 +400,7 @@ impl Model3D {
         meshes
     }
 
-    fn skeleton_from_gltf_node(device: &Device, node: &Node, blob: &[u8], node_to_joints_lookup: &[usize], ibms: &[Matrix4<f32>], parent_transform: Matrix4<f32>) -> Joint {
+    fn skeleton_from_gltf_node(node: &Node, blob: &[u8], node_to_joints_lookup: &[usize], ibms: &[Matrix4<f32>], parent_transform: Matrix4<f32>) -> Joint {
         let mut children = vec!();
         let node_index = node.index();
         let index = node_to_joints_lookup.iter().enumerate().find(|(_, x)| **x == node_index).unwrap().0;
@@ -410,7 +410,7 @@ impl Model3D {
         let pose_transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         for child in node.children() {
-            children.push(Model3D::skeleton_from_gltf_node(device, &child, blob, node_to_joints_lookup, ibms, pose_transform.clone()));
+            children.push(Model3D::skeleton_from_gltf_node(&child, blob, node_to_joints_lookup, ibms, pose_transform.clone()));
         }
 
         let transform = pose_transform * ibm;

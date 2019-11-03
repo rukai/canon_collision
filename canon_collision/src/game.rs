@@ -9,7 +9,7 @@ use crate::results::{GameResults, RawPlayerResult, PlayerResult};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::fighter::{ActionFrame, CollisionBox, LinkType, Action};
+use canon_collision_lib::fighter::{ActionFrame, CollisionBox, Action};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
@@ -497,12 +497,8 @@ impl Game {
 
                                 let point = (player.relative_f(m_x - p_x), m_y - p_y);
                                 let new_colbox = CollisionBox::new(point);
-                                let link_type = match os_input.held_shift() {
-                                    true  => LinkType::Simple,
-                                    false => LinkType::MeldFirst
-                                };
 
-                                self.package.append_fighter_colbox(fighter, action, frame, new_colbox, &self.selector.colboxes, link_type)
+                                self.package.append_fighter_colbox(fighter, action, frame, new_colbox)
                             };
                             self.update_frame();
                             self.selector.colboxes.insert(selected);
@@ -515,23 +511,21 @@ impl Game {
                     if os_input.key_pressed(VirtualKeyCode::RBracket) {
                         self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, 0.1);
                     }
-                    // meld link collisionboxes
-                    if os_input.key_pressed(VirtualKeyCode::Z) {
-                        // TODO
-                    }
-                    // simple link collisionboxes
-                    if os_input.key_pressed(VirtualKeyCode::X) {
-                        // TODO
-                    }
-                    // unlink collisionboxes
-                    if os_input.key_pressed(VirtualKeyCode::C) {
-                        // TODO
-                    }
                     if os_input.key_pressed(VirtualKeyCode::Comma) {
-                        self.package.fighter_colboxes_send_to_front(fighter, action, frame, &self.selector.colboxes)
+                        if os_input.held_shift() {
+                            self.package.fighter_colboxes_order_set_first(fighter, action, frame, &self.selector.colboxes)
+                        }
+                        else {
+                            self.package.fighter_colboxes_order_decrease(fighter, action, frame, &self.selector.colboxes)
+                        }
                     }
                     if os_input.key_pressed(VirtualKeyCode::Period) {
-                        self.package.fighter_colboxes_send_to_back(fighter, action, frame, &self.selector.colboxes)
+                        if os_input.held_shift() {
+                            self.package.fighter_colboxes_order_set_last(fighter, action, frame, &self.selector.colboxes)
+                        }
+                        else {
+                            self.package.fighter_colboxes_order_increase(fighter, action, frame, &self.selector.colboxes)
+                        }
                     }
                     // set hitbox angle
                     if os_input.key_pressed(VirtualKeyCode::Q) {

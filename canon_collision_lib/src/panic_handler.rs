@@ -123,7 +123,7 @@ impl Report {
         let uuid = Uuid::new_v4().to_hyphenated().to_string();
         let tmp_dir = env::temp_dir();
         if let Some(tmp_dir) = tmp_dir.to_str() {
-            let file_name = format!("pf-sandbox-panic-{}.toml", &uuid);
+            let file_name = format!("canon-collision-panic-{}.toml", &uuid);
             let file_path = Path::new(tmp_dir).join(file_name);
             let mut file = File::create(&file_path).map_err(|x| format!("{:?}", x))?;
             let toml = toml::to_string_pretty(&self).map_err(|x| format!("{:?}", x))?;

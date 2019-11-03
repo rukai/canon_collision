@@ -29,7 +29,6 @@ winit = "0.20.0-alpha4" # Needed on all builds, game logic is dependent on Virtu
 winit_input_helper = "0.4.0-alpha4"
 gltf = "0.14"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
-hotwatch = "0.4"
 cgmath = { version = "0.17" }
 
 vk-shader-macros = { version = "0.2", optional = true }

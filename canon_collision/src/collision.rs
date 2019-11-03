@@ -45,7 +45,7 @@ pub fn collision_check(players: &[Player], fighters: &KeyedContextVec<Fighter>, 
                     }
 
                     if hitbox_atk.enable_clang {
-                        for colbox_def in frame_def.get_colboxes() {
+                        for colbox_def in frame_def.colboxes.iter() {
                             match &colbox_def.role {
                             // TODO: How do we only run the clang handler once?
                                 &CollisionBoxRole::Hit (ref hitbox_def) => {
@@ -72,7 +72,7 @@ pub fn collision_check(players: &[Player], fighters: &KeyedContextVec<Fighter>, 
                         }
                     }
 
-                    for colbox_def in &frame_def.get_colboxes() {
+                    for colbox_def in frame_def.colboxes.iter() {
                         match colbox_collision_check(player_atk_xy, colbox_atk, player_def_xy, colbox_def) {
                             ColBoxCollisionResult::Hit (point) => {
                                 match &colbox_def.role {

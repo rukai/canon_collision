@@ -6,7 +6,6 @@
 
 pub(crate) mod ai;
 pub(crate) mod app;
-pub(crate) mod assets;
 pub(crate) mod camera;
 pub(crate) mod cli;
 pub(crate) mod collision;

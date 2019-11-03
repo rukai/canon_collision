@@ -5,6 +5,7 @@
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate treeflection_derive;
 
+pub mod assets;
 pub mod command_line;
 pub mod config;
 pub mod fighter;

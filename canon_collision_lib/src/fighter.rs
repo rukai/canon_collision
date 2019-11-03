@@ -246,8 +246,6 @@ impl Default for VelModify {
 pub struct ActionFrame {
     pub ecb:                 ECB,
     pub colboxes:            ContextVec<CollisionBox>,
-    pub colbox_links:        Vec<CollisionBoxLink>,
-    pub render_order:        Vec<RenderOrder>,
     pub item_hold_x:         f32,
     pub item_hold_y:         f32,
     pub grab_hold_x:         f32,
@@ -272,8 +270,6 @@ impl Default for ActionFrame {
     fn default() -> ActionFrame {
         ActionFrame {
             colboxes:            ContextVec::new(),
-            colbox_links:        vec!(),
-            render_order:        vec!(),
             ecb:                 ECB::default(),
             item_hold_x:         4.0,
             item_hold_y:         11.0,
@@ -294,105 +290,14 @@ impl Default for ActionFrame {
 
 impl ActionFrame {
     pub fn get_hitboxes(&self) -> Vec<&CollisionBox> {
-        let mut result = self.get_colboxes();
+        let mut result: Vec<&CollisionBox> = self.colboxes.iter().collect();
         result.retain(|x| matches!(x.role, CollisionBoxRole::Hit(_)));
         result
     }
 
     pub fn get_hurtboxes(&self) -> Vec<&CollisionBox> {
-        let mut result = self.get_colboxes();
+        let mut result: Vec<&CollisionBox> = self.colboxes.iter().collect();
         result.retain(|x| matches!(x.role, CollisionBoxRole::Hurt(_)));
-        result
-    }
-
-    pub fn get_colboxes(&self) -> Vec<&CollisionBox> {
-        let mut result: Vec<&CollisionBox> = vec!();
-        for (i, colbox) in self.colboxes.iter().enumerate() {
-            if self.is_unordered(&RenderOrder::Colbox(i)) {
-                result.push(colbox);
-            }
-        }
-
-        for order in &self.render_order {
-            if let &RenderOrder::Colbox (index) = order {
-                result.push(&self.colboxes[index]);
-            }
-        }
-
-        result
-    }
-
-    pub fn get_links(&self) -> Vec<&CollisionBoxLink> {
-        let mut result: Vec<&CollisionBoxLink> = vec!();
-        for (i, link) in self.colbox_links.iter().enumerate() {
-            if self.is_unordered(&RenderOrder::Link(i)) {
-                result.push(link);
-            }
-        }
-
-        for order in &self.render_order {
-            if let &RenderOrder::Link (index) = order {
-                result.push(&self.colbox_links[index]);
-            }
-        }
-
-        result
-    }
-
-    /// Returns all collisionboxes and linked collisionboxes
-    /// collisionboxes referenced by a link are not included individually
-    pub fn get_colboxes_and_links(&self) -> Vec<ColboxOrLink> {
-        let mut result: Vec<ColboxOrLink> = vec!();
-        for (i, colbox) in self.colboxes.iter().enumerate() {
-            if self.is_unordered(&RenderOrder::Colbox(i)) && self.is_unlinked(i) {
-                result.push(ColboxOrLink::Colbox(colbox));
-            }
-        }
-        for (i, link) in self.colbox_links.iter().enumerate() {
-            if self.is_unordered(&RenderOrder::Link(i)) {
-                result.push(ColboxOrLink::Link(link));
-            }
-        }
-
-        for order in &self.render_order {
-            match order {
-                &RenderOrder::Colbox (index) => {
-                    result.push(ColboxOrLink::Colbox(&self.colboxes[index]));
-                }
-                &RenderOrder::Link (index) => {
-                    result.push(ColboxOrLink::Link(&self.colbox_links[index]));
-                }
-            }
-        }
-
-        result
-    }
-
-    fn is_unordered(&self, check_order: &RenderOrder) -> bool {
-        for order in &self.render_order {
-            if check_order == order {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn is_unlinked(&self, i: usize) -> bool {
-        for link in &self.colbox_links {
-            if link.one == i || link.two == i {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub fn get_links_containing_colbox(&self, colbox_i: usize) -> Vec<usize> {
-        let mut result: Vec<usize> = vec!();
-        for (link_i, link) in self.colbox_links.iter().enumerate() {
-            if link.one == colbox_i || link.two == colbox_i {
-                result.push(link_i);
-            }
-        }
         result
     }
 }
@@ -416,46 +321,6 @@ impl Default for LedgeGrabBox {
     }
 }
 
-pub enum ColboxOrLink <'a> {
-    Colbox (&'a CollisionBox),
-    Link   (&'a CollisionBoxLink)
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize, Node)]
-pub enum RenderOrder {
-    Colbox (usize),
-    Link   (usize)
-}
-
-impl Default for RenderOrder {
-    fn default() -> RenderOrder {
-        RenderOrder::Colbox (0)
-    }
-}
-
-impl RenderOrder {
-    pub fn dec_greater_than(&self, check: usize) -> RenderOrder {
-        match self {
-            &RenderOrder::Colbox (i) => {
-                if i > check {
-                    RenderOrder::Colbox (i-1)
-                }
-                else {
-                    RenderOrder::Colbox (i)
-                }
-            }
-            &RenderOrder::Link (i) => {
-                if i > check {
-                    RenderOrder::Link (i-1)
-                }
-                else {
-                    RenderOrder::Link (i)
-                }
-            }
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct ECB {
     pub left:   f32,
@@ -472,55 +337,6 @@ impl Default for ECB {
             right:  4.0,
             bottom: 0.0,
         }
-    }
-}
-
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
-pub struct CollisionBoxLink {
-    pub one:       usize,
-    pub two:       usize,
-    pub link_type: LinkType,
-}
-
-impl CollisionBoxLink {
-    pub fn equals (&self, one: usize, two: usize) -> bool {
-        self.one == one && self.two == two ||
-        self.one == two && self.two == one
-    }
-
-    pub fn contains (&self, check: usize) -> bool {
-        self.one == check || self.two == check
-    }
-
-    pub fn dec_greater_than(&self, check: usize) -> CollisionBoxLink {
-        let mut one = self.one;
-        let mut two = self.two;
-
-        if self.one > check {
-            one -= 1;
-        }
-        if self.two > check {
-            two -= 1;
-        }
-
-        CollisionBoxLink {
-            one: one,
-            two: two,
-            link_type: self.link_type.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Node)]
-pub enum LinkType {
-    MeldFirst,
-    MeldSecond,
-    Simple,
-}
-
-impl Default for LinkType {
-    fn default() -> LinkType {
-        LinkType::MeldFirst
     }
 }
 
@@ -718,6 +534,7 @@ impl Default for CollisionBox {
     }
 }
 
+// TODO: Pretty sure I should delete all variants except Hit and hurt
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum CollisionBoxRole {
     Hurt (HurtBox), // a target
