@@ -15,6 +15,16 @@ set -ev
     done
 ) &
 
+# setup blender
+wget https://ftp.nluug.nl/pub/graphics/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2
+tar -xvf blender-2.80-linux-glibc217-x86_64.tar.bz2
+PATH="$PWD/blender-2.80-linux-glibc217-x86_64:$PATH"
+
+# export .blend to .glb
+cd assets_raw/models
+python3 export_all_assets.py
+cd ../..
+
 # test and build
 rustup update
 cargo test --release -v --all -j 2
@@ -23,15 +33,14 @@ cargo build --release --no-default-features
 cd ..
 cargo build --release --all -j 2
 
-# commented out as website is not running for now
-#if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
-#    # package
-#    mkdir cc
-#    mv target/release/canon_collision cc/
-#    mv target/release/cc_cli cc/
-#    mv target/release/cc_map_controllers cc/
-#    tar -cvzf pfsandbox-${TRAVIS_COMMIT:0:15}-linux.tar.gz pf
-#
-#    # upload
-#    echo "put pfsandbox-${TRAVIS_COMMIT:0:15}-linux.tar.gz /home/rubic/PF_Sandbox_Website/builds/" | sftp rubic@pfsandbox.net
-#fi
+if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
+    # package
+    mkdir cc
+    mv target/release/canon_collision cc/
+    mv target/release/cc_cli cc/
+    mv target/release/cc_map_controllers cc/
+    tar -cvzf canoncollision-${TRAVIS_COMMIT:0:15}-linux.tar.gz cc
+
+    # upload
+    echo "put canoncollision-${TRAVIS_COMMIT:0:15}-linux.tar.gz /home/ubuntu/CanonCollisionWebsite/builds/" | sftp ubuntu@ec2-13-210-166-146.ap-southeast-2.compute.amazonaws.com
+fi

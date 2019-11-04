@@ -23,8 +23,6 @@ def main():
     for filename in os.listdir("."):
         if os.path.isdir(filename) and filename != 'Shared' and (len(args) == 0 or filename in args):
             blend_path = pathlib.Path(filename).joinpath(filename + ".blend")
-            #subprocess.run(["blender", blend_path, "-b", "-P", "export.py"])
-            # GLTF exporter in blender 2.8 is buggy, so change this to point to your own daily blender build
-            subprocess.run(["/home/rubic/Bin/blender/blender-2.82-2a3b5dc73038-linux-glibc217-x86_64/blender", blend_path, "-b", "-P", "export.py"])
+            subprocess.run(["blender", str(blend_path), "-b", "-P", "export.py"])
 
 main()

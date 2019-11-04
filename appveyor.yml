@@ -8,13 +8,12 @@ image: Visual Studio 2017
 
 install:
   # setup ssh keys
-  # commented out as website is not running for now
-  #- nuget install secure-file -ExcludeVersion
-  #- secure-file\tools\secure-file -decrypt ssh-keys-appveyor.zip.enc -secret %ssh-keys-secret%
-  #- 7z x ssh-keys-appveyor.zip
-  #- rm -r C:/Users/appveyor/.ssh
-  #- mv .ssh C:/Users/appveyor/
-  #
+  - nuget install secure-file -ExcludeVersion
+  - secure-file\tools\secure-file -decrypt ssh-keys-appveyor.zip.enc -secret %ssh-keys-secret%
+  - 7z x ssh-keys-appveyor.zip
+  - rm -r C:/Users/appveyor/.ssh
+  - mv .ssh C:/Users/appveyor/
+
   # Setup gtk deps https://gtk-rs.org/docs-src/requirements.html
   - git clone https://github.com/Microsoft/vcpkg
   - cd vcpkg
@@ -47,29 +46,14 @@ install:
 test_script:
   - cargo test --release --all
   - cargo build --release --all
-  # commented out as website is not running for now
-  #- mkdir pf
-  #- move target\x86_64-pc-windows-gnu\release\pf_sandbox.exe pf
-  #- move target\x86_64-pc-windows-gnu\release\pf_tas.exe pf
-  #- move target\x86_64-pc-windows-gnu\release\pf_cli.exe pf
-  #- move target\x86_64-pc-windows-gnu\release\pf_map_controllers.exe pf
-  #- move target\x86_64-pc-windows-gnu\release\panic_handler.exe pf
-  #- copy C:\msys64\mingw64\bin\libcairo-2.dll pf
-  #- copy C:\msys64\mingw64\bin\libcairo-gobject-2.dll pf
-  #- copy C:\msys64\mingw64\bin\libepoxy-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libfribidi-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgdk-3-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgdk_pixbuf-2.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgio-2.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libglib-2.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgmodule-2.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgobject-2.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libgtk-3-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libintl-8.dll pf
-  #- copy C:\msys64\mingw64\bin\libpango-1.0-0.dll pf
-  #- copy C:\msys64\mingw64\bin\libusb-1.0.dll pf
-  #- 7z a pfsandbox-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip pf
-  #- echo put pfsandbox-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip /home/rubic/PF_Sandbox_Website/builds/ | sftp rubic@pfsandbox.net
+  - mkdir cc
+  - move target\release\canon_collision.exe cc
+  - move target\release\cc_cli.exe cc
+  - move target\release\cc_map_controllers.exe cc
+  - move target\release\panic_handler.exe cc
+  - 7z a canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip cc
+  # TODO: Need to fix knownhosts file first
+  #- echo put canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip /home/ubuntu/CanonCollisionWebsite/builds/ | sftp ubuntu@ec2-13-210-166-146.ap-southeast-2.compute.amazonaws.com
 
 skip_tags: true
 cache:
