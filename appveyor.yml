@@ -8,18 +8,29 @@ image: Visual Studio 2017
 
 install:
   # setup ssh keys
-  - nuget install secure-file -ExcludeVersion
-  - secure-file\tools\secure-file -decrypt ssh-keys-appveyor.zip.enc -secret %ssh-keys-secret%
+  - ps: iex ((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/appveyor/secure-file/master/install.ps1'))
+  - appveyor-tools\secure-file -decrypt ssh-keys-appveyor.zip.enc -secret %my_secret% -salt %my_salt%
   - 7z x ssh-keys-appveyor.zip
   - rm -r C:/Users/appveyor/.ssh
   - mv .ssh C:/Users/appveyor/
 
+  # Setup shaderc deps
+  - set PATH=C:\Python37;%PATH%
+  - choco install ninja
+
+  # Setup blender
+  - ps: wget "https://ftp.nluug.nl/pub/graphics/blender/release/Blender2.80/blender-2.80-windows64.zip" -OutFile blender.zip
+  - 7z x blender.zip
+  - set PATH=%CD%\blender-2.80-windows64;%PATH%
+
+   # export .blend to .glb
+  - cd assets_raw/models
+  - python export_all_assets.py
+  - cd ..\..
+
   # Setup gtk deps https://gtk-rs.org/docs-src/requirements.html
-  - git clone https://github.com/Microsoft/vcpkg
-  - cd vcpkg
-  - bootstrap-vcpkg.bat
   - vcpkg install gtk:x64-windows
-  - set VCPKGDIR=%CD%\installed\x64-windows
+  - set VCPKGDIR=C:\tools\vcpkg\installed\x64-windows
   - set PATH=%VCPKGDIR%\bin;%PATH%
   - set GTK_LIB_DIR=%VCPKGDIR%\lib
   - mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib
@@ -30,11 +41,7 @@ install:
   - mkdir %VCPKGDIR%\etc\gtk-3.0
   - echo "[Settings]" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
   - echo "gtk-theme-name=win32" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
-  - cd ..
     # TODO: instructions say to add settings.ini file, but it doesnt look very important.
-  # Setup shaderc deps
-  - set PATH=C:\Python37;%PATH%
-  - choco install ninja
   # Setup rust
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
   - rustup-init.exe -y --default-host %TARGET% --default-toolchain %RUST_VERSION%
@@ -51,12 +58,14 @@ test_script:
   - move target\release\cc_cli.exe cc
   - move target\release\cc_map_controllers.exe cc
   - move target\release\panic_handler.exe cc
+  - move package cc
+  - move assets cc
   - 7z a canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip cc
-  # TODO: Need to fix knownhosts file first
-  #- echo put canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip /home/ubuntu/CanonCollisionWebsite/builds/ | sftp ubuntu@ec2-13-210-166-146.ap-southeast-2.compute.amazonaws.com
+  - echo put canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip /home/ubuntu/CanonCollisionWebsite/builds/ | sftp ubuntu@ec2-13-210-166-146.ap-southeast-2.compute.amazonaws.com
 
 skip_tags: true
 cache:
-  - C:\Users\appveyor\.cargo\registry
+  #- C:\Users\appveyor\.cargo\registry # Disabled because rust doesnt cleanup properly, so likely to run out of space
+  - C:\tools\vcpkg\installed\
 # Building is done in the test phase, so we disable Appveyor's build phase.
 build: false

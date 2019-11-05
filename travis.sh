@@ -39,6 +39,8 @@ if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
     mv target/release/canon_collision cc/
     mv target/release/cc_cli cc/
     mv target/release/cc_map_controllers cc/
+    mv package cc/
+    mv assets cc/
     tar -cvzf canoncollision-${TRAVIS_COMMIT:0:15}-linux.tar.gz cc
 
     # upload
