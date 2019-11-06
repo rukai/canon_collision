@@ -33,14 +33,15 @@ install:
   - set VCPKGDIR=C:\tools\vcpkg\installed\x64-windows
   - set PATH=%VCPKGDIR%\bin;%PATH%
   - set GTK_LIB_DIR=%VCPKGDIR%\lib
-  - mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib
-  - mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib
-  - mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll
-  - mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll
-  - mkdir %VCPKGDIR%\etc
-  - mkdir %VCPKGDIR%\etc\gtk-3.0
-  - echo "[Settings]" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
-  - echo "gtk-theme-name=win32" >> %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  # ignore failure, the files get cached and fails if we try to recreate it.
+  - mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib & exit 0
+  - mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib & exit 0
+  - mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll & exit 0
+  - mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll & exit 0
+  - mkdir %VCPKGDIR%\etc & exit 0
+  - mkdir %VCPKGDIR%\etc\gtk-3.0 & exit 0
+  - echo "[Settings]" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  - echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
     # TODO: instructions say to add settings.ini file, but it doesnt look very important.
   # Setup rust
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
