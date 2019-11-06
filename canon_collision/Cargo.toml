@@ -32,8 +32,8 @@ png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 cgmath = { version = "0.17" }
 
 vk-shader-macros = { version = "0.2", optional = true }
-wgpu_glyph = { version = "0.4", git = "https://github.com/hecrj/wgpu_glyph", rev = "e866a95dcf22b39996a56639cd59026af254576b", optional = true }
-wgpu = { version = "0.3", git = "https://github.com/gfx-rs/wgpu-rs", optional = true, rev = "012d08d64de924da93289c2b51fb06b22d7348cf" }
+wgpu_glyph = { version = "0.5", optional = true }
+wgpu = { version = "0.4", optional = true }
 raw-window-handle = "0.3"
 
 [features]
