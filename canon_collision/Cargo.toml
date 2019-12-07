@@ -17,7 +17,7 @@ chrono = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 getopts = "0.2"
 log = "0.4"
-lyon = "0.14"
+lyon = "0.15"
 rand = "0.7.0"
 rand_chacha = "0.2"
 serde = "1"
@@ -32,7 +32,7 @@ png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 cgmath = { version = "0.17" }
 
 vk-shader-macros = { version = "0.2", optional = true }
-wgpu_glyph = { version = "0.5", optional = true }
+wgpu_glyph = { version = "0.6", optional = true }
 wgpu = { version = "0.4", optional = true }
 raw-window-handle = "0.3"
 

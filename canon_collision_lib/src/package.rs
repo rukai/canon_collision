@@ -5,7 +5,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use sha2::{Sha256, Digest};
-use reqwest::Url;
 use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
@@ -228,26 +227,6 @@ impl Package {
         }
 
         hasher.result().iter().map(|x| format!("{:x}", x)).collect()
-    }
-
-    pub fn verify(&self) -> Verify {
-        if let Some(latest_meta) = self.meta.download_latest_meta() {
-            let hash = self.compute_hash();
-            if self.meta.published_version >= latest_meta.published_version {
-                if hash == latest_meta.hash {
-                    Verify::Ok
-                }
-                else {
-                    Verify::IncorrectHash
-                }
-            }
-            else {
-                Verify::UpdateAvailable
-            }
-        }
-        else {
-            Verify::CannotConnect
-        }
     }
 
     pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
@@ -611,10 +590,5 @@ impl PackageMeta {
             fighter_keys:      vec!(),
             stage_keys:        vec!(),
         }
-    }
-
-    pub fn download_latest_meta(&self) -> Option<PackageMeta> {
-        let url = Url::parse("https://pfsandbox.net/latest_meta").unwrap();
-        files::load_struct_from_url(url)
     }
 }

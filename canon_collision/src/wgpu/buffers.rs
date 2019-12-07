@@ -10,10 +10,8 @@ use crate::game::{SurfaceSelection, RenderRect};
 use wgpu::{Device, Buffer};
 
 use lyon::path::Path;
-use lyon::math::point;
-use lyon::tessellation::{VertexBuffers, FillVertex};
-use lyon::tessellation::{FillTessellator, FillOptions};
-use lyon::tessellation::{VertexConstructor, BuffersBuilder};
+use lyon::math::{Point, point};
+use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
 
 use std::collections::HashSet;
 use std::f32::consts;
@@ -40,10 +38,10 @@ fn colorvertex(x: f32, y: f32, color: [f32; 4]) -> ColorVertex {
 }
 
 struct StageVertexConstructor;
-impl VertexConstructor<FillVertex, ColorVertex> for StageVertexConstructor {
-    fn new_vertex(&mut self, vertex: FillVertex) -> ColorVertex {
+impl FillVertexConstructor<ColorVertex> for StageVertexConstructor {
+    fn new_vertex(&mut self, position: Point, _attributes: FillAttributes) -> ColorVertex {
         ColorVertex {
-            position: [vertex.position.x, vertex.position.y, 0.0, 1.0],
+            position: [position.x, position.y, 0.0, 1.0],
             color:    [0.16, 0.16, 0.16, 1.0]
         }
     }
@@ -330,7 +328,7 @@ impl ColorBuffers {
         let path = builder.build();
         let mut tessellator = FillTessellator::new();
         let mut mesh = VertexBuffers::new();
-        tessellator.tessellate_path(
+        tessellator.tessellate(
             path.iter(),
             &FillOptions::tolerance(0.01),
             &mut BuffersBuilder::new(&mut mesh, StageVertexConstructor)

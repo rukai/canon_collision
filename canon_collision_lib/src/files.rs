@@ -4,8 +4,6 @@ use std::io::{Read, Write};
 use std::path::{PathBuf, Path};
 
 use dirs;
-use reqwest::Url;
-use reqwest;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use serde_json::Value;
@@ -68,29 +66,6 @@ pub fn load_file(filename: PathBuf) -> Result<String, String> {
         return Err(format!("Failed to read file {} because: {}", filename.to_str().unwrap(), err))
     };
     Ok(contents)
-}
-
-/// Load the json file at the passed URL directly into a struct
-pub fn load_struct_from_url<T: DeserializeOwned>(url: Url) -> Option<T> {
-    if let Ok(mut response) = reqwest::get(url) {
-        if response.status().is_success() {
-            return response.json().ok();
-        }
-    }
-    None
-}
-
-/// Returns the bytes of the file stored at the url
-pub fn load_bin_from_url(url: Url) -> Option<Vec<u8>> {
-    if let Ok(mut response) = reqwest::get(url) {
-        if response.status().is_success() {
-            let mut buf: Vec<u8> = vec!();
-            if let Ok(_) = response.read_to_end(&mut buf) {
-                return Some(buf);
-            }
-        }
-    }
-    None
 }
 
 /// deletes all files in the passed directory
