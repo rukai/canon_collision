@@ -68,7 +68,7 @@ fn main() {
 
     let window = Window::new(WindowType::Toplevel);
     window.set_property_default_height(800);
-    window.set_title("PFS Controller Mapper");
+    window.set_title("CC Controller Mapper");
 
     let vbox = Box::new(Orientation::Vertical, 5);
     vbox.set_margin_start(10);
