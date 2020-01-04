@@ -40,7 +40,7 @@ impl OsInput {
         }
 
         // force the WinitInputHelper to process the received events
-        self.input.update(Event::EventsCleared);
+        self.input.update(Event::MainEventsCleared);
     }
 }
 

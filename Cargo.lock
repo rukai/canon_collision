@@ -283,8 +283,8 @@ dependencies = [
  "vk-shader-macros 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "wgpu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wgpu_glyph 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "winit 0.20.0-alpha5 (registry+https://github.com/rust-lang/crates.io-index)",
- "winit_input_helper 0.4.0-alpha4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit 0.20.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit_input_helper 0.4.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -316,8 +316,8 @@ dependencies = [
  "treeflection 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
  "treeflection_derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "winit 0.20.0-alpha5 (registry+https://github.com/rust-lang/crates.io-index)",
- "winit_input_helper 0.4.0-alpha4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit 0.20.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit_input_helper 0.4.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2841,7 +2841,7 @@ dependencies = [
 
 [[package]]
 name = "winit"
-version = "0.20.0-alpha5"
+version = "0.20.0-alpha6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "android_glue 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2868,10 +2868,10 @@ dependencies = [
 
 [[package]]
 name = "winit_input_helper"
-version = "0.4.0-alpha4"
+version = "0.4.0-alpha6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "winit 0.20.0-alpha5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winit 0.20.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3258,8 +3258,8 @@ dependencies = [
 "checksum winapi-util 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7168bab6e1daee33b4557efd0e95d5ca70a03706d39fa5f3fe7a236f584b03c9"
 "checksum winapi-x86_64-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 "checksum wincolor 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "96f5016b18804d24db43cebf3c77269e7569b8954a8464501c216cc5e070eaa9"
-"checksum winit 0.20.0-alpha5 (registry+https://github.com/rust-lang/crates.io-index)" = "14fbf7c84c8c1ff9d72982cb382c1a78fbe0f7556f49b1ca98de212d018c5b82"
-"checksum winit_input_helper 0.4.0-alpha4 (registry+https://github.com/rust-lang/crates.io-index)" = "48df19ac64492fa604aeb2269afb41f21c19a2bdc552134bec1c3751d6c0919d"
+"checksum winit 0.20.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)" = "bfa4308ca09f50e2f4688c631c36879521bffc39b949238b288ffd932864acbc"
+"checksum winit_input_helper 0.4.0-alpha6 (registry+https://github.com/rust-lang/crates.io-index)" = "87e2d583026dd354e1357d9f9be7fc932d44bd181be047a89d42417aae7bf037"
 "checksum wio 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "5d129932f4644ac2396cb456385cbf9e63b5b30c6e8dc4820bdca4eb082037a5"
 "checksum ws2_32-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 "checksum x11 2.18.1 (registry+https://github.com/rust-lang/crates.io-index)" = "39697e3123f715483d311b5826e254b6f3cfebdd83cf7ef3358f579c3d68e235"

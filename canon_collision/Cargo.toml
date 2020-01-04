@@ -25,8 +25,8 @@ serde_derive = "1"
 serde_json = "1"
 treeflection = "0.1"
 treeflection_derive = "0.4"
-winit = "0.20.0-alpha4" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
-winit_input_helper = "0.4.0-alpha4"
+winit = "0.20.0-alpha6" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
+winit_input_helper = "0.4.0-alpha6"
 gltf = "0.14"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 cgmath = { version = "0.17" }

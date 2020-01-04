@@ -455,7 +455,7 @@ impl WgpuGraphics {
 
     pub fn update(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
         match event {
-            Event::EventsCleared => {
+            Event::MainEventsCleared => {
                 let frame_start = Instant::now();
 
                 if self.force_send_window_events() {
