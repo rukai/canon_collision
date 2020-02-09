@@ -67,7 +67,7 @@ impl Camera {
         }
     }
 
-    pub fn update_os_input(&mut self, os_input: &WinitInputHelper<()>) {
+    pub fn update_os_input(&mut self, os_input: &WinitInputHelper) {
         // set manual/automatic camera control
         if os_input.mouse_pressed(2) || os_input.scroll_diff() != 0.0 ||
             (!self.dev_mode() && (os_input.key_pressed(VirtualKeyCode::W) || os_input.key_pressed(VirtualKeyCode::A) || os_input.key_pressed(VirtualKeyCode::S) || os_input.key_pressed(VirtualKeyCode::D)))
@@ -211,7 +211,7 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, os_input: &WinitInputHelper<()>, players: &[Player], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
+    pub fn update(&mut self, os_input: &WinitInputHelper, players: &[Player], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
         // process new resolution
         if let Some((width, height)) = os_input.resolution() {
             self.window_width = width as f32;

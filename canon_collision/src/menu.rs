@@ -595,7 +595,7 @@ impl Menu {
         }
     }
 
-    pub fn step(&mut self, package: &Package, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper<()>, netplay: &mut Netplay) -> Option<GameSetup> {
+    pub fn step(&mut self, package: &Package, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, netplay: &mut Netplay) -> Option<GameSetup> {
         if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();

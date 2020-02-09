@@ -33,19 +33,21 @@ fn main() {
 
     let cli_results = cli::cli();
     let graphics_backend = cli_results.graphics_backend.clone();
-    let (os_input_tx, render_rx) = app::run_in_thread(cli_results);
+    let (winit_input_helper_tx, render_rx) = app::run_in_thread(cli_results);
 
     match graphics_backend {
         #[cfg(feature = "wgpu_renderer")]
         GraphicsBackendChoice::Wgpu => {
             let event_loop = EventLoop::new();
-            let mut graphics = WgpuGraphics::new(&event_loop, os_input_tx, render_rx);
+            let mut graphics = WgpuGraphics::new(&event_loop, winit_input_helper_tx, render_rx);
             event_loop.run(move |event, _, control_flow| {
                 graphics.update(event, control_flow);
             });
         }
         GraphicsBackendChoice::Headless => {
-            loop { }
+            // very silly way to do nothing, but I dont know a better way...
+            let one_hundred_years_in_seconds = 60 * 60 * 24 * 365 * 100;
+            std::thread::sleep(std::time::Duration::from_secs(one_hundred_years_in_seconds));
         }
     }
 }

@@ -367,7 +367,7 @@ pub struct DebugStage {
 }
 
 impl DebugStage {
-    pub fn step(&mut self, os_input: &WinitInputHelper<()>) {
+    pub fn step(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::F1) {
             self.blast = !self.blast;
         }

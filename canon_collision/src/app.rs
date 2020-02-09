@@ -14,46 +14,21 @@ use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
 
-use winit::event::Event;
 use winit_input_helper::WinitInputHelper;
 use std::time::{Duration, Instant};
 use std::thread;
 use std::sync::mpsc::channel;
 
-#[allow(unused)] // Needed for headless build
-struct OsInput {
-    input: WinitInputHelper<()>,
-    rx: Receiver<Event<()>>
-}
-
-impl OsInput {
-    fn new() -> (OsInput, Sender<Event<()>>) {
-        let input = WinitInputHelper::new();
-        let (tx, rx) = mpsc::channel();
-        let os_input = OsInput { input, rx };
-        (os_input, tx)
-    }
-
-    fn step(&mut self) {
-        while let Ok(event) = self.rx.try_recv() {
-            self.input.update(event); // returned bool is useless as we filter out EventsCleared
-        }
-
-        // force the WinitInputHelper to process the received events
-        self.input.update(Event::MainEventsCleared);
-    }
-}
-
-pub fn run_in_thread(cli_results: CLIResults) -> (Sender<Event<()>>, Receiver<GraphicsMessage>) {
+pub fn run_in_thread(cli_results: CLIResults) -> (Sender<WinitInputHelper>, Receiver<GraphicsMessage>) {
     let (render_tx, render_rx) = channel();
-    let (os_input, os_input_tx) = OsInput::new();
+    let (winit_input_helper_tx, winit_input_helper_rx) = mpsc::channel();
     thread::spawn(move || {
-        run(cli_results, os_input, render_tx);
+        run(cli_results, winit_input_helper_rx, render_tx);
     });
-    (os_input_tx, render_rx)
+    (winit_input_helper_tx, render_rx)
 }
 
-fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<GraphicsMessage>) {
+fn run(mut cli_results: CLIResults, winit_input_helper_rx: Receiver<WinitInputHelper>, render_tx: Sender<GraphicsMessage>) {
     let mut config = Config::load();
     if let ContinueFrom::Close = cli_results.continue_from {
         return;
@@ -86,7 +61,7 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
     };
 
     // CLI options
-    let (mut menu, mut game, mut os_input) = {
+    let (mut menu, mut game) = {
         #[allow(unused_variables)] // Needed for headless build
 
         match cli_results.continue_from {
@@ -94,7 +69,6 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 (
                     Menu::new(MenuState::GameSelect),
                     None,
-                    os_input
                 )
             }
             ContinueFrom::Game => {
@@ -181,7 +155,6 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 (
                     Menu::new(MenuState::character_select()),
                     Some(Game::new(package.take().unwrap(), setup)),
-                    os_input
                 )
             }
             ContinueFrom::Netplay => {
@@ -191,7 +164,6 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 (
                     Menu::new(state),
                     None,
-                    os_input,
                 )
             }
             ContinueFrom::MatchMaking => {
@@ -205,7 +177,6 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 (
                     Menu::new(state),
                     None,
-                    os_input,
                 )
             }
             ContinueFrom::Close => unreachable!()
@@ -218,8 +189,14 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
         debug!("\n\nAPP LOOP START");
         let frame_start = Instant::now();
 
-        os_input.step();
         netplay.step();
+
+        let os_input = winit_input_helper_rx.recv().unwrap();
+        //while let Ok(event) = self.rx.try_recv() {
+        //    self.input.update(event); // returned bool is useless as we filter out EventsCleared
+        //}
+        //// force the WinitInputHelper to process the received events
+        //self.input.update(Event::MainEventsCleared);
 
         let mut resume_menu: Option<ResumeMenu> = None;
         if let Some(ref mut game) = game {
@@ -230,7 +207,7 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 let reset_deadzones = game.check_reset_deadzones();
                 input.step(&game.tas, &ai_inputs, &mut netplay, reset_deadzones);
 
-                if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input.input, command_line.block(), &netplay) {
+                if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input, command_line.block(), &netplay) {
                     resume_menu = Some(resume_menu_inner)
                 }
                 if let Err(_) = render_tx.send(game.graphics_message(&config, &command_line)) {
@@ -238,13 +215,13 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
                 }
                 if let NetplayState::Offline = netplay.state() {
                     net_command_line.step(game);
-                    command_line.step(&os_input.input, game);
+                    command_line.step(&os_input, game);
                 }
             }
         }
         else {
             input.step(&[], &[], &mut netplay, false);
-            if let Some(mut menu_game_setup) = menu.step(package.as_ref().unwrap(), &mut config, &mut input, &os_input.input, &mut netplay) {
+            if let Some(mut menu_game_setup) = menu.step(package.as_ref().unwrap(), &mut config, &mut input, &os_input, &mut netplay) {
                 input.set_history(std::mem::replace(&mut menu_game_setup.input_history, vec!()));
                 game = Some(Game::new(package.take().unwrap(), menu_game_setup));
             }
@@ -269,7 +246,7 @@ fn run(mut cli_results: CLIResults, os_input: OsInput, render_tx: Sender<Graphic
             // Replay quit     -> replay screen
         }
 
-        if os_input.input.quit() {
+        if os_input.quit() {
             netplay.set_offline(); // tell peer we are quiting
             return;
         }

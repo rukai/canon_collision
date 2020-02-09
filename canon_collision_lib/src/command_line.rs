@@ -27,7 +27,7 @@ impl CommandLine {
         }
     }
 
-    pub fn step<T>(&mut self, os_input: &WinitInputHelper<()>, root_node: &mut T) where T: Node {
+    pub fn step<T>(&mut self, os_input: &WinitInputHelper, root_node: &mut T) where T: Node {
         if os_input.key_pressed(VirtualKeyCode::Grave) {
             self.running = !self.running;
             return;

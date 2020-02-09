@@ -126,7 +126,7 @@ impl Game {
         }
     }
 
-    pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper<()>, os_input_blocked: bool, netplay: &Netplay) -> GameState {
+    pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay) -> GameState {
         if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();
@@ -176,11 +176,11 @@ impl Game {
         self.state.clone()
     }
 
-    fn game_mouse(&self, os_input: &WinitInputHelper<()>) -> Option<(f32, f32)> {
+    fn game_mouse(&self, os_input: &WinitInputHelper) -> Option<(f32, f32)> {
         os_input.mouse().and_then(|point| self.camera.mouse_to_game(point))
     }
 
-    fn game_mouse_diff(&self, os_input: &WinitInputHelper<()>) -> (f32, f32) {
+    fn game_mouse_diff(&self, os_input: &WinitInputHelper) -> (f32, f32) {
         if let (Some(cur), Some(prev)) = (os_input.mouse(), self.prev_mouse_point) {
             if let (Some(cur), Some(prev)) = (self.camera.mouse_to_game(cur), self.camera.mouse_to_game(prev)) {
                 return (cur.0 - prev.0, cur.1 - prev.1)
@@ -280,7 +280,7 @@ impl Game {
         }
     }
 
-    fn step_local_os_input(&mut self, os_input: &WinitInputHelper<()>) {
+    fn step_local_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
             self.state = GameState::Paused;
         }
@@ -321,7 +321,7 @@ impl Game {
         }
     }
 
-    fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper<()>, netplay: &Netplay) {
+    fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
         // game flow control
         if os_input.key_pressed(VirtualKeyCode::J) {
             self.step_replay_backwards(input);
@@ -353,7 +353,7 @@ impl Game {
         }
     }
 
-    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper<()>, netplay: &Netplay) {
+    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
         let players_len = self.players.len();
 
         // set current edit state
@@ -864,7 +864,7 @@ impl Game {
         self.selector.mouse = self.game_mouse(os_input); // hack to access mouse during render call, dont use this otherwise
     }
 
-    fn add_surface(&mut self, surface: Surface, os_input: &WinitInputHelper<()>) {
+    fn add_surface(&mut self, surface: Surface, os_input: &WinitInputHelper) {
         if let Some((m_x, m_y)) = self.game_mouse(os_input) {
             if self.selector.surfaces.len() == 1 {
                 // create new surface, p1 is selected surface, p2 is current mouse
@@ -911,7 +911,7 @@ impl Game {
     //     TODO
     // }
 
-    fn step_replay_forwards_os_input(&mut self, os_input: &WinitInputHelper<()>) {
+    fn step_replay_forwards_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
         }
@@ -938,7 +938,7 @@ impl Game {
         }
     }
 
-    fn step_replay_backwards_os_input(&mut self, os_input: &WinitInputHelper<()>) {
+    fn step_replay_backwards_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwards;
         }
@@ -1382,7 +1382,7 @@ impl Selector {
     }
 
     /// Returns a selection rect iff a multiple selection is finished.
-    fn step_multiple_selection(&mut self, os_input: &WinitInputHelper<()>, camera: &Camera) -> Option<Rect> {
+    fn step_multiple_selection(&mut self, os_input: &WinitInputHelper, camera: &Camera) -> Option<Rect> {
         let game_mouse = os_input.mouse().and_then(|point| camera.mouse_to_game(point));
         // start selection
         if os_input.mouse_pressed(1) {
@@ -1404,7 +1404,7 @@ impl Selector {
     }
 
     /// Returns a selection point iff a single selection is made.
-    fn step_single_selection(&mut self, os_input: &WinitInputHelper<()>, camera: &Camera) -> Option<(f32, f32)> {
+    fn step_single_selection(&mut self, os_input: &WinitInputHelper, camera: &Camera) -> Option<(f32, f32)> {
         if os_input.mouse_pressed(0) {
             if let point @ Some(_) = os_input.mouse().and_then(|point| camera.mouse_to_game(point)) {
                 if !(os_input.held_shift() || os_input.held_alt()) {
