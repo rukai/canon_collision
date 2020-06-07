@@ -18,10 +18,9 @@ install:
   - set PATH=C:\Python37;%PATH%
   - choco install ninja
 
-  # Setup blender
-  - ps: wget "https://ftp.nluug.nl/pub/graphics/blender/release/Blender2.80/blender-2.80-windows64.zip" -OutFile blender.zip
-  - 7z x blender.zip
-  - set PATH=%CD%\blender-2.80-windows64;%PATH%
+  # Setup blender, need to specify version because the path is hardcoded by version
+  - choco install blender -y --version 2.83.0
+  - set PATH=C:\Program Files\Blender Foundation\Blender 2.83;%PATH%
 
    # export .blend to .glb
   - cd assets_raw/models

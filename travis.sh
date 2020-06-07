@@ -16,9 +16,9 @@ set -ev
 ) &
 
 # setup blender
-wget https://ftp.nluug.nl/pub/graphics/blender/release/Blender2.80/blender-2.80-linux-glibc217-x86_64.tar.bz2
-tar -xvf blender-2.80-linux-glibc217-x86_64.tar.bz2
-PATH="$PWD/blender-2.80-linux-glibc217-x86_64:$PATH"
+wget https://ftp.nluug.nl/pub/graphics/blender/release/Blender2.83/blender-2.83.0-linux64.tar.xz
+tar -xvf blender-2.83.0-linux64.tar.xz
+PATH="$PWD/blender-2.83.0-linux64:$PATH"
 
 # export .blend to .glb
 cd assets_raw/models
