@@ -8,23 +8,25 @@ use crate::player::RenderPlayer;
 use crate::game::{SurfaceSelection, RenderRect};
 
 use wgpu::{Device, Buffer};
-
 use lyon::path::Path;
 use lyon::math::{Point, point};
 use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
+use zerocopy::AsBytes;
 
 use std::collections::HashSet;
 use std::f32::consts;
 use std::sync::Arc;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, AsBytes)]
 pub struct Vertex {
     pub position: [f32; 2],
     pub edge: f32,
     pub render_id: u32,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, AsBytes)]
 pub struct ColorVertex {
     pub position:  [f32; 4],
     pub color:     [f32; 4],
@@ -47,38 +49,19 @@ impl FillVertexConstructor<ColorVertex> for StageVertexConstructor {
     }
 }
 
-#[derive(Clone)]
 pub struct Buffers {
-    // TODO: Arc is needed for derive(Clone) but I have no idea why I cloned it instead of borrowing, so try that sometime.
-    pub vertex:      Arc<Buffer>,
-    pub index:       Arc<Buffer>,
-    pub index_count: u32,
-}
-
-#[derive(Clone)]
-pub struct ColorBuffers {
-    pub vertex:      Arc<Buffer>,
-    pub index:       Arc<Buffer>,
+    pub vertex:      Buffer,
+    pub index:       Buffer,
     pub index_count: u32,
 }
 
 impl Buffers {
-    fn new(device: &Device, vertices: &[Vertex], indices: &[u16]) -> Buffers {
-        let vertex = Arc::new(
-            device
-            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
-            .fill_from_slice(&vertices)
-        );
-
-        let index = Arc::new(
-            device
-            .create_buffer_mapped(indices.len(), wgpu::BufferUsage::INDEX)
-            .fill_from_slice(&indices)
-        );
-
+    pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Arc<Buffers> where T: AsBytes {
+        let vertex = device.create_buffer_with_data(vertices.as_bytes(), wgpu::BufferUsage::VERTEX);
+        let index  = device.create_buffer_with_data(indices.as_bytes(), wgpu::BufferUsage::INDEX);
         let index_count = indices.len() as u32;
 
-        Buffers { vertex, index, index_count }
+        Arc::new(Buffers { vertex, index, index_count })
     }
 
     pub fn gen_colbox(vertices: &mut Vec<Vertex>, indices: &mut Vec<u16>, colbox: &CollisionBox, index_count: &mut u16, render_id: u32) {
@@ -99,7 +82,7 @@ impl Buffers {
         *index_count += triangles + 1;
     }
 
-    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize, selected: &HashSet<usize>) -> Buffers {
+    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize, selected: &HashSet<usize>) -> Arc<Buffers> {
         let mut vertices: Vec<Vertex> = vec!();
         let mut indices: Vec<u16> = vec!();
         let mut index_count = 0;
@@ -114,7 +97,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Buffers> {
+    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Arc<Buffers>> {
         let frames = &package.fighters[fighter].actions[action].frames;
         if let Some(frame) = frames.get(frame) {
             let mut vertices: Vec<Vertex> = vec!();
@@ -131,28 +114,8 @@ impl Buffers {
             None
         }
     }
-}
 
-impl ColorBuffers {
-    fn new(device: &Device, vertices: &[ColorVertex], indices: &[u16]) -> ColorBuffers {
-        let vertex = Arc::new(
-            device
-            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
-            .fill_from_slice(&vertices)
-        );
-
-        let index = Arc::new(
-            device
-            .create_buffer_mapped(indices.len(), wgpu::BufferUsage::INDEX)
-            .fill_from_slice(&indices)
-        );
-
-        let index_count = indices.len() as u32;
-
-        ColorBuffers { vertex, index, index_count }
-    }
-
-    pub fn new_selected_surfaces(device: &Device, surfaces: &[Surface], selected_surfaces: &HashSet<SurfaceSelection>) -> Option<ColorBuffers> {
+    pub fn new_selected_surfaces(device: &Device, surfaces: &[Surface], selected_surfaces: &HashSet<SurfaceSelection>) -> Option<Arc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -199,10 +162,10 @@ impl ColorBuffers {
             }
         }
 
-        Some(ColorBuffers::new(device, &vertices, &indices))
+        Some(Buffers::new(device, &vertices, &indices))
     }
 
-    pub fn new_surfaces(device: &Device, surfaces: &[Surface]) -> Option<ColorBuffers> {
+    pub fn new_surfaces(device: &Device, surfaces: &[Surface]) -> Option<Arc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -235,11 +198,11 @@ impl ColorBuffers {
             indice_count += 4;
         }
 
-        Some(ColorBuffers::new(device, &vertices, &indices))
+        Some(Buffers::new(device, &vertices, &indices))
     }
 
     // TODO: Combine new_surfaces(..) and new_surfaces_fill(..), waiting on: https://github.com/nical/lyon/issues/224
-    pub fn new_surfaces_fill(device: &Device, surfaces: &[Surface]) -> Option<ColorBuffers> {
+    pub fn new_surfaces_fill(device: &Device, surfaces: &[Surface]) -> Option<Arc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -334,11 +297,11 @@ impl ColorBuffers {
             &mut BuffersBuilder::new(&mut mesh, StageVertexConstructor)
         ).unwrap();
 
-        Some(ColorBuffers::new(device, &mesh.vertices, &mesh.indices))
+        Some(Buffers::new(device, &mesh.vertices, &mesh.indices))
     }
 
     /// TODO: Set individual corner vertex colours to show which points of the ecb are selected
-    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> ColorBuffers {
+    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> Arc<Buffers> {
         let color = [1.0, 1.0, 1.0, 1.0];
         let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
         let vertices: [ColorVertex; 12] = [
@@ -370,10 +333,10 @@ impl ColorBuffers {
             11, 10, 9,
         ];
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_arrow(device: &Device, color: [f32; 4]) -> ColorBuffers {
+    pub fn new_arrow(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
         let vertices: [ColorVertex; 7] = [
             // stick
             colorvertex(-0.7, 0.0, color),
@@ -396,10 +359,10 @@ impl ColorBuffers {
             4, 5, 6
         ];
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn rect_buffers(device: &Device, rect: Rect, color: [f32; 4]) -> ColorBuffers {
+    pub fn rect_buffers(device: &Device, rect: Rect, color: [f32; 4]) -> Arc<Buffers> {
         let left  = rect.left();
         let right = rect.right();
         let bot   = rect.bot();
@@ -417,10 +380,10 @@ impl ColorBuffers {
             0, 2, 3
         ];
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn rect_outline_buffers(device: &Device, rect: &RenderRect) -> ColorBuffers {
+    pub fn rect_outline_buffers(device: &Device, rect: &RenderRect) -> Arc<Buffers> {
         let width = 0.5;
         let left  = rect.rect.left();
         let right = rect.rect.right();
@@ -448,11 +411,11 @@ impl ColorBuffers {
             3, 7, 0, 0, 4, 7, // left edge
         ];
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
     /// Creates a single triangle with sides of length 1
-    pub fn new_triangle(device: &Device, color: [f32; 4]) -> ColorBuffers {
+    pub fn new_triangle(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
         let h = ((3.0/4.0) as f32).sqrt();
         let vertices = [
             colorvertex(0.0,    h  , color),
@@ -461,10 +424,10 @@ impl ColorBuffers {
         ];
 
         let indices = [0, 1, 2];
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> ColorBuffers {
+    pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> Arc<Buffers> {
         let mut vertices: Vec<ColorVertex> = vec!();
         let mut indices: Vec<u16> = vec!();
 
@@ -491,10 +454,10 @@ impl ColorBuffers {
             indices.push((i + 1) % triangles + 1);
         }
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_spawn_point(device: &Device, color: [f32; 4]) -> ColorBuffers {
+    pub fn new_spawn_point(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
         let vertices: [ColorVertex; 11] = [
             // vertical bar
             colorvertex(-0.15, -4.0, color),
@@ -527,11 +490,11 @@ impl ColorBuffers {
             8, 9, 10
         ];
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 
     /// Creates a single circle with radius 1 around the origin
-    pub fn new_circle(device: &Device, color: [f32; 4]) -> ColorBuffers {
+    pub fn new_circle(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
         let mut vertices: Vec<ColorVertex> = vec!();
         let mut indices: Vec<u16> = vec!();
 
@@ -547,6 +510,6 @@ impl ColorBuffers {
             indices.push((i + 1) % iterations + 1);
         }
 
-        ColorBuffers::new(device, &vertices, &indices)
+        Buffers::new(device, &vertices, &indices)
     }
 }

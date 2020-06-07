@@ -1,21 +1,23 @@
 use canon_collision_lib::assets::Assets;
 use crate::game::{RenderEntity, RenderGame};
+use crate::wgpu::buffers::Buffers;
 
 use std::collections::HashMap;
-
-use gltf::Gltf;
-use gltf::mesh::Mode;
-use gltf::image::Source as ImageSource;
-use gltf::buffer::Source as BufferSource;
-use gltf::scene::{Node, Transform};
-use gltf::animation::{Interpolation};
-use gltf::animation::util::ReadOutputs;
-use png_decoder::png;
-use png_decoder::color::ColorType as PNGColorType;
-use wgpu::{Device, Buffer, Texture, CommandEncoder};
-use cgmath::{Matrix4, Quaternion, SquareMatrix, Vector3};
-
 use std::convert::TryInto;
+use std::sync::Arc;
+
+use cgmath::{Matrix4, Quaternion, SquareMatrix, Vector3};
+use gltf::Gltf;
+use gltf::animation::util::ReadOutputs;
+use gltf::animation::{Interpolation};
+use gltf::buffer::Source as BufferSource;
+use gltf::image::Source as ImageSource;
+use gltf::mesh::Mode;
+use gltf::scene::{Node, Transform};
+use png_decoder::color::ColorType as PNGColorType;
+use png_decoder::png;
+use wgpu::{Device, Texture, CommandEncoder};
+use zerocopy::AsBytes;
 
 pub struct Models {
     assets:           Assets,
@@ -83,7 +85,8 @@ impl Models {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, AsBytes)]
 pub struct ModelVertexAnimated {
     pub position: [f32; 4],
     pub uv:       [f32; 2],
@@ -91,7 +94,8 @@ pub struct ModelVertexAnimated {
     pub weights:  [f32; 4],
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, AsBytes)]
 pub struct ModelVertexStatic {
     pub position: [f32; 4],
     pub uv:       [f32; 2],
@@ -116,9 +120,7 @@ pub struct Mesh {
 
 pub struct Primitive {
     pub vertex_type: ModelVertexType,
-    pub vertex:      Buffer,
-    pub index:       Buffer,
-    pub index_count: u32,
+    pub buffers:     Arc<Buffers>,
     pub texture:     Option<usize>,
 }
 
@@ -190,15 +192,14 @@ impl Model3D {
                     assert_eq!(data.len(), png.width * png.height * 4);
 
                     // create buffer and texture
-                    let texture_buffer = device
-                        .create_buffer_mapped(data.len(), wgpu::BufferUsage::COPY_SRC)
-                        .fill_from_slice(&data);
+                    let texture_buffer = device.create_buffer_with_data(&data, wgpu::BufferUsage::COPY_SRC);
                     let size = wgpu::Extent3d {
                         width: png.width as u32,
                         height: png.height as u32,
                         depth: 1,
                     };
                     let texture = device.create_texture(&wgpu::TextureDescriptor {
+                        label: None,
                         size,
                         array_layer_count: 1,
                         mip_level_count: 1,
@@ -212,14 +213,14 @@ impl Model3D {
                     let texture_buffer_copy_view = wgpu::BufferCopyView {
                         buffer: &texture_buffer,
                         offset: 0,
-                        row_pitch: 0,
-                        image_height: size.height,
+                        bytes_per_row: png.width as u32 * 4,
+                        rows_per_image: 0,
                     };
                     let texture_copy_view = wgpu::TextureCopyView {
                         texture: &texture,
                         mip_level: 0,
                         array_layer: 0,
-                        origin: wgpu::Origin3d { x: 0.0, y: 0.0, z: 0.0 },
+                        origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
                     };
                     encoder.copy_buffer_to_texture(texture_buffer_copy_view, texture_copy_view, size);
 
@@ -327,11 +328,18 @@ impl Model3D {
                     Some(&blob)
                 });
 
+                let index: Vec<u16> = reader
+                    .read_indices()
+                    .unwrap()
+                    .into_u32()
+                    .map(|x| x.try_into().unwrap())
+                    .collect();
+
                 let positions = reader.read_positions();
                 let uvs = reader.read_tex_coords(0);
                 let joints = reader.read_joints(0);
                 let weights = reader.read_weights(0);
-                let (vertex, vertex_type) = match (positions, uvs, joints, weights) {
+                let (buffers, vertex_type) = match (positions, uvs, joints, weights) {
                     (Some(positions), Some(uvs), Some(joints), Some(weights)) => {
                         let vertices: Vec<_> = positions
                             .zip(uvs.into_f32())
@@ -345,11 +353,8 @@ impl Model3D {
                             })
                             .collect();
 
-                        let vertex = device
-                            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
-                            .fill_from_slice(&vertices);
-
-                        (vertex, ModelVertexType::Animated)
+                        let buffers = Buffers::new(device, vertices.as_bytes(), &index);
+                        (buffers, ModelVertexType::Animated)
                     }
                     (Some(positions), Some(uvs), None, None) => {
                         let vertices: Vec<_> = positions
@@ -360,24 +365,11 @@ impl Model3D {
                             })
                             .collect();
 
-                        let vertex = device
-                            .create_buffer_mapped(vertices.len(), wgpu::BufferUsage::VERTEX)
-                            .fill_from_slice(&vertices);
-
-                        (vertex, ModelVertexType::Static)
+                        let buffers = Buffers::new(device, vertices.as_bytes(), &index);
+                        (buffers, ModelVertexType::Static)
                     }
                     (positions, uvs, joints, weights) => unimplemented!("Unexpected combination of vertex data - positions: {:?}, uvs: {:?}, joints: {:?}, weights: {:?}", positions.is_some(), uvs.is_some(), joints.is_some(), weights.is_some()),
                 };
-
-                let indices: Vec<u16> = reader
-                    .read_indices()
-                    .unwrap()
-                    .into_u32()
-                    .map(|x| x.try_into().unwrap())
-                    .collect();
-                let index = device
-                    .create_buffer_mapped(indices.len(), wgpu::BufferUsage::INDEX)
-                    .fill_from_slice(&indices);
 
                 let texture = primitive
                     .material()
@@ -385,9 +377,7 @@ impl Model3D {
                     .base_color_texture()
                     .map(|x| x.texture().index());
 
-                let index_count = indices.len() as u32;
-
-                primitives.push(Primitive { vertex_type, vertex, index, index_count, texture });
+                primitives.push(Primitive { vertex_type, buffers, texture });
             }
 
             meshes.push(Mesh { primitives, transform, root_joint });

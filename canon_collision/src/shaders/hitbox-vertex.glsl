@@ -14,7 +14,7 @@ layout(set = 0, binding = 0) uniform Data {
 
 void main() {
     vec4 result = uniforms.transformation * vec4(position, 0.0, 1.0);
-    gl_Position = vec4(result[0], result[1] * -1.0, result[2], result[3]); // positive is up
+    gl_Position = vec4(result[0], result[1], result[2], result[3]);
 
     v_edge = edge;
     v_render_id = render_id;

@@ -20,7 +20,6 @@ void main() {
         a_weights.w * u_joint_transforms[a_joints.w];
 
     gl_Position = u_transform * skin_transform * a_position;
-    gl_Position.y *= -1;
 
     v_uv = a_uv;
 }

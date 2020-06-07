@@ -39,7 +39,7 @@ fn main() {
         #[cfg(feature = "wgpu_renderer")]
         GraphicsBackendChoice::Wgpu => {
             let event_loop = EventLoop::new();
-            let mut graphics = WgpuGraphics::new(&event_loop, event_tx, render_rx);
+            let mut graphics = futures::executor::block_on(WgpuGraphics::new(&event_loop, event_tx, render_rx));
             event_loop.run(move |event, _, control_flow| {
                 graphics.update(event, control_flow);
             });
@@ -50,10 +50,4 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_secs(one_hundred_years_in_seconds));
         }
     }
-}
-
-pub enum ActualBackend {
-    #[cfg(feature = "wgpu_renderer")]
-    Wgpu,
-    Headless,
 }
