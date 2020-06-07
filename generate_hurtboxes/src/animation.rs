@@ -108,7 +108,6 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
                         }
                     };
                 }
-                (_, Interpolation::CatmullRomSpline) => unimplemented!("This will be deleted in next gltf version"),
             }
         }
     }

@@ -151,7 +151,7 @@ pub struct Animation {
 
 impl Animation {
     pub fn len(&self) -> usize {
-        0
+        unimplemented!()
     }
 }
 

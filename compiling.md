@@ -3,11 +3,12 @@
 Install rust via https://www.rustup.rs/ using the default settings. If you already have rustup, ensure it is setup with the msvc toolchain.
 Install [Build Tools for Visual Studio 2017](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2017)
 
-Install ninja, cmake and python 3.
+Install ninja, cmake, python 3 and blender.
 The recommended way to do this is to install [chocolatey](https://chocolatey.org) then run:
 *   `choco install ninja`
 *   `choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'`
 *   `choco install python`
+*   `choco install blender`
 
 Install gtk, the recommended way is to run the following commands in cmd:
 ```cmd
@@ -33,7 +34,7 @@ echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
 Install rust via https://www.rustup.rs/ (Use the default settings)
 
 ```
-sudo apt-get install build-essential libssl-dev libusb-1.0-0-dev pkg-config cmake libvulkan-dev vulkan-utils libudev-dev
+sudo apt-get install build-essential libssl-dev libusb-1.0-0-dev pkg-config cmake libvulkan-dev vulkan-utils libudev-dev blender
 ```
 
 Need to also install one of the following packages depending on your graphics card:
@@ -54,7 +55,7 @@ EndSection
 # Setup for Arch
 
 ```
-sudo pacman -Syu rustup gcc make python libusb cmake vulkan-icd-loader
+sudo pacman -Syu rustup gcc make python libusb cmake vulkan-icd-loader blender
 ```
 
 Need to also install one of the following packages depending on your graphics card:
@@ -64,8 +65,8 @@ Need to also install one of the following packages depending on your graphics ca
 
 # Compile and run the game
 
-In the assets_raw/models directory run: `python export_all_assets.py`
-In the canon_collision directory run: `cargo run --release`
+1.  In the assets_raw/models directory run: `python export_all_assets.py`
+2.  In the canon_collision directory run: `cargo run --release`
 
 # Compile and run the Controller Mapper
 

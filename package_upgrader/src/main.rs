@@ -5,7 +5,7 @@ use canon_collision_lib::package::Package;
 /// *   refer back to past changes
 /// *   copy paste from previous similar transforms
 /// *   allow for review of transforms run in a PR
-/// *   makes it possible to restore old deleted deleted files to the current format (via per file versioning)
+/// *   makes it possible to restore old deleted files to the current format (via per file versioning)
 fn main() {
     if std::env::args().any(|x| x.to_lowercase() == "init") {
         let path = std::env::current_dir().unwrap().join("package");

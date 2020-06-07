@@ -13,4 +13,4 @@ categories = ["games", "game-engines"]
 canon_collision_lib = { path = "../canon_collision_lib" }
 getopts = "0.2"
 cgmath = { version = "0.17" }
-gltf = "0.14"
+gltf = "0.15"

@@ -409,6 +409,8 @@ impl Player {
 
             self.frame_step(context);
             let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
+            // TODO: move this assert somewhere earlier, maybe the fighter loading code?
+            assert_ne!(last_action_frame, -1, "A subaction has a length of 0");
             self.frame = last_action_frame.min(self.frame + 1); // +1 instead of =0 so that frame_step can skip frames if it wants to
             self.frame_norestart += 1;
         }

@@ -71,10 +71,11 @@ fn main() {
 
 fn regenerate_action(action: &mut ActionDef, root_joint: &Joint, animation: &Animation, cli: &CLIResults, hurtboxes: &[HurtBox]) {
     if cli.resize {
-        while action.frames.len() > animation.len() {
+        let frames = animation.len().max(1);
+        while action.frames.len() > frames {
             action.frames.pop();
         }
-        while action.frames.len() < animation.len() {
+        while action.frames.len() < frames {
             action.frames.push(ActionFrame::default());
         }
     }
