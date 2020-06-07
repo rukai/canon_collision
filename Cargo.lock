@@ -3160,8 +3160,7 @@ dependencies = [
 [[package]]
 name = "winit_input_helper"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92fb91195e8014654ac800d5592aefe9c39a0a6c93da472abad5f7c0c1c663df"
+source = "git+https://github.com/rukai/winit_input_helper#b23bf304eb7f1ae34d0ca9e263db91784ddcdec7"
 dependencies = [
  "winit",
 ]

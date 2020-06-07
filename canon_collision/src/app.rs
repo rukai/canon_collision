@@ -14,21 +14,22 @@ use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
 
+use winit::event::WindowEvent;
 use winit_input_helper::WinitInputHelper;
-use std::time::{Duration, Instant};
+use std::time::{Instant, Duration};
 use std::thread;
 use std::sync::mpsc::channel;
 
-pub fn run_in_thread(cli_results: CLIResults) -> (Sender<WinitInputHelper>, Receiver<GraphicsMessage>) {
+pub fn run_in_thread(cli_results: CLIResults) -> (Sender<WindowEvent<'static>>, Receiver<GraphicsMessage>) {
     let (render_tx, render_rx) = channel();
-    let (winit_input_helper_tx, winit_input_helper_rx) = mpsc::channel();
+    let (event_tx, event_rx) = mpsc::channel();
     thread::spawn(move || {
-        run(cli_results, winit_input_helper_rx, render_tx);
+        run(cli_results, event_rx, render_tx);
     });
-    (winit_input_helper_tx, render_rx)
+    (event_tx, render_rx)
 }
 
-fn run(mut cli_results: CLIResults, winit_input_helper_rx: Receiver<WinitInputHelper>, render_tx: Sender<GraphicsMessage>) {
+fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, render_tx: Sender<GraphicsMessage>) {
     let mut config = Config::load();
     if let ContinueFrom::Close = cli_results.continue_from {
         return;
@@ -184,6 +185,8 @@ fn run(mut cli_results: CLIResults, winit_input_helper_rx: Receiver<WinitInputHe
     };
 
     let mut command_line = CommandLine::new();
+    let mut os_input = WinitInputHelper::new();
+    let mut events = vec!();
 
     loop {
         debug!("\n\nAPP LOOP START");
@@ -191,12 +194,17 @@ fn run(mut cli_results: CLIResults, winit_input_helper_rx: Receiver<WinitInputHe
 
         netplay.step();
 
-        let os_input = winit_input_helper_rx.recv().unwrap();
-        //while let Ok(event) = self.rx.try_recv() {
-        //    self.input.update(event); // returned bool is useless as we filter out EventsCleared
-        //}
-        //// force the WinitInputHelper to process the received events
-        //self.input.update(Event::MainEventsCleared);
+        // TODO:
+        // *    use 1/60s timer to update current_frame variable
+        // *    keep rerunning the last frame as new information comes in (inputs)
+        // *    if the current_frame has not yet updated then we need to reset to the previous frames state first
+        //      +   needs to be for both menu + game logic or else things will break
+        //      +   should this be implemented seperately for menu + game?
+        events.clear();
+        while let Ok(event) = event_rx.try_recv() {
+            events.push(event);
+        }
+        os_input.step_with_window_events(&events);
 
         let mut resume_menu: Option<ResumeMenu> = None;
         if let Some(ref mut game) = game {

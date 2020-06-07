@@ -15,7 +15,7 @@ use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
 use std::collections::HashSet;
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use std::{mem, f32};
 
@@ -28,12 +28,11 @@ use rand::{Rng, SeedableRng};
 use wgpu::{Device, Queue, Surface, SwapChain, BindGroup, BindGroupLayout, RenderPipeline, RenderPass, TextureView, Sampler};
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Scale as GlyphScale};
 
-use winit::dpi::PhysicalSize;
+//use winit::dpi::PhysicalSize;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 use winit::event::{Event, WindowEvent};
 use winit::window::Fullscreen;
-use winit_input_helper::WinitInputHelper;
 
 pub struct WgpuGraphics {
     package:                   Option<Package>,
@@ -41,8 +40,7 @@ pub struct WgpuGraphics {
     glyph_brush:               GlyphBrush<'static, ()>,
     hack_font_id:              FontId,
     window:                    Window,
-    winit_input_helper_tx:     Sender<WinitInputHelper>,
-    winit_input_helper:        WinitInputHelper,
+    event_tx:                  Sender<WindowEvent<'static>>,
     render_rx:                 Receiver<GraphicsMessage>,
     device:                    Device,
     queue:                     Queue,
@@ -66,7 +64,7 @@ pub struct WgpuGraphics {
 const SAMPLE_COUNT: u32 = 4;
 
 impl WgpuGraphics {
-    pub fn new(event_loop: &EventLoop<()>, winit_input_helper_tx: Sender<WinitInputHelper>, render_rx: Receiver<GraphicsMessage>) -> WgpuGraphics {
+    pub fn new(event_loop: &EventLoop<()>, event_tx: Sender<WindowEvent<'static>>, render_rx: Receiver<GraphicsMessage>) -> WgpuGraphics {
         let window = Window::new(&event_loop).unwrap();
         window.set_title("Canon Collision");
 
@@ -425,7 +423,6 @@ impl WgpuGraphics {
         let wsd = WindowSizeDependent::new(&device, &surface, width, height);
 
         let models = Models::new();
-        let winit_input_helper = WinitInputHelper::new();
 
         WgpuGraphics {
             package: None,
@@ -433,8 +430,7 @@ impl WgpuGraphics {
             glyph_brush,
             hack_font_id,
             window,
-            winit_input_helper_tx,
-            winit_input_helper,
+            event_tx,
             render_rx,
             surface,
             device,
@@ -457,35 +453,49 @@ impl WgpuGraphics {
     }
 
     pub fn update(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
+        *control_flow = ControlFlow::Poll;
+
         match event {
             Event::MainEventsCleared => {
                 let frame_start = Instant::now();
 
-                self.winit_input_helper_tx.send(self.winit_input_helper.clone()).ok(); // TODO: should we send here?
-                self.force_send_window_events();
-
                 // get the most recent render
-                let mut render = if let Ok(message) = self.render_rx.recv() {
-                    self.read_message(message)
-                } else {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                };
-                while let Ok(message) = self.render_rx.try_recv() {
-                    render = self.read_message(message);
+                let mut render = None;
+                loop {
+                    match self.render_rx.try_recv() {
+                        Ok(message) => {
+                            // we want only the last render message
+                            render = Some(self.read_message(message));
+                        }
+                        Err(TryRecvError::Empty) => {
+                            if render.is_none() {
+                                // restart loop so we can send more window events to the app thread
+                                return;
+                            }
+                            else {
+                                break;
+                            }
+                        }
+                        Err(TryRecvError::Disconnected) => {
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                    }
                 }
+                let render = render.expect("Guaranteed by logic above");
 
-                let resolution: (u32, u32) = self.window.inner_size()
-                    .into();
+                let resolution: (u32, u32) = self.window.inner_size().into();
                 self.window_resize(resolution.0, resolution.1);
 
                 self.render(render);
                 self.frame_durations.push(frame_start.elapsed());
             }
-            Event::NewEvents (_) => { }
-            _ => {
-                self.winit_input_helper.update(event);
+            Event::WindowEvent { event, .. } => {
+                if let Some(event) = event.to_static() {
+                    self.event_tx.send(event).unwrap();
+                }
             }
+            _ => {}
         }
     }
 
@@ -701,7 +711,7 @@ impl WgpuGraphics {
         self.glyph_brush.queue(Section {
             text: &self.fps,
             color: [1.0, 1.0, 1.0, 1.0],
-            screen_position: (self.width as f32 - 30.0, 4.0),
+            screen_position: (self.width as f32 - 70.0, 4.0),
             scale: GlyphScale::uniform(20.0),
             .. Section::default()
         });
@@ -1687,25 +1697,6 @@ impl WgpuGraphics {
     fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height as f32
     }
-
-    /// TODO: I wonder if we dont need this anymore...?
-    fn force_send_window_events(&mut self) {
-        // We need to force send the resolution and dpi every frame because WinitInputHelper may receive the normal events while it isn't listening for them.
-        let event = Event::WindowEvent::<()> {
-            window_id: self.window.id(),
-            event: WindowEvent::Resized(self.window.inner_size())
-        };
-
-        self.winit_input_helper.update(event);
-
-        // force send the current dpi
-        let mut new_inner_size = PhysicalSize::new(1, 1); // eugh ... what is this for?
-        let event = Event::WindowEvent::<()> {
-            window_id: self.window.id(),
-            event: WindowEvent::ScaleFactorChanged { scale_factor: self.window.scale_factor(), new_inner_size: &mut new_inner_size }
-        };
-        self.winit_input_helper.update(event);
-    }
 }
 
 struct WindowSizeDependent {
@@ -1723,6 +1714,7 @@ impl WindowSizeDependent {
                 usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
                 format: wgpu::TextureFormat::Bgra8Unorm,
                 present_mode: wgpu::PresentMode::Vsync,
+                //present_mode: wgpu::PresentMode::Mailbox, // TODO: need to upgrade wgpu first
                 width,
                 height,
             },

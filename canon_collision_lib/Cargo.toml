@@ -36,5 +36,5 @@ treeflection = "0.1"
 treeflection_derive = "0.4"
 uuid = { version = "0.8", features = ["v4", "serde"] }
 winit = "0.22.0" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
-winit_input_helper = "0.6"
+winit_input_helper = { git = "https://github.com/rukai/winit_input_helper" }
 hotwatch = "0.4"
