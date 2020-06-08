@@ -1365,11 +1365,8 @@ impl WgpuGraphics {
     // TODO: Rewrite text rendering to be part of scene instead of just plastered on top
     // TODO: Then this bar can be drawn on top of the package banner text
     fn draw_back_counter(&self, back_counter: usize, back_counter_max: usize) -> Draw {
-        let uniform = Uniform {
-            edge_color:     [1.0, 1.0, 1.0, 1.0],
-            color:          [1.0, 1.0, 1.0, 1.0],
-            transform: Matrix4::identity().into(),
-        };
+        let transform = Matrix4::identity().into();
+        let uniform = TransformUniform { transform };
         let bind_group = self.new_bind_group(uniform);
 
         let rect = Rect {
@@ -1378,7 +1375,7 @@ impl WgpuGraphics {
             x2: back_counter as f32 / back_counter_max as f32 * 2.0 - 1.0,
             y2: -1.0,
         };
-        let buffers = Buffers::rect_buffers(&self.device, rect.clone(), [1.0, 1.0, 1.0, 1.0]);
+        let buffers = Buffers::rect_buffers(&self.device, rect, [1.0, 1.0, 1.0, 1.0]);
 
         let pipeline = self.pipeline_debug.clone();
 
