@@ -73,22 +73,26 @@ impl WgpuGraphics {
 
         let size = window.inner_size();
 
-        let surface = wgpu::Surface::create(&window);
+        let instance = wgpu::Instance::new();
+        let surface = unsafe { instance.create_surface(&window) };
 
-        let adapter = wgpu::Adapter::request(
+        let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::Default,
                 compatible_surface: Some(&surface),
             },
+            wgpu::UnsafeExtensions::disallow(),
             wgpu::BackendBit::PRIMARY,
         ).await.unwrap();
 
-        let (mut device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-            extensions: wgpu::Extensions {
-                anisotropic_filtering: false,
+        let (mut device, queue) = adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                extensions: wgpu::Extensions::empty(),
+                limits: wgpu::Limits::default(),
+                shader_validation: true,
             },
-            limits: wgpu::Limits::default(),
-        }).await;
+            None,
+        ).await.unwrap();
 
         let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
         let color_vs_module = device.create_shader_module(color_vs);
@@ -104,6 +108,7 @@ impl WgpuGraphics {
                         binding: 0,
                         visibility: wgpu::ShaderStage::all(),
                         ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                        ..wgpu::BindGroupLayoutEntry::default()
                     },
                 ]
             }
@@ -302,6 +307,7 @@ impl WgpuGraphics {
                         binding: 0,
                         visibility: wgpu::ShaderStage::all(),
                         ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                        ..wgpu::BindGroupLayoutEntry::default()
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
@@ -311,11 +317,13 @@ impl WgpuGraphics {
                             dimension: wgpu::TextureViewDimension::D2,
                             component_type: wgpu::TextureComponentType::Float
                         },
+                        ..wgpu::BindGroupLayoutEntry::default()
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Sampler { comparison: false },
+                        ..wgpu::BindGroupLayoutEntry::default()
                     },
                 ]
             }
@@ -423,9 +431,7 @@ impl WgpuGraphics {
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Nearest,
-            lod_min_clamp: -100.0,
-            lod_max_clamp: 100.0,
-            compare: wgpu::CompareFunction::Always,
+            ..Default::default()
         });
 
         let dejavu = FontArc::try_from_slice(include_bytes!("../fonts/DejaVuSans.ttf")).unwrap();
@@ -605,7 +611,7 @@ impl WgpuGraphics {
 
         let mut wsd = self.wsd.take().unwrap();
         {
-            let frame = wsd.swap_chain.get_next_texture().unwrap();
+            let frame = wsd.swap_chain.get_next_frame().unwrap().output;
 
             let draws = match render.render_type {
                 RenderType::Game(game) => self.game_render(game, &render.command_output),
@@ -625,8 +631,10 @@ impl WgpuGraphics {
                         attachment: &wsd.depth_stencil,
                         depth_load_op: wgpu::LoadOp::Clear,
                         depth_store_op: wgpu::StoreOp::Store,
+                        depth_read_only: false,
                         stencil_load_op: wgpu::LoadOp::Clear,
                         stencil_store_op: wgpu::StoreOp::Store,
+                        stencil_read_only: false,
                         clear_depth: 1.0,
                         clear_stencil: 0,
                     }),
@@ -635,15 +643,15 @@ impl WgpuGraphics {
                 for draw in &draws {
                     rpass.set_pipeline(draw.pipeline.as_ref());
                     rpass.set_bind_group(0, &draw.bind_group, &[]);
-                    rpass.set_index_buffer(&draw.buffers.index, 0, 0);
-                    rpass.set_vertex_buffer(0, &draw.buffers.vertex, 0, 0);
+                    rpass.set_index_buffer(draw.buffers.index.slice(..));
+                    rpass.set_vertex_buffer(0, draw.buffers.vertex.slice(..));
                     rpass.draw_indexed(0..draw.buffers.index_count as u32, 0, 0..1);
                 }
             }
 
             self.glyph_brush.draw_queued(&mut self.device, &mut encoder, &frame.view, self.width, self.height).unwrap();
 
-            self.queue.submit(&[encoder.finish()]);
+            self.queue.submit(Some(encoder.finish()));
         }
         self.wsd = Some(wsd);
     }
@@ -850,10 +858,7 @@ impl WgpuGraphics {
                         bindings: &[
                             wgpu::Binding {
                                 binding: 0,
-                                resource: wgpu::BindingResource::Buffer {
-                                    buffer: uniform,
-                                    range: 0..mem::size_of::<TransformUniform>() as u64,
-                                }
+                                resource: wgpu::BindingResource::Buffer(uniform.slice(..)),
                             },
                             wgpu::Binding {
                                 binding: 1,
@@ -916,10 +921,7 @@ impl WgpuGraphics {
             layout: &self.bind_group_layout_generic,
             bindings: &[wgpu::Binding {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &uniform_buffer,
-                    range: 0..mem::size_of::<T>() as wgpu::BufferAddress,
-                }
+                resource: wgpu::BindingResource::Buffer(uniform_buffer.slice(..)),
             }]
         })
     }
@@ -1673,7 +1675,6 @@ impl WindowSizeDependent {
         let multisampled_frame_descriptor = &wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d { width, height, depth: 1 },
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
@@ -1685,7 +1686,6 @@ impl WindowSizeDependent {
         let depth_stencil_descriptor = &wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d { width, height, depth: 1 },
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,

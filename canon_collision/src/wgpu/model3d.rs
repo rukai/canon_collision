@@ -201,7 +201,6 @@ impl Model3D {
                     let texture = device.create_texture(&wgpu::TextureDescriptor {
                         label: None,
                         size,
-                        array_layer_count: 1,
                         mip_level_count: 1,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
@@ -212,14 +211,15 @@ impl Model3D {
                     // copy buffer to texture
                     let texture_buffer_copy_view = wgpu::BufferCopyView {
                         buffer: &texture_buffer,
-                        offset: 0,
-                        bytes_per_row: png.width as u32 * 4,
-                        rows_per_image: 0,
+                        layout: wgpu::TextureDataLayout {
+                            offset: 0,
+                            bytes_per_row: png.width as u32 * 4,
+                            rows_per_image: 0,
+                        }
                     };
                     let texture_copy_view = wgpu::TextureCopyView {
                         texture: &texture,
                         mip_level: 0,
-                        array_layer: 0,
                         origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
                     };
                     encoder.copy_buffer_to_texture(texture_buffer_copy_view, texture_copy_view, size);
