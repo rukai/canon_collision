@@ -606,7 +606,7 @@ impl WgpuGraphics {
         });
 
         if let RenderType::Game(render) = &render.render_type {
-            self.models.load(&self.device, &mut encoder, render);
+            self.models.load(&self.device, &self.queue, render);
         }
 
         let mut wsd = self.wsd.take().unwrap();

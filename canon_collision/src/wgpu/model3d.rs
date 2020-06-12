@@ -16,7 +16,7 @@ use gltf::mesh::Mode;
 use gltf::scene::{Node, Transform};
 use png_decoder::color::ColorType as PNGColorType;
 use png_decoder::png;
-use wgpu::{Device, Texture, CommandEncoder};
+use wgpu::{Device, Texture, Queue};
 use zerocopy::AsBytes;
 
 pub struct Models {
@@ -41,12 +41,12 @@ impl Models {
     // TODO: Refactor this so the game logic sends a message to the graphics logic requesting it to
     // preload models before it needs them.
     // Maybe load fighters immediately when selected on the CSS.
-    pub fn load(&mut self, device: &Device, encoder: &mut CommandEncoder, render: &RenderGame) {
+    pub fn load(&mut self, device: &Device, queue: &Queue, render: &RenderGame) {
         // hotreload current models
         for reload in self.assets.models_reloads() {
             // only reload if its still in memory
             if self.models.contains_key(&reload.name) {
-                self.models.insert(reload.name.clone(), Model3D::from_gltf(device, encoder, &reload.data));
+                self.models.insert(reload.name.clone(), Model3D::from_gltf(device, queue, &reload.data));
             }
         }
 
@@ -56,11 +56,11 @@ impl Models {
         if let Some(ref old_name) = self.stage_model_name {
             if old_name != &new_name {
                 self.models.remove(old_name);
-                self.load_stage(device, encoder, new_name);
+                self.load_stage(device, queue, new_name);
             }
         }
         else {
-            self.load_stage(device, encoder, new_name);
+            self.load_stage(device, queue, new_name);
         }
 
         // load current fighters
@@ -70,16 +70,16 @@ impl Models {
                 if !self.models.contains_key(&fighter_model_name) {
                     // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
                     if let Some(data) = self.assets.get_model(&fighter_model_name) {
-                        self.models.insert(fighter_model_name.clone(), Model3D::from_gltf(device, encoder, &data));
+                        self.models.insert(fighter_model_name.clone(), Model3D::from_gltf(device, queue, &data));
                     }
                 }
             }
         }
     }
 
-    fn load_stage(&mut self, device: &Device, encoder: &mut CommandEncoder, new_name: String) {
+    fn load_stage(&mut self, device: &Device, queue: &Queue, new_name: String) {
         if let Some(data) = self.assets.get_model(&new_name) {
-            self.models.insert(new_name.clone(), Model3D::from_gltf(device, encoder, &data));
+            self.models.insert(new_name.clone(), Model3D::from_gltf(device, queue, &data));
         }
         self.stage_model_name = Some(new_name);
     }
@@ -157,7 +157,7 @@ pub struct Joint {
 }
 
 impl Model3D {
-    pub fn from_gltf(device: &Device, encoder: &mut CommandEncoder, data: &[u8]) -> Model3D {
+    pub fn from_gltf(device: &Device, queue: &Queue, data: &[u8]) -> Model3D {
         let gltf = Gltf::from_slice(&data).unwrap();
         let blob = gltf.blob.as_ref().unwrap();
         let scene = gltf.default_scene().unwrap();
@@ -192,7 +192,6 @@ impl Model3D {
                     assert_eq!(data.len(), png.width * png.height * 4);
 
                     // create buffer and texture
-                    let texture_buffer = device.create_buffer_with_data(&data, wgpu::BufferUsage::COPY_SRC);
                     let size = wgpu::Extent3d {
                         width: png.width as u32,
                         height: png.height as u32,
@@ -209,20 +208,17 @@ impl Model3D {
                     });
 
                     // copy buffer to texture
-                    let texture_buffer_copy_view = wgpu::BufferCopyView {
-                        buffer: &texture_buffer,
-                        layout: wgpu::TextureDataLayout {
-                            offset: 0,
-                            bytes_per_row: png.width as u32 * 4,
-                            rows_per_image: 0,
-                        }
-                    };
                     let texture_copy_view = wgpu::TextureCopyView {
                         texture: &texture,
                         mip_level: 0,
                         origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
                     };
-                    encoder.copy_buffer_to_texture(texture_buffer_copy_view, texture_copy_view, size);
+                    let texture_data_layout = wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row: png.width as u32 * 4,
+                        rows_per_image: 0,
+                    };
+                    queue.write_texture(texture_copy_view, &data, texture_data_layout, size);
 
                     textures.push(texture);
                 }
