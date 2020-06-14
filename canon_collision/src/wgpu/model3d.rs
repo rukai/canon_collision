@@ -4,7 +4,7 @@ use crate::wgpu::buffers::Buffers;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use cgmath::{Matrix4, Quaternion, SquareMatrix, Vector3};
 use gltf::Gltf;
@@ -108,19 +108,24 @@ pub enum ModelVertexType {
 
 pub struct Model3D {
     pub meshes: Vec<Mesh>,
-    pub textures: Vec<Texture>,
+    pub textures: Vec<Rc<Texture>>,
     pub animations: HashMap<String, Animation>
 }
 
 pub struct Mesh {
-    pub primitives:  Vec<Primitive>,
-    pub transform:   Matrix4<f32>,
-    pub root_joint:   Option<Joint>,
+    pub primitives: Vec<Primitive>,
+    pub transform:  Matrix4<f32>,
+    pub root_joint: Option<Joint>,
 }
 
+// TODO: I should probably commit fully to either indexes or Rc:
+// Option 1) Replace texture: Option<usize> with texture: Rc<Texture>
+//     then the logic never needs to worry about indexing the textures.
+// Option 2) Replace buffers: Rc<Buffers> with buffers: Buffers
+//     then the logic can specify buffers via the models index + primitives index
 pub struct Primitive {
     pub vertex_type: ModelVertexType,
-    pub buffers:     Arc<Buffers>,
+    pub buffers:     Rc<Buffers>,
     pub texture:     Option<usize>,
 }
 
@@ -143,10 +148,10 @@ pub enum ChannelOutputs {
 
 #[derive(Debug, Clone)]
 pub struct Joint {
-    pub name: String,
-    pub node_index: usize,
-    pub index: usize,
-    pub children: Vec<Joint>,
+    pub name:        String,
+    pub node_index:  usize,
+    pub index:       usize,
+    pub children:    Vec<Joint>,
     // TODO: delete this and write to the buffer directly
     pub transform:   Matrix4<f32>,
     pub ibm:         Matrix4<f32>,
@@ -220,7 +225,7 @@ impl Model3D {
                     };
                     queue.write_texture(texture_copy_view, &data, texture_data_layout, size);
 
-                    textures.push(texture);
+                    textures.push(Rc::new(texture));
                 }
                 _ => unimplemented!("It is assumed that gltf textures are embedded in the glb file.")
             }

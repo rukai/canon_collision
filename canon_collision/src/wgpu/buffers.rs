@@ -15,7 +15,7 @@ use zerocopy::AsBytes;
 
 use std::collections::HashSet;
 use std::f32::consts;
-use std::sync::Arc;
+use std::rc::Rc;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, AsBytes)]
@@ -56,12 +56,12 @@ pub struct Buffers {
 }
 
 impl Buffers {
-    pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Arc<Buffers> where T: AsBytes {
+    pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Rc<Buffers> where T: AsBytes {
         let vertex = device.create_buffer_with_data(vertices.as_bytes(), wgpu::BufferUsage::VERTEX);
         let index  = device.create_buffer_with_data(indices.as_bytes(), wgpu::BufferUsage::INDEX);
         let index_count = indices.len() as u32;
 
-        Arc::new(Buffers { vertex, index, index_count })
+        Rc::new(Buffers { vertex, index, index_count })
     }
 
     pub fn gen_colbox(vertices: &mut Vec<Vertex>, indices: &mut Vec<u16>, colbox: &CollisionBox, index_count: &mut u16, render_id: u32) {
@@ -82,7 +82,7 @@ impl Buffers {
         *index_count += triangles + 1;
     }
 
-    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize, selected: &HashSet<usize>) -> Arc<Buffers> {
+    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize, selected: &HashSet<usize>) -> Rc<Buffers> {
         let mut vertices: Vec<Vertex> = vec!();
         let mut indices: Vec<u16> = vec!();
         let mut index_count = 0;
@@ -97,7 +97,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Arc<Buffers>> {
+    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Rc<Buffers>> {
         let frames = &package.fighters[fighter].actions[action].frames;
         if let Some(frame) = frames.get(frame) {
             let mut vertices: Vec<Vertex> = vec!();
@@ -115,7 +115,7 @@ impl Buffers {
         }
     }
 
-    pub fn new_selected_surfaces(device: &Device, surfaces: &[Surface], selected_surfaces: &HashSet<SurfaceSelection>) -> Option<Arc<Buffers>> {
+    pub fn new_selected_surfaces(device: &Device, surfaces: &[Surface], selected_surfaces: &HashSet<SurfaceSelection>) -> Option<Rc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -165,7 +165,7 @@ impl Buffers {
         Some(Buffers::new(device, &vertices, &indices))
     }
 
-    pub fn new_surfaces(device: &Device, surfaces: &[Surface]) -> Option<Arc<Buffers>> {
+    pub fn new_surfaces(device: &Device, surfaces: &[Surface]) -> Option<Rc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -202,7 +202,7 @@ impl Buffers {
     }
 
     // TODO: Combine new_surfaces(..) and new_surfaces_fill(..), waiting on: https://github.com/nical/lyon/issues/224
-    pub fn new_surfaces_fill(device: &Device, surfaces: &[Surface]) -> Option<Arc<Buffers>> {
+    pub fn new_surfaces_fill(device: &Device, surfaces: &[Surface]) -> Option<Rc<Buffers>> {
         if surfaces.len() == 0 {
             return None;
         }
@@ -301,7 +301,7 @@ impl Buffers {
     }
 
     /// TODO: Set individual corner vertex colours to show which points of the ecb are selected
-    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> Arc<Buffers> {
+    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> Rc<Buffers> {
         let color = [1.0, 1.0, 1.0, 1.0];
         let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
         let vertices: [ColorVertex; 12] = [
@@ -336,7 +336,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_arrow(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn new_arrow(device: &Device, color: [f32; 4]) -> Rc<Buffers> {
         let vertices: [ColorVertex; 7] = [
             // stick
             colorvertex(-0.7, 0.0, color),
@@ -362,7 +362,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn rect_buffers(device: &Device, rect: Rect, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn rect_buffers(device: &Device, rect: Rect, color: [f32; 4]) -> Rc<Buffers> {
         let left  = rect.left();
         let right = rect.right();
         let bot   = rect.bot();
@@ -383,7 +383,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn rect_outline_buffers(device: &Device, rect: &RenderRect) -> Arc<Buffers> {
+    pub fn rect_outline_buffers(device: &Device, rect: &RenderRect) -> Rc<Buffers> {
         let width = 0.5;
         let left  = rect.rect.left();
         let right = rect.rect.right();
@@ -415,7 +415,7 @@ impl Buffers {
     }
 
     /// Creates a single triangle with sides of length 1
-    pub fn new_triangle(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn new_triangle(device: &Device, color: [f32; 4]) -> Rc<Buffers> {
         let h = ((3.0/4.0) as f32).sqrt();
         let vertices = [
             colorvertex(0.0,    h  , color),
@@ -427,7 +427,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> Rc<Buffers> {
         let mut vertices: Vec<ColorVertex> = vec!();
         let mut indices: Vec<u16> = vec!();
 
@@ -457,7 +457,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_spawn_point(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn new_spawn_point(device: &Device, color: [f32; 4]) -> Rc<Buffers> {
         let vertices: [ColorVertex; 11] = [
             // vertical bar
             colorvertex(-0.15, -4.0, color),
@@ -494,7 +494,7 @@ impl Buffers {
     }
 
     /// Creates a single circle with radius 1 around the origin
-    pub fn new_circle(device: &Device, color: [f32; 4]) -> Arc<Buffers> {
+    pub fn new_circle(device: &Device, color: [f32; 4]) -> Rc<Buffers> {
         let mut vertices: Vec<ColorVertex> = vec!();
         let mut indices: Vec<u16> = vec!();
 
