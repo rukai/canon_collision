@@ -26,7 +26,7 @@ use cgmath::{Matrix4, Vector3};
 use num_traits::{FromPrimitive, ToPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer};
+use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderModuleSource};
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
 use wgpu_glyph::ab_glyph::FontArc;
 use zerocopy::AsBytes;
@@ -75,7 +75,7 @@ impl WgpuGraphics {
 
         let size = window.inner_size();
 
-        let instance = wgpu::Instance::new();
+        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
 
         let adapter = instance.request_adapter(
@@ -83,13 +83,12 @@ impl WgpuGraphics {
                 power_preference: wgpu::PowerPreference::Default,
                 compatible_surface: Some(&surface),
             },
-            wgpu::UnsafeExtensions::disallow(),
-            wgpu::BackendBit::PRIMARY,
+            wgpu::UnsafeFeatures::disallow(),
         ).await.unwrap();
 
         let (mut device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
-                extensions: wgpu::Extensions::empty(),
+                features: wgpu::Features::empty(),
                 limits: wgpu::Limits::default(),
                 shader_validation: true,
             },
@@ -97,21 +96,23 @@ impl WgpuGraphics {
         ).await.unwrap();
 
         let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
-        let color_vs_module = device.create_shader_module(color_vs);
+        let color_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(color_vs));
 
         let color_fs = vk_shader_macros::include_glsl!("src/shaders/color-fragment.glsl", kind: frag);
-        let color_fs_module = device.create_shader_module(color_fs);
+        let color_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(color_fs));
 
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
                 bindings: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::all(),
-                        ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-                        ..wgpu::BindGroupLayoutEntry::default()
-                    },
+                    wgpu::BindGroupLayoutEntry::new(
+                        0,
+                        wgpu::ShaderStage::all(),
+                        wgpu::BindingType::UniformBuffer {
+                            dynamic: false,
+                            min_binding_size: None,
+                        },
+                    ),
                 ]
             }
         );
@@ -236,10 +237,10 @@ impl WgpuGraphics {
         });
 
         let hitbox_vs = vk_shader_macros::include_glsl!("src/shaders/hitbox-vertex.glsl", kind: vert);
-        let hitbox_vs_module = device.create_shader_module(hitbox_vs);
+        let hitbox_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(hitbox_vs));
 
         let hitbox_fs = vk_shader_macros::include_glsl!("src/shaders/hitbox-fragment.glsl", kind: frag);
-        let hitbox_fs_module = device.create_shader_module(hitbox_fs);
+        let hitbox_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(hitbox_fs));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
@@ -293,40 +294,40 @@ impl WgpuGraphics {
         });
 
         let model3d_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-fragment.glsl", kind: frag);
-        let model3d_fs_module = device.create_shader_module(model3d_fs);
+        let model3d_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_fs));
 
         let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
-        let model3d_static_vs_module = device.create_shader_module(model3d_static_vs);
+        let model3d_static_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_static_vs));
 
         let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
-        let model3d_animated_vs_module = device.create_shader_module(model3d_animated_vs);
+        let model3d_animated_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_animated_vs));
 
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
                 bindings: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::all(),
-                        ty: wgpu::BindingType::UniformBuffer { dynamic: false },
-                        ..wgpu::BindGroupLayoutEntry::default()
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::SampledTexture {
+                    wgpu::BindGroupLayoutEntry::new(
+                        0,
+                        wgpu::ShaderStage::all(),
+                        wgpu::BindingType::UniformBuffer {
+                            dynamic: false,
+                            min_binding_size: None,
+                        },
+                    ),
+                    wgpu::BindGroupLayoutEntry::new(
+                        1,
+                        wgpu::ShaderStage::FRAGMENT,
+                        wgpu::BindingType::SampledTexture {
                             multisampled: false,
                             dimension: wgpu::TextureViewDimension::D2,
                             component_type: wgpu::TextureComponentType::Float
                         },
-                        ..wgpu::BindGroupLayoutEntry::default()
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler { comparison: false },
-                        ..wgpu::BindGroupLayoutEntry::default()
-                    },
+                    ),
+                    wgpu::BindGroupLayoutEntry::new(
+                        2,
+                        wgpu::ShaderStage::FRAGMENT,
+                        wgpu::BindingType::Sampler { comparison: false },
+                    ),
                 ]
             }
         );
@@ -652,20 +653,21 @@ impl WgpuGraphics {
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &wsd.multisampled_framebuffer,
                         resolve_target: Some(&frame.view),
-                        load_op: wgpu::LoadOp::Clear,
-                        store_op: wgpu::StoreOp::Store,
-                        clear_color: wgpu::Color::BLACK,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: true,
+                        },
                     }],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                         attachment: &wsd.depth_stencil,
-                        depth_load_op: wgpu::LoadOp::Clear,
-                        depth_store_op: wgpu::StoreOp::Store,
-                        depth_read_only: false,
-                        stencil_load_op: wgpu::LoadOp::Clear,
-                        stencil_store_op: wgpu::StoreOp::Store,
-                        stencil_read_only: false,
-                        clear_depth: 1.0,
-                        clear_stencil: 0,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0),
+                            store: true,
+                        }),
                     }),
                 });
 
