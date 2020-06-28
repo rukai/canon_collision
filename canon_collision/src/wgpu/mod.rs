@@ -171,17 +171,9 @@ impl WgpuGraphics {
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 4 * 4,
-                            shader_location: 1,
-                        },
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float4  // color
                     ],
                 }],
             },
@@ -217,17 +209,9 @@ impl WgpuGraphics {
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 4 * 4,
-                            shader_location: 1,
-                        },
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float4  // color
                     ],
                 }],
             },
@@ -269,22 +253,10 @@ impl WgpuGraphics {
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float2,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float,
-                            offset: 8,
-                            shader_location: 1,
-                        },
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Uint,
-                            offset: 12,
-                            shader_location: 2,
-                        },
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float2, // position
+                        1 => Float,  // edge
+                        2 => Uint    // render_id
                     ],
                 }],
             },
@@ -354,19 +326,9 @@ impl WgpuGraphics {
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        // position
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        // uv
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 4 * 4,
-                            shader_location: 1,
-                        },
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float2  // uv
                     ],
                 }],
             },
@@ -394,31 +356,11 @@ impl WgpuGraphics {
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &[
-                        // position
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        // uv
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 4 * 4,
-                            shader_location: 1,
-                        },
-                        // joints
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Uint4,
-                            offset: 4 * 4 + 4 * 2,
-                            shader_location: 2,
-                        },
-                        // weights
-                        wgpu::VertexAttributeDescriptor {
-                            format: wgpu::VertexFormat::Float4,
-                            offset: 4 * 4 + 4 * 2 + 4 * 4,
-                            shader_location: 3,
-                        },
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float2, // uv
+                        2 => Uint4,  // joints
+                        3 => Float4  // weights
                     ],
                 }],
             },
