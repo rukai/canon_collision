@@ -1251,6 +1251,7 @@ impl Game {
 
         RenderGame {
             seed:              self.get_seed(),
+            current_frame:     self.current_frame,
             surfaces:          self.stage.surfaces.to_vec(),
             selected_surfaces: self.selector.surfaces.clone(),
             render_stage_mode: self.debug_stage.render_stage_mode.clone(),
@@ -1440,6 +1441,7 @@ impl Default for SurfaceSelection {
 
 pub struct RenderGame {
     pub seed:              [u8; 32],
+    pub current_frame:     usize,
     pub surfaces:          Vec<Surface>,
     pub selected_surfaces: HashSet<SurfaceSelection>,
     pub render_stage_mode: RenderStageMode,

@@ -106,6 +106,12 @@ pub enum ModelVertexType {
     Static,
 }
 
+#[derive(Clone)]
+pub enum ShaderType {
+    Standard,
+    Lava
+}
+
 pub struct Model3D {
     pub meshes: Vec<Mesh>,
     pub textures: Vec<Rc<Texture>>,
@@ -125,6 +131,7 @@ pub struct Mesh {
 //     then the logic can specify buffers via the models index + primitives index
 pub struct Primitive {
     pub vertex_type: ModelVertexType,
+    pub shader_type: ShaderType,
     pub buffers:     Rc<Buffers>,
     pub texture:     Option<usize>,
 }
@@ -371,6 +378,10 @@ impl Model3D {
                     }
                     (positions, uvs, joints, weights) => unimplemented!("Unexpected combination of vertex data - positions: {:?}, uvs: {:?}, joints: {:?}, weights: {:?}", positions.is_some(), uvs.is_some(), joints.is_some(), weights.is_some()),
                 };
+                let shader_type = match node.name() {
+                    Some("Lava") => ShaderType::Lava,
+                    _ => ShaderType::Standard,
+                };
 
                 let texture = primitive
                     .material()
@@ -378,7 +389,7 @@ impl Model3D {
                     .base_color_texture()
                     .map(|x| x.texture().index());
 
-                primitives.push(Primitive { vertex_type, buffers, texture });
+                primitives.push(Primitive { vertex_type, shader_type, buffers, texture });
             }
 
             meshes.push(Mesh { primitives, transform, root_joint });

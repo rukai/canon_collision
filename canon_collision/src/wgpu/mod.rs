@@ -3,7 +3,7 @@ mod model3d;
 mod animation;
 
 use buffers::{ColorVertex, Vertex, Buffers};
-use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ModelVertexStatic, Joint};
+use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic, Joint};
 use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
@@ -38,32 +38,33 @@ use winit::event::{Event, WindowEvent};
 use winit::window::Fullscreen;
 
 pub struct WgpuGraphics {
-    package:                   Option<Package>,
-    models:                    Models,
-    uniforms_buffer:           Buffer,
-    uniforms_buffer_len:       usize,
-    glyph_brush:               GlyphBrush<()>,
-    hack_font_id:              FontId,
-    window:                    Window,
-    event_tx:                  Sender<WindowEvent<'static>>,
-    render_rx:                 Receiver<GraphicsMessage>,
-    device:                    Device,
-    queue:                     Queue,
-    surface:                   Surface,
-    wsd:                       Option<WindowSizeDependent>,
-    pipeline_color:            RenderPipeline,
-    pipeline_hitbox:           RenderPipeline,
-    pipeline_debug:            RenderPipeline,
-    pipeline_model3d_static:   RenderPipeline,
-    pipeline_model3d_animated: RenderPipeline,
-    bind_group_layout_generic: BindGroupLayout,
-    bind_group_layout_model3d: BindGroupLayout,
-    sampler:                   Sampler,
-    prev_fullscreen:           Option<bool>,
-    frame_durations:           Vec<Duration>,
-    fps:                       String,
-    width:                     u32,
-    height:                    u32,
+    package:                      Option<Package>,
+    models:                       Models,
+    uniforms_buffer:              Buffer,
+    uniforms_buffer_len:          usize,
+    glyph_brush:                  GlyphBrush<()>,
+    hack_font_id:                 FontId,
+    window:                       Window,
+    event_tx:                     Sender<WindowEvent<'static>>,
+    render_rx:                    Receiver<GraphicsMessage>,
+    device:                       Device,
+    queue:                        Queue,
+    surface:                      Surface,
+    wsd:                          Option<WindowSizeDependent>,
+    pipeline_color:               RenderPipeline,
+    pipeline_hitbox:              RenderPipeline,
+    pipeline_debug:               RenderPipeline,
+    pipeline_model3d_static:      RenderPipeline,
+    pipeline_model3d_static_lava: RenderPipeline,
+    pipeline_model3d_animated:    RenderPipeline,
+    bind_group_layout_generic:    BindGroupLayout,
+    bind_group_layout_model3d:    BindGroupLayout,
+    sampler:                      Sampler,
+    prev_fullscreen:              Option<bool>,
+    frame_durations:              Vec<Duration>,
+    fps:                          String,
+    width:                        u32,
+    height:                       u32,
 }
 
 const SAMPLE_COUNT: u32 = 4;
@@ -265,8 +266,11 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
-        let model3d_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-fragment.glsl", kind: frag);
-        let model3d_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_fs));
+        let model3d_standard_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-standard-fragment.glsl", kind: frag);
+        let model3d_standard_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_standard_fs));
+
+        let model3d_lava_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-lava-fragment.glsl", kind: frag);
+        let model3d_lava_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_lava_fs));
 
         let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
         let model3d_static_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_static_vs));
@@ -314,7 +318,37 @@ impl WgpuGraphics {
                 entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &model3d_fs_module,
+                module: &model3d_standard_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state: depth_stencil_state.clone(),
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16,
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                    stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
+                    step_mode: wgpu::InputStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float2  // uv
+                    ],
+                }],
+            },
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        let pipeline_model3d_static_lava = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_model3d_layout,
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &model3d_static_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &model3d_lava_fs_module,
                 entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
@@ -344,7 +378,7 @@ impl WgpuGraphics {
                 entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                module: &model3d_fs_module,
+                module: &model3d_standard_fs_module,
                 entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
@@ -373,8 +407,9 @@ impl WgpuGraphics {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
             address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Nearest,
+            mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            anisotropy_clamp: Some(16),
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
@@ -414,6 +449,7 @@ impl WgpuGraphics {
             pipeline_hitbox,
             pipeline_debug,
             pipeline_model3d_static,
+            pipeline_model3d_static_lava,
             pipeline_model3d_animated,
             bind_group_layout_generic,
             bind_group_layout_model3d,
@@ -678,6 +714,26 @@ impl WgpuGraphics {
                                 ]
                             })
                         }
+                        DrawType::Lava { texture, .. } => {
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: None,
+                                layout: &self.bind_group_layout_model3d,
+                                bindings: &[
+                                    wgpu::Binding {
+                                        binding: 0,
+                                        resource: uniform_resource,
+                                    },
+                                    wgpu::Binding {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                    },
+                                    wgpu::Binding {
+                                        binding: 2,
+                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                                    },
+                                ]
+                            })
+                        }
                     };
                     bind_groups.push(bind_group);
                     uniforms_offset += draw.ty.uniform_size_padded() as u64;
@@ -690,6 +746,7 @@ impl WgpuGraphics {
                         DrawType::Hitbox        { .. }               => &self.pipeline_hitbox,
                         DrawType::ModelAnimated { .. }               => &self.pipeline_model3d_animated,
                         DrawType::ModelStatic   { .. }               => &self.pipeline_model3d_static,
+                        DrawType::Lava          { .. }               => &self.pipeline_model3d_static_lava,
                     };
                     rpass.set_pipeline(pipeline);
                     rpass.set_bind_group(0, &bind_groups[i], &[]);
@@ -894,8 +951,19 @@ impl WgpuGraphics {
                         }
                         ModelVertexType::Static => {
                             let transformation = camera * entity * mesh.transform;
-                            let uniform = TransformUniform { transform: transformation.into() };
-                            let ty = DrawType::ModelStatic { uniform, texture };
+                            let ty = match primitive.shader_type {
+                                ShaderType::Standard => {
+                                    let uniform = TransformUniform { transform: transformation.into() };
+                                    DrawType::ModelStatic { uniform, texture }
+                                }
+                                ShaderType::Lava => {
+                                    let uniform = TransformUniformCycle {
+                                        transform: transformation.into(),
+                                        frame_count: animation_frame,
+                                    };
+                                    DrawType::Lava { uniform, texture }
+                                }
+                            };
                             Draw { ty, buffers }
                         }
                     };
@@ -975,7 +1043,7 @@ impl WgpuGraphics {
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
             if let Some(stage) = self.models.get(&render.stage_model_name) {
-                draws.extend(self.render_model3d(&render, &stage, &stage_transformation, "NONE", 0.0));
+                draws.extend(self.render_model3d(&render, &stage, &stage_transformation, "NONE", render.current_frame as f32));
             }
         }
 
@@ -1751,6 +1819,13 @@ struct TransformUniform {
     transform: [[f32; 4]; 4],
 }
 
+#[derive(Clone, Copy, AsBytes)]
+#[repr(C)]
+struct TransformUniformCycle {
+    transform:   [[f32; 4]; 4],
+    frame_count: f32,
+}
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 struct AnimatedUniform {
@@ -1771,6 +1846,7 @@ enum DrawType {
     Hitbox        { uniform: HitboxUniform },
     ModelAnimated { uniform: AnimatedUniform,  texture: Rc<Texture> },
     ModelStatic   { uniform: TransformUniform, texture: Rc<Texture> },
+    Lava          { uniform: TransformUniformCycle, texture: Rc<Texture> },
 }
 
 impl DrawType {
@@ -1780,6 +1856,7 @@ impl DrawType {
             DrawType::Hitbox        { uniform, .. } => uniform.as_bytes(),
             DrawType::ModelStatic   { uniform, .. } => uniform.as_bytes(),
             DrawType::ModelAnimated { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Lava          { uniform, .. } => uniform.as_bytes(),
         }
     }
 
@@ -1789,6 +1866,7 @@ impl DrawType {
             DrawType::Hitbox        { .. } => mem::size_of::<HitboxUniform>(),
             DrawType::ModelAnimated { .. } => mem::size_of::<AnimatedUniform>(),
             DrawType::ModelStatic   { .. } => mem::size_of::<TransformUniform>(),
+            DrawType::Lava          { .. } => mem::size_of::<TransformUniformCycle>(),
         }
     }
 
