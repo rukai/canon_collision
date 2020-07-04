@@ -3,7 +3,7 @@ mod model3d;
 mod animation;
 
 use buffers::{ColorVertex, Vertex, Buffers};
-use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic, Joint};
+use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic};
 use crate::game::{GameState, RenderEntity, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
@@ -909,14 +909,6 @@ impl WgpuGraphics {
         }
     }
 
-    fn flatten_joint_transforms(joint: &Joint, buffer: &mut [[[f32; 4]; 4]; 500]) {
-        buffer[joint.index] = joint.transform.into();
-
-        for child in &joint.children {
-            WgpuGraphics::flatten_joint_transforms(child, buffer);
-        }
-    }
-
     fn render_model3d(
         &self,
         render:          &RenderGame,
@@ -937,11 +929,10 @@ impl WgpuGraphics {
                         ModelVertexType::Animated => {
                             let transform = (camera * entity).into();
                             let mut joint_transforms = [Matrix4::identity().into(); 500];
-                            if let Some(mut root_joint) = mesh.root_joint.clone() {
+                            if let Some(root_joint) = &mesh.root_joint {
                                 if let Some(animation) = model.animations.get(animation_name) {
-                                    animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
+                                    animation::generate_joint_transforms(animation, animation_frame, &root_joint, Matrix4::identity(), &mut joint_transforms);
                                 }
-                                WgpuGraphics::flatten_joint_transforms(&root_joint, &mut joint_transforms);
                             }
 
                             let uniform = AnimatedUniform { transform, joint_transforms };

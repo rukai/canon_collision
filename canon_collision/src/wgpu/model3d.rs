@@ -153,8 +153,6 @@ pub struct Joint {
     pub node_index:  usize,
     pub index:       usize,
     pub children:    Vec<Joint>,
-    // TODO: delete this and write to the buffer directly
-    pub transform:   Matrix4<f32>,
     pub ibm:         Matrix4<f32>,
     // default transform
     pub translation: Vector3<f32>,
@@ -411,7 +409,6 @@ impl Model3D {
             children.push(Model3D::skeleton_from_gltf_node(&child, blob, node_to_joints_lookup, ibms, pose_transform.clone()));
         }
 
-        let transform = pose_transform * ibm;
         let ibm = ibm.clone();
 
         let (translation, rotation, scale) = match node.transform() {
@@ -424,6 +421,6 @@ impl Model3D {
             }
         };
 
-        Joint { node_index, index, name, children, transform, ibm, translation, rotation, scale }
+        Joint { node_index, index, name, children, ibm, translation, rotation, scale }
     }
 }

@@ -6,7 +6,7 @@ use gltf::animation::Interpolation;
 // Cubicspline interpolation implemented as per:
 // https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#appendix-c-spline-interpolation
 
-pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut Joint, parent_transform: Matrix4<f32>) {
+pub fn generate_joint_transforms(animation: &Animation, frame: f32, root_joint: &Joint, parent_transform: Matrix4<f32>, buffer: &mut [[[f32; 4]; 4]; 500]) {
     let mut translation = root_joint.translation.clone();
     let mut rotation = root_joint.rotation.clone();
     let mut scale = root_joint.scale.clone();
@@ -118,10 +118,11 @@ pub fn set_animated_joints(animation: &Animation, frame: f32, root_joint: &mut J
         rotation *
         Matrix4::from_nonuniform_scale(scale.x, scale.y, scale.z);
 
-    root_joint.transform = transform * root_joint.ibm;
+    let final_transform = transform * root_joint.ibm;
+    buffer[root_joint.index] = final_transform.into();
 
-    for child in &mut root_joint.children {
-        set_animated_joints(animation, frame, child, transform.clone());
+    for child in &root_joint.children {
+        generate_joint_transforms(animation, frame, child, transform.clone(), buffer);
     }
 }
 
