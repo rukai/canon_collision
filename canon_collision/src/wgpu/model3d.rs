@@ -114,7 +114,6 @@ pub enum ShaderType {
 
 pub struct Model3D {
     pub meshes: Vec<Mesh>,
-    pub textures: Vec<Rc<Texture>>,
     pub animations: HashMap<String, Animation>
 }
 
@@ -124,16 +123,11 @@ pub struct Mesh {
     pub root_joint: Option<Joint>,
 }
 
-// TODO: I should probably commit fully to either indexes or Rc:
-// Option 1) Replace texture: Option<usize> with texture: Rc<Texture>
-//     then the logic never needs to worry about indexing the textures.
-// Option 2) Replace buffers: Rc<Buffers> with buffers: Buffers
-//     then the logic can specify buffers via the models index + primitives index
 pub struct Primitive {
     pub vertex_type: ModelVertexType,
     pub shader_type: ShaderType,
     pub buffers:     Rc<Buffers>,
-    pub texture:     Option<usize>,
+    pub texture:     Option<Rc<Texture>>,
 }
 
 pub struct Animation {
@@ -173,11 +167,6 @@ impl Model3D {
         let gltf = Gltf::from_slice(&data).unwrap();
         let blob = gltf.blob.as_ref().unwrap();
         let scene = gltf.default_scene().unwrap();
-
-        let mut meshes = vec!();
-        for node in scene.nodes() {
-            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &node, Matrix4::identity()));
-        }
 
         let mut textures = vec!();
         for texture in gltf.textures() {
@@ -238,6 +227,11 @@ impl Model3D {
             }
         }
 
+        let mut meshes = vec!();
+        for node in scene.nodes() {
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &node, Matrix4::identity(), &textures));
+        }
+
         let mut animations = HashMap::new();
         for animation in gltf.animations() {
             if let Some(name) = animation.name() {
@@ -283,7 +277,7 @@ impl Model3D {
             }
         }
 
-        Model3D { meshes, textures, animations }
+        Model3D { meshes, animations }
     }
 
     fn transform_to_matrix4(transform: Transform) -> Matrix4<f32> {
@@ -298,7 +292,7 @@ impl Model3D {
         }
     }
 
-    fn mesh_from_gltf_node(device: &Device, blob: &[u8], node: &Node, parent_transform: Matrix4<f32>) -> Vec<Mesh> {
+    fn mesh_from_gltf_node(device: &Device, blob: &[u8], node: &Node, parent_transform: Matrix4<f32>, textures: &[Rc<Texture>]) -> Vec<Mesh> {
         let mut meshes = vec!();
 
         let transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
@@ -383,11 +377,13 @@ impl Model3D {
                     _ => ShaderType::Standard,
                 };
 
-                let texture = primitive
+                let texture_index = primitive
                     .material()
                     .pbr_metallic_roughness()
                     .base_color_texture()
                     .map(|x| x.texture().index());
+
+                let texture = texture_index.and_then(|x| textures.get(x).cloned());
 
                 primitives.push(Primitive { vertex_type, shader_type, buffers, texture });
             }
@@ -396,7 +392,7 @@ impl Model3D {
         }
 
         for child in node.children() {
-            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &child, transform));
+            meshes.extend(Model3D::mesh_from_gltf_node(device, blob, &child, transform, textures));
         }
 
         meshes

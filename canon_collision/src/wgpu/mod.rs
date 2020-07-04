@@ -930,8 +930,7 @@ impl WgpuGraphics {
 
         for mesh in &model.meshes {
             for primitive in &mesh.primitives {
-                // TODO: make the texture field store the Rc<Texture> directly instead of an index
-                if let Some(texture) = primitive.texture.and_then(|x| model.textures.get(x).cloned()) {
+                if let Some(texture) = primitive.texture.clone() {
                     let buffers = primitive.buffers.clone();
 
                     let draw = match primitive.vertex_type {
