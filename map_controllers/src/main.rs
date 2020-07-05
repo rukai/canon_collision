@@ -105,14 +105,14 @@ fn main() {
 fn save_copy_hbox(state: Rc<RwLock<State>>) -> Box {
     let hbox = Box::new(Orientation::Horizontal, 5);
 
-    let save = Button::new_with_label("Save");
+    let save = Button::with_label("Save");
     save.connect_clicked(clone!(state => move |_| {
         let state = state.read().unwrap();
         state.controller_maps.save();
     }));
     hbox.add(&save);
 
-    let copy = Button::new_with_label("Copy JSON to clipboard");
+    let copy = Button::with_label("Copy JSON to clipboard");
     copy.connect_clicked(clone!(state => move |_| {
         let state = state.read().unwrap();
         if let Some(controller_map) = state.controller {
@@ -146,7 +146,7 @@ fn controller_select_hbox(state: Rc<RwLock<State>>, inputs_vbox: Box) -> Box {
     }));
     hbox.add(&combo_box);
 
-    let only_plugged_in = CheckButton::new_with_label("Only show plugged in controllers");
+    let only_plugged_in = CheckButton::with_label("Only show plugged in controllers");
     only_plugged_in.connect_toggled(clone!(state, only_plugged_in, combo_box => move |_| {
         combo_box.remove_all();
         let state = state.read().unwrap();
@@ -185,7 +185,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
 
     let label = Label::new(Some(""));
 
-    let refresh_button = Button::new_with_label("Clear");
+    let refresh_button = Button::with_label("Clear");
     refresh_button.connect_clicked(clone!(state, label => move |_| {
         let mut state = state.write().unwrap();
         state.last_code = Code::None;
@@ -284,8 +284,7 @@ fn digital_input_vbox(state: Rc<RwLock<State>>, input_text: String, dest: Digita
     if let Some(controller) = controller {
         let maps = state.read().unwrap().controller_maps.maps[controller].get_digital_maps(dest);
         for (index, map) in maps {
-            let input_map = input_digital_map_hbox(state.clone(), map, index);
-            vbox.add(&input_map);
+            input_digital_map_hbox(state.clone(), map, index, &vbox);
         }
     }
 
@@ -298,7 +297,7 @@ fn digital_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String
     let input_label = Label::new(Some(input_text.as_str()));
     hbox.add(&input_label);
 
-    let detect_button = Button::new_with_label("Add from last input");
+    let detect_button = Button::with_label("Add from last input");
     detect_button.connect_clicked(clone!(state, vbox, dest => move |_| {
         let last_code = state.read().unwrap().last_code.clone();
         match last_code {
@@ -323,7 +322,7 @@ fn digital_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String
     }));
     hbox.add(&detect_button);
 
-    let add_digital_button = Button::new_with_label("Add empty Digital");
+    let add_digital_button = Button::with_label("Add empty Digital");
     add_digital_button.connect_clicked(clone!(state, vbox, dest => move |_| {
         let map = DigitalMap {
             source: 0,
@@ -334,7 +333,7 @@ fn digital_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String
     }));
     hbox.add(&add_digital_button);
 
-    let add_analog_button = Button::new_with_label("Add empty Analog");
+    let add_analog_button = Button::with_label("Add empty Analog");
     add_analog_button.connect_clicked(move |_| {
         let map = DigitalMap {
             source: 0,
@@ -356,12 +355,11 @@ fn new_input_digital_map(state: Rc<RwLock<State>>, vbox: Box, map: DigitalMap) {
         state.controller_maps.maps[i].digital_maps.len() - 1
     };
 
-    let input_map = input_digital_map_hbox(state.clone(), map, push_index);
-    vbox.add(&input_map);
+    input_digital_map_hbox(state.clone(), map, push_index, &vbox);
     vbox.show_all();
 }
 
-fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, index: usize) -> Box {
+fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, index: usize, parent: &Box) {
     let uuid = Uuid::new_v4();
     state.write().unwrap().ui_to_digital_map.insert(uuid, index);
 
@@ -372,7 +370,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
 
     let input_code = digital_map.source.to_string();
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));
-    let code_entry = Entry::new_with_buffer(&code_entry_buffer);
+    let code_entry = Entry::with_buffer(&code_entry_buffer);
     code_entry.connect_changed(clone!(state => move |_| {
         if let Ok(value) = code_entry_buffer.get_text().parse() {
             let mut state = state.write().unwrap();
@@ -387,7 +385,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
         DigitalFilter::FromAnalog { min, max } => {
             hbox.add(&Label::new(Some("min: ")));
             let min_entry_buffer = EntryBuffer::new(Some(min.to_string().as_ref()));
-            let min_entry = Entry::new_with_buffer(&min_entry_buffer);
+            let min_entry = Entry::with_buffer(&min_entry_buffer);
             min_entry.connect_changed(clone!(state => move |_| {
                 if let Ok(value) = min_entry_buffer.get_text().parse() {
                     let mut state = state.write().unwrap();
@@ -400,7 +398,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
 
             hbox.add(&Label::new(Some("max: ")));
             let max_entry_buffer = EntryBuffer::new(Some(max.to_string().as_ref()));
-            let max_entry = Entry::new_with_buffer(&max_entry_buffer);
+            let max_entry = Entry::with_buffer(&max_entry_buffer);
             max_entry.connect_changed(clone!(state => move |_| {
                 if let Ok(value) = max_entry_buffer.get_text().parse() {
                     let mut state = state.write().unwrap();
@@ -414,10 +412,10 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
         DigitalFilter::FromDigital => { }
     }
 
-    let button = Button::new_with_label("Remove");
-    button.connect_clicked(clone!(hbox => move |_| {
+    let button = Button::with_label("Remove");
+    button.connect_clicked(clone!(hbox, parent => move |_| {
         // remove from UI
-        hbox.destroy();
+        parent.remove(&hbox);
 
         // remove from map
         let mut state = state.write().unwrap();
@@ -434,7 +432,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
     }));
     hbox.add(&button);
 
-    hbox
+    parent.add(&hbox);
 }
 
 /* Analog Input UI */
@@ -449,8 +447,7 @@ fn analog_input_vbox(state: Rc<RwLock<State>>, input_text: String, dest: AnalogD
     if let Some(controller) = controller {
         let maps = state.read().unwrap().controller_maps.maps[controller].get_analog_maps(dest);
         for (index, map) in maps {
-            let input_map = input_analog_map_hbox(state.clone(), map, index);
-            vbox.add(&input_map);
+            input_analog_map_hbox(state.clone(), map, index, &vbox);
         }
     }
 
@@ -463,7 +460,7 @@ fn analog_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String,
     let input_label = Label::new(Some(input_text.as_str()));
     hbox.add(&input_label);
 
-    let detect_button = Button::new_with_label("Add from last input");
+    let detect_button = Button::with_label("Add from last input");
     detect_button.connect_clicked(clone!(state, vbox, dest => move |_| {
         let last_code = state.read().unwrap().last_code.clone();
         match last_code {
@@ -488,7 +485,7 @@ fn analog_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String,
     }));
     hbox.add(&detect_button);
 
-    let add_digital_button = Button::new_with_label("Add empty Digital");
+    let add_digital_button = Button::with_label("Add empty Digital");
     add_digital_button.connect_clicked(clone!(state, vbox, dest => move |_| {
         let map = AnalogMap {
             source: 0,
@@ -499,7 +496,7 @@ fn analog_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String,
     }));
     hbox.add(&add_digital_button);
 
-    let add_analog_button = Button::new_with_label("Add empty Analog");
+    let add_analog_button = Button::with_label("Add empty Analog");
     add_analog_button.connect_clicked(move |_| {
         let map = AnalogMap {
             source: 0,
@@ -521,12 +518,11 @@ fn new_input_analog_map(state: Rc<RwLock<State>>, vbox: Box, map: AnalogMap) {
         state.controller_maps.maps[i].analog_maps.len() - 1
     };
 
-    let input_map = input_analog_map_hbox(state.clone(), map, push_index);
-    vbox.add(&input_map);
+    input_analog_map_hbox(state.clone(), map, push_index, &vbox);
     vbox.show_all();
 }
 
-fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index: usize) -> Box {
+fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index: usize, parent: &Box) {
     let uuid = Uuid::new_v4();
     state.write().unwrap().ui_to_analog_map.insert(uuid, index);
 
@@ -537,7 +533,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
 
     let input_code = analog_map.source.to_string();
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));
-    let code_entry = Entry::new_with_buffer(&code_entry_buffer);
+    let code_entry = Entry::with_buffer(&code_entry_buffer);
     code_entry.connect_changed(clone!(state => move |_| {
         if let Ok(value) = code_entry_buffer.get_text().parse() {
             let mut state = state.write().unwrap();
@@ -552,7 +548,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
         AnalogFilter::FromAnalog { min, max, flip } => {
             hbox.add(&Label::new(Some("min: ")));
             let min_entry_buffer = EntryBuffer::new(Some(min.to_string().as_ref()));
-            let min_entry = Entry::new_with_buffer(&min_entry_buffer);
+            let min_entry = Entry::with_buffer(&min_entry_buffer);
             min_entry.connect_changed(clone!(state => move |_| {
                 if let Ok(value) = min_entry_buffer.get_text().parse() {
                     let mut state = state.write().unwrap();
@@ -565,7 +561,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
 
             hbox.add(&Label::new(Some("max: ")));
             let max_entry_buffer = EntryBuffer::new(Some(max.to_string().as_ref()));
-            let max_entry = Entry::new_with_buffer(&max_entry_buffer);
+            let max_entry = Entry::with_buffer(&max_entry_buffer);
             max_entry.connect_changed(clone!(state => move |_| {
                 if let Ok(value) = max_entry_buffer.get_text().parse() {
                     let mut state = state.write().unwrap();
@@ -576,7 +572,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
             }));
             hbox.add(&max_entry);
 
-            let flip_check_button = CheckButton::new_with_label("flip: ");
+            let flip_check_button = CheckButton::with_label("flip: ");
             flip_check_button.connect_toggled(clone!(state, flip_check_button => move |_| {
                 let mut state = state.write().unwrap();
                 let map_i = state.controller.unwrap();
@@ -590,7 +586,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
         AnalogFilter::FromDigital { value } => {
             hbox.add(&Label::new(Some("value: ")));
             let value_entry_buffer = EntryBuffer::new(Some(value.to_string().as_ref()));
-            let value_entry = Entry::new_with_buffer(&value_entry_buffer);
+            let value_entry = Entry::with_buffer(&value_entry_buffer);
             value_entry.connect_changed(clone!(state => move |_| {
                 if let Ok(value) = value_entry_buffer.get_text().parse() {
                     let mut state = state.write().unwrap();
@@ -603,10 +599,10 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
         }
     }
 
-    let button = Button::new_with_label("Remove");
-    button.connect_clicked(clone!(hbox => move |_| {
+    let button = Button::with_label("Remove");
+    button.connect_clicked(clone!(hbox, parent => move |_| {
         // remove from ui
-        hbox.destroy();
+        parent.remove(&hbox);
 
         // remove from map
         let mut state = state.write().unwrap();
@@ -623,5 +619,5 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
     }));
     hbox.add(&button);
 
-    hbox
+    parent.add(&hbox);
 }

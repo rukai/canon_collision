@@ -5,8 +5,8 @@ authors = ["Rukai <rubickent@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-gtk = "0.8"
-gdk = "0.12"
+gtk = "0.9"
+gdk = "0.13"
 gilrs-core = "0.2"
 canon_collision_lib = { path = "../canon_collision_lib" }
 serde_json = "1.0"

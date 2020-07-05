@@ -27,20 +27,21 @@ install:
   - python export_all_assets.py
   - cd ..\..
 
-  # Setup gtk deps https://gtk-rs.org/docs-src/requirements.html
-  - vcpkg install gtk:x64-windows
-  - set VCPKGDIR=C:\tools\vcpkg\installed\x64-windows
-  - set PATH=%VCPKGDIR%\bin;%PATH%
-  - set GTK_LIB_DIR=%VCPKGDIR%\lib
-  # ignore failure, the files get cached and fails if we try to recreate it.
-  - mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib & exit 0
-  - mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib & exit 0
-  - mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll & exit 0
-  - mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll & exit 0
-  - mkdir %VCPKGDIR%\etc & exit 0
-  - mkdir %VCPKGDIR%\etc\gtk-3.0 & exit 0
-  - echo "[Settings]" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
-  - echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  # gtk-rs 9.0 on msvc is broken, waiting for a fix: https://github.com/microsoft/vcpkg/issues/12282
+  # Setup gtk deps https://gtk-rs.org/docs-src/requirements.html - https://gtk-rs.org/docs/requirements.html
+  #- vcpkg install gtk:x64-windows
+  #- set VCPKGDIR=C:\tools\vcpkg\installed\x64-windows
+  #- set PATH=%VCPKGDIR%\bin;%PATH%
+  #- set GTK_LIB_DIR=%VCPKGDIR%\lib
+  ## ignore failure, the files get cached and fails if we try to recreate it.
+  #- mklink %VCPKGDIR%\lib\gtk-3.lib %VCPKGDIR%\lib\gtk-3.0.lib & exit 0
+  #- mklink %VCPKGDIR%\lib\gdk-3.lib %VCPKGDIR%\lib\gdk-3.0.lib & exit 0
+  #- mklink %VCPKGDIR%\bin\gtk-3.0.dll %VCPKGDIR%\bin\gtk-3.dll & exit 0
+  #- mklink %VCPKGDIR%\bin\gdk-3.0.dll %VCPKGDIR%\bin\gdk-3.dll & exit 0
+  #- mkdir %VCPKGDIR%\etc & exit 0
+  #- mkdir %VCPKGDIR%\etc\gtk-3.0 & exit 0
+  #- echo "[Settings]" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
+  #- echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
     # TODO: instructions say to add settings.ini file, but it doesnt look very important.
   # Setup rust
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
@@ -51,13 +52,19 @@ install:
   - echo %PATH%
 
 test_script:
-  - cargo test --release --all
-  - cargo build --release --all
+    # TODO: reenable when gtk is fixed
+    #- cargo test --release --all
+    #- cargo build --release --all
+  - cd canon_collision
+  - cargo build --release
+  - cd ../cc_cli
+  - cargo build --release
+  - cd ..
   - mkdir cc
   - move target\release\canon_collision.exe cc
   - move target\release\cc_cli.exe cc
-  - move target\release\cc_map_controllers.exe cc
-  - move target\release\panic_handler.exe cc
+  #- move target\release\cc_map_controllers.exe cc
+  #- move target\release\panic_handler.exe cc
   - move package cc
   - move assets cc
   - 7z a canoncollision-%APPVEYOR_REPO_COMMIT:~0,15%-windows.zip cc

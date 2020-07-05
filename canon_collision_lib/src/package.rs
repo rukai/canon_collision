@@ -216,17 +216,19 @@ impl Package {
 
     pub fn compute_hash(&self) -> String {
         let mut hasher = Sha256::default();
-        hasher.input(&serde_json::to_vec(&self.rules).unwrap());
+        hasher.update(&serde_json::to_vec(&self.rules).unwrap());
 
         for stage in self.stages.iter() {
-            hasher.input(&serde_json::to_vec(stage).unwrap());
+            hasher.update(&serde_json::to_vec(stage).unwrap());
         }
 
         for fighter in self.fighters.iter() {
-            hasher.input(&serde_json::to_vec(fighter).unwrap());
+            hasher.update(&serde_json::to_vec(fighter).unwrap());
         }
 
-        hasher.result().iter().map(|x| format!("{:x}", x)).collect()
+        let foo = hasher.finalize().iter().map(|x| format!("{:x}", x)).collect();
+        println!("{}", foo);
+        foo
     }
 
     pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
