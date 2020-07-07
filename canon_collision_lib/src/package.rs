@@ -10,14 +10,12 @@ use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
 use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole};
 use crate::files::{self, engine_version};
-use crate::rules::Rules;
 use crate::stage::Stage;
 
 /// Stores persistent that data that can be modified at runtime.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
     pub meta:            PackageMeta,
-    pub rules:           Rules,
     pub stages:          KeyedContextVec<Stage>, // TODO: Can just use a std map here
     pub fighters:        KeyedContextVec<Fighter>,
         path:            PathBuf,
@@ -41,7 +39,6 @@ impl Package {
         let mut package = Package {
             path,
             meta:            PackageMeta::new(),
-            rules:           Rules::default(),
             stages:          KeyedContextVec::new(),
             fighters:        KeyedContextVec::new(),
             package_updates: vec!(),
@@ -84,7 +81,6 @@ impl Package {
         let mut package = Package {
             path,
             meta:            meta,
-            rules:           Rules::default(),
             stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
             fighters:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), Fighter::default()))),
             package_updates: vec!(),
@@ -117,7 +113,6 @@ impl Package {
         }
 
         // save all cbor files
-        files::save_struct_cbor(new_path.join("rules.cbor"), &self.rules);
         files::save_struct_cbor(new_path.join("package_meta.cbor"), &self.meta);
 
         for (key, fighter) in self.fighters.key_value_iter() {
@@ -145,15 +140,6 @@ impl Package {
                 serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
             }
             Err (_) => PackageMeta::default()
-        };
-
-        // load the rules file if exists otherwise generate one.
-        // if the rules file exists but is invalid fail the package load
-        self.rules = match File::open(self.path.join("rules.json")) {
-            Ok (reader) => {
-                serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
-            }
-            Err (_) => Rules::default()
         };
 
         // Get paths to the fighters
@@ -216,7 +202,6 @@ impl Package {
 
     pub fn compute_hash(&self) -> String {
         let mut hasher = Sha256::default();
-        hasher.update(&serde_json::to_vec(&self.rules).unwrap());
 
         for stage in self.stages.iter() {
             hasher.update(&serde_json::to_vec(stage).unwrap());
@@ -505,7 +490,6 @@ impl Node for Package {
                     "fighters" => { self.fighters.node_step(runner) }
                     "stages"   => { self.stages.node_step(runner) }
                     "meta"     => { self.meta.node_step(runner) }
-                    "rules"    => { self.rules.node_step(runner) }
                     prop       => format!("Package does not have a property '{}'", prop)
                 }
             }
@@ -521,8 +505,7 @@ Commands:
 Accessors:
 *   .fighters - KeyedContextVec
 *   .stages   - KeyedContextVec
-*   .meta     - PackageMeta
-*   .rules    - Rules"#)
+*   .meta     - PackageMeta"#)
             }
             NodeToken::Custom (action, _) => {
                 match action.as_ref() {

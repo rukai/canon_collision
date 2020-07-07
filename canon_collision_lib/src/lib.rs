@@ -16,5 +16,4 @@ pub mod logger;
 pub mod network;
 pub mod package;
 pub mod panic_handler;
-pub mod rules;
 pub mod stage;

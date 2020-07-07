@@ -10,6 +10,7 @@ use canon_collision_lib::input::state::ControllerInput;
 use canon_collision_lib::stage::Stage;
 use crate::game::{Game, PlayerSetup};
 use crate::player::Player;
+use crate::rules::Rules;
 
 pub fn get_replay_names() -> Vec<String> {
     let mut result: Vec<String> = vec!();
@@ -86,6 +87,7 @@ pub struct Replay {
     pub selected_players:     Vec<PlayerSetup>,
     pub selected_ais:         Vec<usize>,
     pub selected_stage:       String,
+    pub rules:                Rules,
 }
 
 impl Replay {
@@ -104,6 +106,7 @@ impl Replay {
             selected_controllers: game.selected_controllers.clone(),
             selected_ais:         game.selected_ais.clone(),
             selected_stage:       game.selected_stage.clone(),
+            rules:                game.rules.clone(),
             selected_players
         }
     }

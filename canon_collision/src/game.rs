@@ -6,6 +6,7 @@ use crate::player::{Player, RenderPlayer, DebugPlayer, StepContext};
 use crate::replays::Replay;
 use crate::replays;
 use crate::results::{GameResults, RawPlayerResult, PlayerResult};
+use crate::rules::{Rules, Goal};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -15,7 +16,6 @@ use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
 use canon_collision_lib::network::Netplay;
 use canon_collision_lib::package::Package;
-use canon_collision_lib::rules::Goal;
 use canon_collision_lib::stage::{Stage, DebugStage, SpawnPoint, Surface, Floor, RenderStageMode};
 
 use rand_chacha::rand_core::SeedableRng;
@@ -54,6 +54,7 @@ pub struct Game {
     pub selected_controllers:   Vec<usize>,
     pub selected_ais:           Vec<usize>,
     pub selected_stage:         String,
+    pub rules:                  Rules,
     pub edit:                   Edit,
     pub debug_output_this_step: bool,
     pub debug_lines:            Vec<String>,
@@ -88,7 +89,7 @@ impl Game {
                 // Stage can have less spawn points then players
                 let fighter = player.fighter.clone();
                 let team = player.team;
-                players.push(Player::new(fighter, team, i, &stage, &package));
+                players.push(Player::new(fighter, team, i, &stage, &package, &setup.rules));
                 if setup.debug {
                     debug_players.push(DebugPlayer::all());
                 }
@@ -108,6 +109,7 @@ impl Game {
             selected_controllers:   setup.controllers,
             selected_ais:           setup.ais,
             selected_stage:         setup.stage,
+            rules:                  setup.rules,
             edit:                   Edit::Stage,
             debug_output_this_step: false,
             debug_lines:            vec!(),
@@ -1006,7 +1008,7 @@ impl Game {
                     rng:      &mut rng,
                     input,
                 };
-                player.physics_step(&mut context, i, self.current_frame, self.package.rules.goal.clone());
+                player.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
                 physics_players.push(player);
             }
 
@@ -1043,7 +1045,7 @@ impl Game {
     }
 
     pub fn time_out(&self) -> bool {
-        if let Some(time_limit_frames) = self.package.rules.time_limit_frames() {
+        if let Some(time_limit_frames) = self.rules.time_limit_frames() {
             self.current_frame as u64 > time_limit_frames
         } else {
             false
@@ -1053,7 +1055,7 @@ impl Game {
     pub fn generate_game_results(&self, input: &Input) -> GameState {
         let raw_player_results: Vec<RawPlayerResult> = self.players.iter().map(|x| x.result()).collect();
         // TODO: Players on the same team score to the same pool, and share their place.
-        let places: Vec<usize> = match self.package.rules.goal {
+        let places: Vec<usize> = match self.rules.goal {
             Goal::LastManStanding => {
                 // most stocks remaining wins
                 // tie-breaker:
@@ -1241,7 +1243,7 @@ impl Game {
             }
         }
 
-        let timer = if let Some(time_limit_frames) = self.package.rules.time_limit_frames() {
+        let timer = if let Some(time_limit_frames) = self.rules.time_limit_frames() {
             let frames_remaining = time_limit_frames.saturating_sub(self.current_frame as u64);
             let frame_duration = Duration::new(1, 0) / 60;
             Some(frame_duration * frames_remaining as u32)
@@ -1505,6 +1507,7 @@ pub struct GameSetup {
     pub stage:          String,
     pub state:          GameState,
     pub debug:          bool,
+    pub rules:          Rules
 }
 
 impl GameSetup {

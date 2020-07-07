@@ -2,13 +2,13 @@ use crate::collision::CollisionResult;
 use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
+use crate::rules::{Goal, Rules};
 
 use canon_collision_lib::fighter::*;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::geometry;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
-use canon_collision_lib::rules::Goal;
 use canon_collision_lib::stage::{Stage, Surface};
 
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
@@ -177,7 +177,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(fighter: String, team: usize, player_i: usize, stage: &Stage, package: &Package) -> Player {
+    pub fn new(fighter: String, team: usize, player_i: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
@@ -225,7 +225,7 @@ impl Player {
             new_action:         false,
             frame:              0,
             frame_norestart:    0,
-            stocks:             package.rules.stock_count,
+            stocks:             rules.stock_count,
             damage:             0.0,
             x_vel:              0.0,
             y_vel:              0.0,

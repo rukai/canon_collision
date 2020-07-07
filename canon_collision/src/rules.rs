@@ -1,11 +1,8 @@
 use treeflection::{Node, NodeRunner, NodeToken};
 
-use crate::files::engine_version;
-
+// TODO: remove from package, we can specify a default impl here, will never need to modify it at runtime anyway
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct Rules {
-    pub engine_version:     u64,
-    pub title:              String,
     pub goal:               Goal,
     pub stock_count:        Option<u64>,
     pub time_limit_seconds: Option<u64>,
@@ -13,14 +10,11 @@ pub struct Rules {
     pub pause:              Pause,
     pub teams:              Teams,
     pub grab_clang:         bool,
-    //pub force_user_settings: User,
 }
 
 impl Default for Rules {
     fn default() -> Self {
         Rules {
-            engine_version:     engine_version(),
-            title:              "Base Game Mode".to_string(),
             goal:               Goal::default(),
             stock_count:        Some(4),
             time_limit_seconds: Some(480),

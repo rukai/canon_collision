@@ -13,6 +13,7 @@ use crate::cli::{ContinueFrom, CLIResults};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
+use crate::rules::Rules;
 
 use winit::event::WindowEvent;
 use winit_input_helper::WinitInputHelper;
@@ -141,6 +142,11 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     cli_results.stage_name = package.as_ref().unwrap().stages.index_to_key(0);
                 }
 
+                let rules = Rules {
+                    time_limit_seconds: None,
+                    ..Default::default()
+                };
+
                 let setup = GameSetup {
                     init_seed:      GameSetup::gen_seed(),
                     input_history:  vec!(),
@@ -148,6 +154,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     stage_history:  vec!(),
                     stage:          cli_results.stage_name.unwrap(),
                     state:          GameState::Local,
+                    rules,
                     controllers,
                     players,
                     ais,

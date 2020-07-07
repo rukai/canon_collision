@@ -138,6 +138,7 @@ impl Menu {
                             ais:            replay.selected_ais,
                             stage:          replay.selected_stage,
                             state:          GameState::ReplayForwards,
+                            rules:          replay.rules,
                             debug:          false,
                         });
                     }
@@ -522,6 +523,7 @@ impl Menu {
             input_history:  vec!(),
             player_history: vec!(),
             stage_history:  vec!(),
+            rules: Default::default(), // TODO: this will be configured by the user in the menu
             init_seed,
             controllers,
             ais,
