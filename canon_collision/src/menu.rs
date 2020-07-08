@@ -126,21 +126,9 @@ impl Menu {
 
             if (player_inputs.iter().any(|x| x.start.press || x.a.press)) && replays.len() > 0 {
                 let name = &replays[ticker.cursor];
-                match replays::load_replay(name) {
+                match replays::load_replay(&format!("{}.zip", name)) {
                     Ok(replay) => {
-                        self.game_setup = Some(GameSetup {
-                            init_seed:      replay.init_seed,
-                            input_history:  replay.input_history,
-                            player_history: replay.player_history,
-                            stage_history:  replay.stage_history,
-                            controllers:    replay.selected_controllers,
-                            players:        replay.selected_players,
-                            ais:            replay.selected_ais,
-                            stage:          replay.selected_stage,
-                            state:          GameState::ReplayForwards,
-                            rules:          replay.rules,
-                            debug:          false,
-                        });
+                        self.game_setup = Some(replay.into_game_setup(false, false));
                     }
                     Err(error) => {
                         println!("Failed to load replay: {}\n{}", name, error);
@@ -520,17 +508,18 @@ impl Menu {
         let init_seed = netplay.get_seed().unwrap_or(GameSetup::gen_seed());
 
         self.game_setup = Some(GameSetup {
-            input_history:  vec!(),
-            player_history: vec!(),
-            stage_history:  vec!(),
-            rules: Default::default(), // TODO: this will be configured by the user in the menu
+            input_history:       vec!(),
+            player_history:      vec!(),
+            stage_history:       vec!(),
+            rules:               Default::default(), // TODO: this will be configured by the user in the menu
+            debug:               false,
+            start_at_last_frame: false,
             init_seed,
             controllers,
             ais,
             players,
             stage,
             state,
-            debug: false,
         });
     }
 

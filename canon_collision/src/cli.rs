@@ -20,6 +20,7 @@ pub fn cli() -> CLIResults {
     opts.optopt("a",  "address",        "IP Address of other client to start netplay with", "IP_ADDRESS");
     opts.optopt("n",  "netplayplayers", "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
     opts.optopt("r",  "netplayregion",  "Search for a netplay game with the specified region", "REGION");
+    opts.optopt("k",  "replay",         "load the replay in the replays folder with the specified filename", "FILENAME");
     opts.optopt("g",  "graphics",       "Graphics backend to use",
         if cfg!(feature = "wgpu_renderer") {
             "[wgpu|none]"
@@ -131,6 +132,10 @@ pub fn cli() -> CLIResults {
         results.continue_from = ContinueFrom::MatchMaking;
     }
 
+    if let Some(replay_filename) = matches.opt_str("k") {
+        results.continue_from = ContinueFrom::ReplayFile(replay_filename);
+    }
+
     results
 }
 
@@ -171,7 +176,8 @@ pub enum ContinueFrom {
     Netplay,
     MatchMaking,
     Game,
-    Close
+    ReplayFile (String),
+    Close,
 }
 
 #[derive(Clone)]

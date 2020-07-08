@@ -99,7 +99,7 @@ impl Game {
             }
         }
 
-        Game {
+        let mut game = Game {
             init_seed:              setup.init_seed,
             state:                  setup.state,
             player_history:         setup.player_history,
@@ -125,7 +125,12 @@ impl Game {
             players,
             debug_stage,
             debug_players,
+        };
+        if setup.start_at_last_frame {
+            game.jump_frame(game.player_history.len() - 1);
         }
+
+        game
     }
 
     pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay) -> GameState {
@@ -142,24 +147,26 @@ impl Game {
         {
             let state = self.state.clone();
             match state {
-                GameState::Local                 => self.step_local(input, netplay),
-                GameState::Netplay               => self.step_netplay(input, netplay),
-                GameState::ReplayForwards        => self.step_replay_forwards(input, netplay),
-                GameState::ReplayBackwards       => self.step_replay_backwards(input),
-                GameState::StepThenPause         => { self.step_local(input, netplay); self.state = GameState::Paused; }
-                GameState::StepForwardThenPause  => { self.step_replay_forwards(input, netplay); self.state = GameState::Paused; }
-                GameState::StepBackwardThenPause => { self.step_replay_backwards(input); self.state = GameState::Paused; }
-                GameState::Paused                => self.step_pause(input),
-                GameState::Quit (_)              => unreachable!(),
+                GameState::Local                     => self.step_local(input, netplay),
+                GameState::Netplay                   => self.step_netplay(input, netplay),
+                GameState::ReplayForwardsFromHistory => self.step_replay_forwards_from_history(input),
+                GameState::ReplayForwardsFromInput   => self.step_replay_forwards_from_input(input, netplay),
+                GameState::ReplayBackwards           => self.step_replay_backwards(input),
+                GameState::StepThenPause             => { self.step_local(input, netplay); self.state = GameState::Paused; }
+                GameState::StepForwardThenPause      => { self.step_replay_forwards_from_history(input); self.state = GameState::Paused; }
+                GameState::StepBackwardThenPause     => { self.step_replay_backwards(input); self.state = GameState::Paused; }
+                GameState::Paused                    => self.step_pause(input),
+                GameState::Quit (_)                  => unreachable!(),
             }
 
             if !os_input_blocked {
                 match state {
-                    GameState::Local           => self.step_local_os_input(os_input),
-                    GameState::ReplayForwards  => self.step_replay_forwards_os_input(os_input),
-                    GameState::ReplayBackwards => self.step_replay_backwards_os_input(os_input),
-                    GameState::Paused          => self.step_pause_os_input(input, os_input, netplay),
-                    GameState::Quit (_)        => unreachable!(),
+                    GameState::Local                     => self.step_local_os_input(os_input),
+                    GameState::ReplayForwardsFromHistory => self.step_replay_forwards_os_input(os_input),
+                    GameState::ReplayForwardsFromInput   => self.step_replay_forwards_os_input(os_input),
+                    GameState::ReplayBackwards           => self.step_replay_backwards_os_input(os_input),
+                    GameState::Paused                    => self.step_pause_os_input(input, os_input, netplay),
+                    GameState::Quit (_)                  => unreachable!(),
 
                     GameState::Netplay              | GameState::StepThenPause |
                     GameState::StepForwardThenPause | GameState::StepBackwardThenPause => { }
@@ -328,14 +335,20 @@ impl Game {
         if os_input.key_pressed(VirtualKeyCode::J) {
             self.step_replay_backwards(input);
         }
+        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::K) {
+            self.step_replay_forwards_from_input(input, netplay);
+        }
         else if os_input.key_pressed(VirtualKeyCode::K) {
-            self.step_replay_forwards(input, netplay);
+            self.step_replay_forwards_from_history(input);
         }
         else if os_input.key_pressed(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
         }
+        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwardsFromInput;
+        }
         else if os_input.key_pressed(VirtualKeyCode::L) {
-            self.state = GameState::ReplayForwards;
+            self.state = GameState::ReplayForwardsFromHistory;
         }
         else if os_input.key_pressed(VirtualKeyCode::Space) {
             self.step_local(input, netplay);
@@ -344,7 +357,7 @@ impl Game {
             self.saved_frame = self.current_frame;
         }
         else if os_input.key_pressed(VirtualKeyCode::I) {
-            //self.jump_frame(); // TODO: Fix
+            self.jump_frame(self.saved_frame);
         }
         else if os_input.key_pressed(VirtualKeyCode::Return) {
             self.state = GameState::Local;
@@ -890,8 +903,7 @@ impl Game {
     }
 
     /// next frame is advanced by using the input history on the current frame
-    // TODO: Activate by shift+K/L
-    fn step_replay_forwards(&mut self, input: &mut Input, netplay: &Netplay) { // TODO: rename: step_replay_forwards_from_input
+    fn step_replay_forwards_from_input(&mut self, input: &mut Input, netplay: &Netplay) {
         if self.current_frame <= input.last_frame() {
             self.current_frame += 1;
             let player_inputs = &input.players(self.current_frame, netplay);
@@ -908,15 +920,32 @@ impl Game {
         }
     }
 
-    // TODO: Activate by K/L
-    // fn step_replay_forwards_from_history() {
-    //     TODO
-    // }
+    /// next frame is advanced by taking the next frame in history
+    fn step_replay_forwards_from_history(&mut self, input: &mut Input) {
+        let new_frame = self.current_frame + 1;
+        if new_frame < self.player_history.len() {
+            self.jump_frame(new_frame);
+        }
+        else {
+            self.state = GameState::Paused;
+        }
+
+        if input.start_pressed() {
+            self.state = GameState::Paused;
+        }
+    }
 
     fn step_replay_forwards_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
         }
+        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwardsFromInput;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwardsFromHistory;
+        }
+
         if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
             self.state = GameState::Paused;
         }
@@ -925,10 +954,7 @@ impl Game {
     /// Immediately jumps to the previous frame in history
     fn step_replay_backwards(&mut self, input: &mut Input) {
         if self.current_frame > 0 {
-            self.current_frame -= 1;
-            self.players = self.player_history.get(self.current_frame).unwrap().clone();
-            self.stage   = self.stage_history .get(self.current_frame).unwrap().clone();
-            self.update_frame();
+            self.jump_frame(self.current_frame - 1);
         }
         else {
             self.state = GameState::Paused;
@@ -941,8 +967,11 @@ impl Game {
     }
 
     fn step_replay_backwards_os_input(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::L) {
-            self.state = GameState::ReplayForwards;
+        if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwardsFromInput;
+        }
+        else if os_input.key_pressed(VirtualKeyCode::L) {
+            self.state = GameState::ReplayForwardsFromHistory;
         }
         else if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
             self.state = GameState::Paused;
@@ -951,16 +980,15 @@ impl Game {
     }
 
     /// Jump to the saved frame in history
-    // TODO: FIX
-    //fn jump_frame(&mut self) {
-    //    let frame = self.saved_frame;
-    //    if (frame+1) < self.player_history.len() {
-    //        self.players = self.player_history.get(frame).unwrap().clone();
+    fn jump_frame(&mut self, to_frame: usize) {
+        if to_frame < self.player_history.len() {
+            self.players = self.player_history.get(to_frame).unwrap().clone();
+            self.stage   = self.stage_history .get(to_frame).unwrap().clone();
 
-    //        self.current_frame = frame;
-    //        self.update_frame();
-    //    }
-    //}
+            self.current_frame = to_frame;
+            self.update_frame();
+        }
+    }
 
     fn get_seed(&self) -> [u8; 32] {
         let mut seed = [0; 32];
@@ -1288,7 +1316,8 @@ impl Game {
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum GameState {
     Local,
-    ReplayForwards,
+    ReplayForwardsFromHistory,
+    ReplayForwardsFromInput,
     ReplayBackwards,
     Netplay,
     Paused, // Only Local, ReplayForwards and ReplayBackwards can be paused
@@ -1303,15 +1332,16 @@ pub enum GameState {
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &GameState::Local                 => write!(f, "Local"),
-            &GameState::ReplayForwards        => write!(f, "ReplayForwards"),
-            &GameState::ReplayBackwards       => write!(f, "ReplayBackwards"),
-            &GameState::Netplay               => write!(f, "Netplay"),
-            &GameState::Paused                => write!(f, "Paused"),
-            &GameState::Quit (_)              => write!(f, "Quit"),
-            &GameState::StepThenPause         => write!(f, "StepThenPause"),
-            &GameState::StepForwardThenPause  => write!(f, "StepForwardThenPause"),
-            &GameState::StepBackwardThenPause => write!(f, "StepBackwardThenPause)"),
+            &GameState::Local                     => write!(f, "Local"),
+            &GameState::ReplayForwardsFromHistory => write!(f, "ReplayForwardsFromHistory"),
+            &GameState::ReplayForwardsFromInput   => write!(f, "ReplayForwardsFromInput"),
+            &GameState::ReplayBackwards           => write!(f, "ReplayBackwards"),
+            &GameState::Netplay                   => write!(f, "Netplay"),
+            &GameState::Paused                    => write!(f, "Paused"),
+            &GameState::Quit (_)                  => write!(f, "Quit"),
+            &GameState::StepThenPause             => write!(f, "StepThenPause"),
+            &GameState::StepForwardThenPause      => write!(f, "StepForwardThenPause"),
+            &GameState::StepBackwardThenPause     => write!(f, "StepBackwardThenPause)"),
         }
     }
 }
@@ -1497,17 +1527,18 @@ pub struct RenderSpawnPoint {
 
 #[derive(Clone)]
 pub struct GameSetup {
-    pub init_seed:      u64,
-    pub input_history:  Vec<Vec<ControllerInput>>,
-    pub player_history: Vec<Vec<Player>>,
-    pub stage_history:  Vec<Stage>,
-    pub controllers:    Vec<usize>,
-    pub players:        Vec<PlayerSetup>,
-    pub ais:            Vec<usize>,
-    pub stage:          String,
-    pub state:          GameState,
-    pub debug:          bool,
-    pub rules:          Rules
+    pub init_seed:           u64,
+    pub input_history:       Vec<Vec<ControllerInput>>,
+    pub player_history:      Vec<Vec<Player>>,
+    pub stage_history:       Vec<Stage>,
+    pub controllers:         Vec<usize>,
+    pub players:             Vec<PlayerSetup>,
+    pub ais:                 Vec<usize>,
+    pub stage:               String,
+    pub state:               GameState,
+    pub rules:               Rules,
+    pub debug:               bool,
+    pub start_at_last_frame: bool,
 }
 
 impl GameSetup {

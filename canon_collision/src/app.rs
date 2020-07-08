@@ -14,6 +14,7 @@ use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
 use crate::rules::Rules;
+use crate::replays;
 
 use winit::event::WindowEvent;
 use winit_input_helper::WinitInputHelper;
@@ -148,22 +149,40 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 };
 
                 let setup = GameSetup {
-                    init_seed:      GameSetup::gen_seed(),
-                    input_history:  vec!(),
-                    player_history: vec!(),
-                    stage_history:  vec!(),
-                    stage:          cli_results.stage_name.unwrap(),
-                    state:          GameState::Local,
+                    init_seed:           GameSetup::gen_seed(),
+                    input_history:       vec!(),
+                    player_history:      vec!(),
+                    stage_history:       vec!(),
+                    stage:               cli_results.stage_name.unwrap(),
+                    state:               GameState::Local,
+                    debug:               cli_results.debug,
+                    start_at_last_frame: false,
                     rules,
                     controllers,
                     players,
                     ais,
-                    debug: cli_results.debug,
                 };
                 (
                     Menu::new(MenuState::character_select()),
                     Some(Game::new(package.take().unwrap(), setup)),
                 )
+            }
+            ContinueFrom::ReplayFile (file_name) => {
+                match replays::load_replay(&file_name) {
+                    Ok(replay) => {
+                        let mut game_setup = replay.into_game_setup(cli_results.debug, true);
+                        input.set_history(std::mem::replace(&mut game_setup.input_history, vec!()));
+                        (
+                            Menu::new(MenuState::character_select()),
+                            Some(Game::new(package.take().unwrap(), game_setup)),
+                        )
+                    }
+                    Err(err) => {
+                        println!("Failed to load replay with filename '{}', because: {}", file_name, err);
+                        return;
+                    }
+                }
+
             }
             ContinueFrom::Netplay => {
                 netplay.direct_connect(cli_results.address.unwrap(), package.as_ref().unwrap().compute_hash());
