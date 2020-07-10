@@ -201,6 +201,7 @@ impl Game {
 
     pub fn save_replay(&mut self) -> String {
         self.save_replay = true;
+        // TODO: We are actually lying here, we cant complete the save until the Game::step where we have access to the input data.
         String::from("Save replay completed")
     }
 

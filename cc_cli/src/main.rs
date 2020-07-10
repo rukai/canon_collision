@@ -24,7 +24,7 @@ fn main_main() -> i32 {
             0
         }
         Err(e) => {
-            println!("Could not connect to PF Sandbox host: {}", e);
+            println!("Could not connect to Canon Collision host: {}", e);
             1
         }
     }

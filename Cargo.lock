@@ -322,6 +322,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "canon_collision_hot_reload"
+version = "0.1.0"
+dependencies = [
+ "canon_collision_lib",
+ "hotwatch",
+]
+
+[[package]]
 name = "canon_collision_lib"
 version = "0.0.1"
 dependencies = [

@@ -41,7 +41,7 @@ fn main() {
 //pub(crate) fn upgrade_to_latest_fighter(fighter: &mut Value, file_name: &str) {
 //    let fighter_engine_version = get_engine_version(fighter);
 //    if fighter_engine_version > engine_version() {
-//        println!("Fighter: {} is newer than this version of PF Sandbox. Please upgrade to the latest version.", file_name);
+//        println!("Fighter: {} is newer than this version of Canon Collision. Please upgrade to the latest version.", file_name);
 //    }
 //    else if fighter_engine_version < engine_version() {
 //        for upgrade_from in fighter_engine_version..engine_version() {
@@ -60,7 +60,7 @@ fn main() {
 //pub(crate) fn upgrade_to_latest_stage(stage: &mut Value, file_name: &str) {
 //    let stage_engine_version = get_engine_version(stage);
 //    if stage_engine_version > engine_version() {
-//        println!("Stage: {} is newer than this version of PF Sandbox. Please upgrade to the latest version.", file_name);
+//        println!("Stage: {} is newer than this version of Canon Collision. Please upgrade to the latest version.", file_name);
 //    }
 //    else if stage_engine_version < engine_version() {
 //        // TODO: Handle upgrades here
@@ -71,7 +71,7 @@ fn main() {
 //pub(crate) fn upgrade_to_latest_rules(rules: &mut Value) {
 //    let rules_engine_version = get_engine_version(rules);
 //    if rules_engine_version > engine_version() {
-//        println!("rules.json is newer than this version of PF Sandbox. Please upgrade to the latest version.");
+//        println!("rules.json is newer than this version of Canon Collision. Please upgrade to the latest version.");
 //    }
 //    else if rules_engine_version < engine_version() {
 //        // TODO: Handle upgrades here
@@ -82,7 +82,7 @@ fn main() {
 //pub(crate) fn upgrade_to_latest_meta(meta: &mut Value) {
 //    let meta_engine_version = get_engine_version(meta);
 //    if meta_engine_version > engine_version() {
-//        println!("meta.json is newer than this version of PF Sandbox. Please upgrade to the latest version.");
+//        println!("meta.json is newer than this version of Canon Collision. Please upgrade to the latest version.");
 //    }
 //    else if meta_engine_version < engine_version() {
 //        // TODO: Handle upgrades here

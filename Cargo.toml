@@ -2,6 +2,7 @@
 members = [
     "canon_collision",
     "canon_collision_lib",
+    "canon_collision_hot_reload",
     "cc_cli",
     "map_controllers",
     "panic_handler",

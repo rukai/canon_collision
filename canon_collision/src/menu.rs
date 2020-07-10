@@ -4,6 +4,7 @@ use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::network::{Netplay, NetplayState};
 use canon_collision_lib::package::Package;
+use canon_collision_lib::replays_files;
 use crate::game::{GameSetup, GameState, PlayerSetup};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::graphics;
@@ -685,7 +686,7 @@ pub enum MenuState {
 
 impl MenuState {
     pub fn replay_select() -> MenuState {
-        let replays = replays::get_replay_names();
+        let replays = replays_files::get_replay_names();
         let ticker = MenuTicker::new(replays.len());
         MenuState::ReplaySelect (replays, ticker)
     }

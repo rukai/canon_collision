@@ -18,7 +18,15 @@ pub struct NetCommandLine {
 
 impl NetCommandLine {
     pub fn new() -> NetCommandLine {
-        let listener = TcpListener::bind("127.0.0.1:1613").unwrap();
+        // can fail when using scripts to quickly relaunch
+        let listener = match TcpListener::bind("127.0.0.1:1613") {
+            Ok(listener) => listener,
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                TcpListener::bind("127.0.0.1:1613").unwrap()
+            }
+        };
+
         listener.set_nonblocking(true).unwrap();
 
         NetCommandLine {

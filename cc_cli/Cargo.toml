@@ -2,9 +2,9 @@
 name = "cc_cli"
 version = "0.0.1"
 authors = ["Rukai <rubickent@gmail.com>"]
-description = "CLI client for PF Sandbox"
+description = "CLI client for Canon Collision"
 license = "GPL-3.0"
 repository = "https://github.com/rukai/pf_sandbox"
-keywords = ["pf", "sandbox", "CLI", "command", "client"]
+keywords = ["canon", "collision", "CLI", "command", "client"]
 
 [dependencies]
