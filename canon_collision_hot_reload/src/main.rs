@@ -49,7 +49,7 @@ fn run(rx: Receiver<Event>) {
             if build_status.success() {
                 // if the process is running then hot reload it.
                 // otherwise launch from scratch
-                if process.as_mut().map(|x| x.try_wait().unwrap().is_none()).unwrap_or(false) {
+                if is_process_running(&mut process) {
                     // This doesnt block because the replay save needs to be delayed until the Game::step where it has access to input data.
                     assert!(send_to_cc(":save_replay"));
                     // This blocks on the first command because we cant run another command until the next Game::step has occured.
@@ -65,8 +65,8 @@ fn run(rx: Receiver<Event>) {
                     // relaunch
                     process = launch(&["--replay", &latest_replay_filename]);
 
-                    // busy loop until the replay is loaded
-                    while !send_to_cc(":help") { }
+                    // busy loop until the replay is loaded or the process died, probably due to changes in the replay structure.
+                    while !send_to_cc(":help") && is_process_running(&mut process) { }
 
                     // cleanup the replay
                     replays_files::delete_replay(latest_replay);
@@ -79,10 +79,17 @@ fn run(rx: Receiver<Event>) {
     }
 }
 
+fn is_process_running(process: &mut Option<Child>) -> bool {
+    process
+        .as_mut()
+        .map(|x| x.try_wait().unwrap().is_none())
+        .unwrap_or(false)
+}
+
 fn launch(pass_through_args: &[&str]) -> Option<Child> {
     Command::new("cargo")
         .current_dir("../canon_collision")
-        .args(&["run", "--release", "--"])
+        .args(&["run", "--release", "--", "--maxhistoryframes", "14400"])
         .args(pass_through_args)
         .spawn()
         .ok()

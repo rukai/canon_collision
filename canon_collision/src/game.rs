@@ -47,6 +47,8 @@ pub struct Game {
     pub stage_history:          Vec<Stage>,
     pub current_frame:          usize,
     pub saved_frame:            usize,
+    pub deleted_history_frames: usize,
+    pub max_history_frames:     Option<usize>,
     pub stage:                  Stage,
     pub players:                Vec<Player>,
     pub debug_stage:            DebugStage,
@@ -74,8 +76,15 @@ pub struct Game {
 
 impl Game {
     pub fn new(package: Package, setup: GameSetup) -> Game {
-        let stage = package.stages[setup.stage.as_ref()].clone();
-        let debug_stage = if setup.debug {
+        let stage = if let Some(stage) = setup.hot_reload_stage {
+            stage
+        } else {
+            package.stages[setup.stage.as_ref()].clone()
+        };
+
+        let debug_stage = if let Some(debug_stage) = setup.debug_stage {
+            debug_stage
+        } else if setup.debug {
             DebugStage::all()
         } else {
             DebugStage::default()
@@ -98,14 +107,22 @@ impl Game {
                 }
             }
         }
+        if let Some(overwrite) = setup.hot_reload_players {
+            players = overwrite;
+        }
+        if let Some(overwrite) = setup.debug_players {
+            debug_players = overwrite;
+        }
 
-        let mut game = Game {
+        Game {
             init_seed:              setup.init_seed,
             state:                  setup.state,
             player_history:         setup.player_history,
             stage_history:          setup.stage_history,
-            current_frame:          0,
+            current_frame:          setup.current_frame,
             saved_frame:            0,
+            max_history_frames:     setup.max_history_frames,
+            deleted_history_frames: setup.deleted_history_frames,
             selected_controllers:   setup.controllers,
             selected_ais:           setup.ais,
             selected_stage:         setup.stage,
@@ -115,7 +132,7 @@ impl Game {
             debug_lines:            vec!(),
             selector:               Default::default(),
             copied_frame:           None,
-            camera:                 Camera::new(),
+            camera:                 setup.camera,
             tas:                    vec!(),
             save_replay:            false,
             reset_deadzones:        false,
@@ -125,12 +142,7 @@ impl Game {
             players,
             debug_stage,
             debug_players,
-        };
-        if setup.start_at_last_frame {
-            game.jump_frame(game.player_history.len() - 1);
         }
-
-        game
     }
 
     pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay) -> GameState {
@@ -272,10 +284,10 @@ impl Game {
         self.current_frame += 1;
 
         // erase any future history
-        for _ in self.current_frame..self.player_history.len() {
+        for _ in self.current_history_index()..self.player_history.len() {
             self.player_history.pop();
         }
-        for _ in self.current_frame..self.stage_history.len() {
+        for _ in self.current_history_index()..self.stage_history.len() {
             self.stage_history.pop();
         }
 
@@ -283,6 +295,15 @@ impl Game {
         input.game_update(self.current_frame);
         let player_inputs = &input.players(self.current_frame, netplay);
         self.step_game(input, player_inputs);
+
+        if let Some(max_history_frames) = self.max_history_frames {
+            let extra_frames = self.player_history.len().saturating_sub(max_history_frames);
+            self.deleted_history_frames += extra_frames;
+            if extra_frames > 0 {
+                self.player_history.drain(0..extra_frames);
+                self.stage_history.drain(0..extra_frames);
+            }
+        }
 
         // pause game
         if input.start_pressed() {
@@ -923,9 +944,8 @@ impl Game {
 
     /// next frame is advanced by taking the next frame in history
     fn step_replay_forwards_from_history(&mut self, input: &mut Input) {
-        let new_frame = self.current_frame + 1;
-        if new_frame < self.player_history.len() {
-            self.jump_frame(new_frame);
+        if self.current_history_index() < self.player_history.len() {
+            self.jump_frame(self.current_frame + 1);
         }
         else {
             self.state = GameState::Paused;
@@ -982,9 +1002,10 @@ impl Game {
 
     /// Jump to the saved frame in history
     fn jump_frame(&mut self, to_frame: usize) {
-        if to_frame < self.player_history.len() {
-            self.players = self.player_history.get(to_frame).unwrap().clone();
-            self.stage   = self.stage_history .get(to_frame).unwrap().clone();
+        let history_index = to_frame - self.deleted_history_frames;
+        if history_index < self.player_history.len() {
+            self.players = self.player_history.get(history_index).unwrap().clone();
+            self.stage   = self.stage_history .get(history_index).unwrap().clone();
 
             self.current_frame = to_frame;
             self.update_frame();
@@ -1234,7 +1255,7 @@ impl Game {
 
             let fighters = &self.package.fighters;
             let surfaces = &self.stage.surfaces;
-            let player_render = player.render(selected_colboxes, fighter_selected, player_selected, debug, i, &self.player_history[0..self.current_frame], &self.players, fighters, surfaces);
+            let player_render = player.render(selected_colboxes, fighter_selected, player_selected, debug, i, &self.player_history[0..self.current_history_index()], &self.players, fighters, surfaces);
             entities.push(RenderEntity::Player(player_render));
         }
 
@@ -1309,6 +1330,10 @@ impl Game {
         }
     }
 
+    pub fn current_history_index(&self) -> usize {
+        self.current_frame - self.deleted_history_frames
+    }
+
     pub fn reclaim(self) -> Package {
         self.package
     }
@@ -1321,7 +1346,7 @@ pub enum GameState {
     ReplayForwardsFromInput,
     ReplayBackwards,
     Netplay,
-    Paused, // Only Local, ReplayForwards and ReplayBackwards can be paused
+    Paused, // Only Local, ReplayForwardsFromHistory, ReplayForwardsFromInput and ReplayBackwards can be paused
     Quit (ResumeMenu), // Both Local and Netplay end at Quit
 
     // Used for TAS, in game these are run during pause state
@@ -1528,18 +1553,27 @@ pub struct RenderSpawnPoint {
 
 #[derive(Clone)]
 pub struct GameSetup {
-    pub init_seed:           u64,
-    pub input_history:       Vec<Vec<ControllerInput>>,
-    pub player_history:      Vec<Vec<Player>>,
-    pub stage_history:       Vec<Stage>,
-    pub controllers:         Vec<usize>,
-    pub players:             Vec<PlayerSetup>,
-    pub ais:                 Vec<usize>,
-    pub stage:               String,
-    pub state:               GameState,
-    pub rules:               Rules,
-    pub debug:               bool,
-    pub start_at_last_frame: bool,
+    pub init_seed:              u64,
+    pub input_history:          Vec<Vec<ControllerInput>>,
+    pub player_history:         Vec<Vec<Player>>,
+    pub stage_history:          Vec<Stage>,
+    pub controllers:            Vec<usize>,
+    pub players:                Vec<PlayerSetup>,
+    pub ais:                    Vec<usize>,
+    pub stage:                  String,
+    pub state:                  GameState,
+    pub rules:                  Rules,
+    pub debug:                  bool,
+    pub max_history_frames:     Option<usize>,
+    pub deleted_history_frames: usize,
+    pub current_frame:          usize,
+    pub camera:                 Camera,
+    pub debug_stage:            Option<DebugStage>,
+    pub debug_players:          Option<Vec<DebugPlayer>>,
+    // TODO: lets not have hot_reload specific fields here
+    //       or maybe we should even rewrite to have a single Option<HotReload> field
+    pub hot_reload_players:     Option<Vec<Player>>,
+    pub hot_reload_stage:       Option<Stage>,
 }
 
 impl GameSetup {

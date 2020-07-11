@@ -12,16 +12,17 @@ pub fn cli() -> CLIResults {
     let program = &args[0];
 
     let mut opts = Options::new();
-    opts.optflag("d", "debug",          "Start the game with every debug tool turned on");
-    opts.optopt("s",  "stage",          "Use the stage specified", "NAME");
-    opts.optopt("f",  "fighters",       "Use the fighters specified", "NAME1,NAME2,NAME3...");
-    opts.optopt("h",  "humanplayers",   "Number of human players in the game", "NUM_HUMAN_PLAYERS");
-    opts.optopt("c",  "cpuplayers",     "Number of CPU players in the game", "NUM_CPU_PLAYERS");
-    opts.optopt("a",  "address",        "IP Address of other client to start netplay with", "IP_ADDRESS");
-    opts.optopt("n",  "netplayplayers", "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
-    opts.optopt("r",  "netplayregion",  "Search for a netplay game with the specified region", "REGION");
-    opts.optopt("k",  "replay",         "load the replay in the replays folder with the specified filename", "FILENAME");
-    opts.optopt("g",  "graphics",       "Graphics backend to use",
+    opts.optflag("d", "debug",            "Start the game with every debug tool turned on");
+    opts.optopt("s",  "stage",            "Use the stage specified", "NAME");
+    opts.optopt("f",  "fighters",         "Use the fighters specified", "NAME1,NAME2,NAME3...");
+    opts.optopt("h",  "humanplayers",     "Number of human players in the game", "NUM_HUMAN_PLAYERS");
+    opts.optopt("c",  "cpuplayers",       "Number of CPU players in the game", "NUM_CPU_PLAYERS");
+    opts.optopt("a",  "address",          "IP Address of other client to start netplay with", "IP_ADDRESS");
+    opts.optopt("n",  "netplayplayers",   "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
+    opts.optopt("r",  "netplayregion",    "Search for a netplay game with the specified region", "REGION");
+    opts.optopt("k",  "replay",           "load the replay in the replays folder with the specified filename. Replay additionally loads normally usused data that is kept specifically for hot reloading.", "FILENAME");
+    opts.optopt("m",  "maxhistoryframes", "The oldest history frame is removed when number of history frames exceeds this value", "NUM_FRAMES");
+    opts.optopt("g",  "graphics",         "Graphics backend to use",
         if cfg!(feature = "wgpu_renderer") {
             "[wgpu|none]"
         } else {
@@ -71,6 +72,18 @@ pub fn cli() -> CLIResults {
         if let Ok(players) = players.parse::<usize>() {
             results.continue_from = ContinueFrom::Game;
             results.total_cpu_players = Some(players);
+        }
+        else {
+            print_usage(program, opts);
+            results.continue_from = ContinueFrom::Close;
+            return results;
+        }
+    }
+
+    if let Some(max) = matches.opt_str("m") {
+        if let Ok(max) = max.parse::<usize>() {
+            results.continue_from = ContinueFrom::Game;
+            results.max_history_frames = Some(max);
         }
         else {
             print_usage(program, opts);
@@ -140,33 +153,35 @@ pub fn cli() -> CLIResults {
 }
 
 pub struct CLIResults {
-    pub graphics_backend:  GraphicsBackendChoice,
-    pub package:           Option<String>,
-    pub max_human_players: Option<usize>,
-    pub total_cpu_players: Option<usize>,
-    pub fighter_names:     Vec<String>,
-    pub stage_name:        Option<String>,
-    pub address:           Option<IpAddr>,
-    pub continue_from:     ContinueFrom,
-    pub netplay_players:   Option<u8>,
-    pub netplay_region:    Option<String>,
-    pub debug:             bool,
+    pub graphics_backend:   GraphicsBackendChoice,
+    pub package:            Option<String>,
+    pub max_human_players:  Option<usize>,
+    pub total_cpu_players:  Option<usize>,
+    pub fighter_names:      Vec<String>,
+    pub stage_name:         Option<String>,
+    pub address:            Option<IpAddr>,
+    pub continue_from:      ContinueFrom,
+    pub netplay_players:    Option<u8>,
+    pub netplay_region:     Option<String>,
+    pub debug:              bool,
+    pub max_history_frames: Option<usize>,
 }
 
 impl CLIResults {
     pub fn new() -> CLIResults {
         CLIResults {
-            graphics_backend:  GraphicsBackendChoice::default(),
-            package:           None,
-            max_human_players: None,
-            total_cpu_players: None,
-            fighter_names:     vec!(),
-            stage_name:        None,
-            address:           None,
-            continue_from:     ContinueFrom::Menu,
-            netplay_players:   None,
-            netplay_region:    None,
-            debug:             false,
+            graphics_backend:   GraphicsBackendChoice::default(),
+            package:            None,
+            max_human_players:  None,
+            total_cpu_players:  None,
+            fighter_names:      vec!(),
+            stage_name:         None,
+            address:            None,
+            continue_from:      ContinueFrom::Menu,
+            netplay_players:    None,
+            netplay_region:     None,
+            debug:              false,
+            max_history_frames: None,
         }
     }
 }

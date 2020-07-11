@@ -9,6 +9,7 @@ use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use canon_collision_lib::assets::Assets;
 use crate::ai;
+use crate::camera::Camera;
 use crate::cli::{ContinueFrom, CLIResults};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup};
 use crate::graphics::GraphicsMessage;
@@ -149,14 +150,21 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 };
 
                 let setup = GameSetup {
-                    init_seed:           GameSetup::gen_seed(),
-                    input_history:       vec!(),
-                    player_history:      vec!(),
-                    stage_history:       vec!(),
-                    stage:               cli_results.stage_name.unwrap(),
-                    state:               GameState::Local,
-                    debug:               cli_results.debug,
-                    start_at_last_frame: false,
+                    init_seed:              GameSetup::gen_seed(),
+                    input_history:          vec!(),
+                    player_history:         vec!(),
+                    stage_history:          vec!(),
+                    stage:                  cli_results.stage_name.unwrap(),
+                    state:                  GameState::Local,
+                    debug:                  cli_results.debug,
+                    max_history_frames:     cli_results.max_history_frames,
+                    current_frame:          0,
+                    deleted_history_frames: 0,
+                    debug_players:          Default::default(),
+                    debug_stage:            Default::default(),
+                    camera:                 Camera::new(),
+                    hot_reload_players:     None,
+                    hot_reload_stage:       None,
                     rules,
                     controllers,
                     players,
@@ -170,7 +178,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             ContinueFrom::ReplayFile (file_name) => {
                 match replays::load_replay(&file_name) {
                     Ok(replay) => {
-                        let mut game_setup = replay.into_game_setup(cli_results.debug, true);
+                        let mut game_setup = replay.into_game_setup(true);
                         input.set_history(std::mem::replace(&mut game_setup.input_history, vec!()));
                         (
                             Menu::new(MenuState::character_select()),

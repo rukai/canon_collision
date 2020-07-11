@@ -5,6 +5,7 @@ use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::network::{Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use canon_collision_lib::replays_files;
+use crate::camera::Camera;
 use crate::game::{GameSetup, GameState, PlayerSetup};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::graphics;
@@ -129,7 +130,7 @@ impl Menu {
                 let name = &replays[ticker.cursor];
                 match replays::load_replay(&format!("{}.zip", name)) {
                     Ok(replay) => {
-                        self.game_setup = Some(replay.into_game_setup(false, false));
+                        self.game_setup = Some(replay.into_game_setup(false));
                     }
                     Err(error) => {
                         println!("Failed to load replay: {}\n{}", name, error);
@@ -509,12 +510,19 @@ impl Menu {
         let init_seed = netplay.get_seed().unwrap_or(GameSetup::gen_seed());
 
         self.game_setup = Some(GameSetup {
-            input_history:       vec!(),
-            player_history:      vec!(),
-            stage_history:       vec!(),
-            rules:               Default::default(), // TODO: this will be configured by the user in the menu
-            debug:               false,
-            start_at_last_frame: false,
+            input_history:          vec!(),
+            player_history:         vec!(),
+            stage_history:          vec!(),
+            rules:                  Default::default(), // TODO: this will be configured by the user in the menu
+            debug:                  false,
+            max_history_frames:     None,
+            current_frame:          0,
+            deleted_history_frames: 0,
+            debug_players:          Default::default(),
+            debug_stage:            Default::default(),
+            camera:                 Camera::new(),
+            hot_reload_players:     None,
+            hot_reload_stage:       None,
             init_seed,
             controllers,
             ais,

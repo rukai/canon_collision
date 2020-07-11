@@ -3,9 +3,10 @@ use chrono::{Local, DateTime};
 use canon_collision_lib::files;
 use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::ControllerInput;
-use canon_collision_lib::stage::Stage;
+use canon_collision_lib::stage::{Stage, DebugStage};
+use crate::camera::Camera;
 use crate::game::{Game, GameSetup, PlayerSetup, GameState};
-use crate::player::Player;
+use crate::player::{Player, DebugPlayer};
 use crate::rules::Rules;
 use canon_collision_lib::replays_files;
 
@@ -21,16 +22,25 @@ pub fn save_replay(replay: &Replay) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Replay {
-    pub init_seed:            u64,
-    pub timestamp:            DateTime<Local>,
-    pub input_history:        Vec<Vec<ControllerInput>>,
-    pub player_history:       Vec<Vec<Player>>,
-    pub stage_history:        Vec<Stage>,
-    pub selected_controllers: Vec<usize>,
-    pub selected_players:     Vec<PlayerSetup>,
-    pub selected_ais:         Vec<usize>,
-    pub selected_stage:       String,
-    pub rules:                Rules,
+    pub init_seed:                u64,
+    pub timestamp:                DateTime<Local>,
+    pub input_history:            Vec<Vec<ControllerInput>>,
+    pub player_history:           Vec<Vec<Player>>,
+    pub stage_history:            Vec<Stage>,
+    pub selected_controllers:     Vec<usize>,
+    pub selected_players:         Vec<PlayerSetup>,
+    pub selected_ais:             Vec<usize>,
+    pub selected_stage:           String,
+    pub rules:                    Rules,
+    pub max_history_frames:       Option<usize>,
+    pub deleted_history_frames:   usize,
+    pub hot_reload_current_frame: usize,
+    pub hot_reload_camera:        Camera,
+    pub hot_reload_debug_players: Vec<DebugPlayer>,
+    pub hot_reload_debug_stage:   DebugStage,
+    pub hot_reload_players:       Vec<Player>,
+    pub hot_reload_stage:         Stage,
+    pub hot_reload_as_running:    bool,
 }
 
 impl Replay {
@@ -40,39 +50,102 @@ impl Replay {
             team:    x.team,
         }).collect();
 
+        let hot_reload_as_running = match game.state {
+            GameState::Local => true,
+            _ => false
+        };
+
         Replay {
-            init_seed:            game.init_seed.clone(),
-            timestamp:            Local::now(),
-            input_history:        input.get_history(),
-            player_history:       game.player_history.clone(),
-            stage_history:        game.stage_history.clone(),
-            selected_controllers: game.selected_controllers.clone(),
-            selected_ais:         game.selected_ais.clone(),
-            selected_stage:       game.selected_stage.clone(),
-            rules:                game.rules.clone(),
-            selected_players
+            init_seed:                game.init_seed.clone(),
+            timestamp:                Local::now(),
+            input_history:            input.get_history(),
+            player_history:           game.player_history.clone(),
+            stage_history:            game.stage_history.clone(),
+            selected_controllers:     game.selected_controllers.clone(),
+            selected_ais:             game.selected_ais.clone(),
+            selected_stage:           game.selected_stage.clone(),
+            rules:                    game.rules.clone(),
+            max_history_frames:       game.max_history_frames,
+            deleted_history_frames:   game.deleted_history_frames,
+            hot_reload_current_frame: game.current_frame,
+            hot_reload_camera:        game.camera.clone(),
+            hot_reload_debug_players: game.debug_players.clone(),
+            hot_reload_debug_stage:   game.debug_stage.clone(),
+            hot_reload_players:       game.players.clone(),
+            hot_reload_stage:         game.stage.clone(),
+            hot_reload_as_running,
+            selected_players,
         }
     }
 
-    pub fn into_game_setup(self, debug: bool, start_at_last_frame: bool) -> GameSetup {
-        let state = if start_at_last_frame {
+    // TODO: maybe hotreloading should be its own thing seperate to replays
+    // Its increasing looking like hot reloading wants to serialize EVERYTHING
+    // whereas replays only wants to serialize the bits relevant to gameplay
+    pub fn into_game_setup(self, hot_reload: bool) -> GameSetup {
+        let state = if !hot_reload {
+            GameState::ReplayForwardsFromHistory
+        } else if self.hot_reload_as_running {
             GameState::Local
         } else {
-            GameState::ReplayForwardsFromHistory
+            GameState::Paused
         };
+
+        let current_frame = if hot_reload {
+            self.hot_reload_current_frame
+        } else {
+            self.deleted_history_frames
+        };
+
+        let debug_players = if hot_reload {
+            Some(self.hot_reload_debug_players)
+        } else {
+            None
+        };
+
+        let debug_stage = if hot_reload {
+            Some(self.hot_reload_debug_stage)
+        } else {
+            None
+        };
+
+        let camera = if hot_reload {
+            self.hot_reload_camera
+        } else {
+            Camera::new()
+        };
+
+        let hot_reload_players = if hot_reload {
+            Some(self.hot_reload_players)
+        } else {
+            None
+        };
+
+        let hot_reload_stage = if hot_reload {
+            Some(self.hot_reload_stage)
+        } else {
+            None
+        };
+
         GameSetup {
-            init_seed:      self.init_seed,
-            input_history:  self.input_history,
-            player_history: self.player_history,
-            stage_history:  self.stage_history,
-            controllers:    self.selected_controllers,
-            players:        self.selected_players,
-            ais:            self.selected_ais,
-            stage:          self.selected_stage,
-            rules:          self.rules,
+            init_seed:              self.init_seed,
+            input_history:          self.input_history,
+            player_history:         self.player_history,
+            stage_history:          self.stage_history,
+            controllers:            self.selected_controllers,
+            players:                self.selected_players,
+            ais:                    self.selected_ais,
+            stage:                  self.selected_stage,
+            rules:                  self.rules,
+            max_history_frames:     self.max_history_frames,
+            deleted_history_frames: self.deleted_history_frames,
+            current_frame:          current_frame,
+            debug:                  false,
+            camera,
+            debug_players,
+            debug_stage,
+            hot_reload_players,
+            hot_reload_stage,
             state,
-            start_at_last_frame,
-            debug,
         }
     }
 }

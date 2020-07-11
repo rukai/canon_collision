@@ -27,11 +27,11 @@ cd ../..
 
 # test and build
 rustup update
-cargo test --release -v --all -j 2
+cargo test --release -v --all
 cd canon_collision
 cargo build --release --no-default-features
 cd ..
-cargo build --release --all -j 2
+cargo build --release --all
 
 if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
     # package
