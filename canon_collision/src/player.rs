@@ -1938,8 +1938,8 @@ impl Player {
             Some(Action::LedgeJump)      => self.set_action_fall_from_ledge_jump(context),
             Some(Action::LedgeJumpSlow)  => self.set_action_fall_from_ledge_jump(context),
             Some(Action::LedgeGrab) => {
-                self.set_action(context, Action::LedgeIdle);
                 self.ledge_idle_timer = 0;
+                self.set_action(context, Action::LedgeIdle);
             }
             Some(Action::JumpSquat) => {
                 self.set_airbourne(context);

@@ -211,9 +211,7 @@ impl Package {
             hasher.update(&serde_json::to_vec(fighter).unwrap());
         }
 
-        let foo = hasher.finalize().iter().map(|x| format!("{:x}", x)).collect();
-        println!("{}", foo);
-        foo
+        hasher.finalize().iter().map(|x| format!("{:x}", x)).collect()
     }
 
     pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
