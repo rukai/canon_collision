@@ -31,6 +31,7 @@ fn main() {
 
 fn run(rx: Receiver<Event>) {
     let mut process: Option<Child> = None;
+    let profile_arg = env!("PROFILE");
 
     for event in rx {
         if let Event::Write (_) | Event::Create (_) = event {
@@ -39,11 +40,20 @@ fn run(rx: Receiver<Event>) {
             let args: Vec<String> = args.collect();
             let pass_through_args: Vec<&str> = args.iter().map(|x| x.as_ref()).collect();
 
-            let build_status = Command::new("cargo")
-                .current_dir("../canon_collision")
-                .args(&["build", "--release"])
-                .status()
-                .unwrap();
+            let build_status = if env!("PROFILE") == "release" {
+                Command::new("cargo")
+                    .current_dir("../canon_collision")
+                    //.args(&["build", "-Z", "unstable-options", "--profile", &profile_arg]) // TODO: when --profile is stablized we can use that which is much nicer
+                    .args(&["build", "--release"])
+                    .status()
+                    .unwrap()
+            } else {
+                Command::new("cargo")
+                    .current_dir("../canon_collision")
+                    .args(&["build"])
+                    .status()
+                    .unwrap()
+            };
 
             // only try to launch if the build currently succeeds
             if build_status.success() {
@@ -63,7 +73,7 @@ fn run(rx: Receiver<Event>) {
                     process.take().map(|mut x| x.kill().unwrap());
 
                     // relaunch
-                    process = launch(&["--replay", &latest_replay_filename]);
+                    process = launch(&profile_arg, &["--replay", &latest_replay_filename]);
 
                     // busy loop until the replay is loaded or the process died, probably due to changes in the replay structure.
                     while !send_to_cc(":help") && is_process_running(&mut process) { }
@@ -72,7 +82,7 @@ fn run(rx: Receiver<Event>) {
                     replays_files::delete_replay(latest_replay);
                 }
                 else {
-                    process = launch(&pass_through_args);
+                    process = launch(&profile_arg, &pass_through_args);
                 }
             }
         }
@@ -86,13 +96,23 @@ fn is_process_running(process: &mut Option<Child>) -> bool {
         .unwrap_or(false)
 }
 
-fn launch(pass_through_args: &[&str]) -> Option<Child> {
-    Command::new("cargo")
-        .current_dir("../canon_collision")
-        .args(&["run", "--release", "--", "--maxhistoryframes", "14400"])
-        .args(pass_through_args)
-        .spawn()
-        .ok()
+fn launch(profile_arg: &str, pass_through_args: &[&str]) -> Option<Child> {
+    // TODO: use --profile arg instead of if when its stabilized
+    if profile_arg == "release" {
+        Command::new("cargo")
+            .current_dir("../canon_collision")
+            .args(&["run", "--release", "--", "--maxhistoryframes", "14400"])
+            .args(pass_through_args)
+            .spawn()
+            .ok()
+    } else {
+        Command::new("cargo")
+            .current_dir("../canon_collision")
+            .args(&["run", "--", "--maxhistoryframes", "14400"])
+            .args(pass_through_args)
+            .spawn()
+            .ok()
+    }
 }
 
 /// returns true on success
