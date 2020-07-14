@@ -7,7 +7,7 @@ use crate::graphics;
 use crate::player::RenderPlayer;
 use crate::game::{SurfaceSelection, RenderRect};
 
-use wgpu::{Device, Buffer};
+use wgpu::{Device, Buffer, COPY_BUFFER_ALIGNMENT};
 use lyon::path::Path;
 use lyon::math::{Point, point};
 use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
@@ -16,6 +16,7 @@ use zerocopy::AsBytes;
 use std::collections::HashSet;
 use std::f32::consts;
 use std::rc::Rc;
+use std::borrow::Cow;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, AsBytes)]
@@ -57,8 +58,24 @@ pub struct Buffers {
 
 impl Buffers {
     pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Rc<Buffers> where T: AsBytes {
-        let vertex = device.create_buffer_with_data(vertices.as_bytes(), wgpu::BufferUsage::VERTEX);
-        let index  = device.create_buffer_with_data(indices.as_bytes(), wgpu::BufferUsage::INDEX);
+        let mut vertex_bytes = Cow::Borrowed(vertices.as_bytes());
+        if vertex_bytes.len() % COPY_BUFFER_ALIGNMENT as usize != 0 {
+            let bytes = vertex_bytes.to_mut();
+            while bytes.len() % COPY_BUFFER_ALIGNMENT as usize != 0 {
+                bytes.push(0);
+            }
+        }
+        let vertex = device.create_buffer_with_data(&vertex_bytes, wgpu::BufferUsage::VERTEX);
+
+        let mut index_bytes = Cow::Borrowed(indices.as_bytes());
+        if index_bytes.len() % COPY_BUFFER_ALIGNMENT as usize != 0 {
+            let bytes = index_bytes.to_mut();
+            while bytes.len() % COPY_BUFFER_ALIGNMENT as usize != 0 {
+                bytes.push(0);
+            }
+        }
+        let index = device.create_buffer_with_data(&index_bytes, wgpu::BufferUsage::INDEX);
+
         let index_count = indices.len() as u32;
 
         Rc::new(Buffers { vertex, index, index_count })

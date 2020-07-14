@@ -83,14 +83,16 @@ impl WgpuGraphics {
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::Default,
                 compatible_surface: Some(&surface),
-            },
-            wgpu::UnsafeFeatures::disallow(),
+            }
         ).await.unwrap();
 
         let (mut device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
-                limits: wgpu::Limits::default(),
+                limits: wgpu::Limits {
+                    max_uniform_buffer_binding_size: 32064, // Needed for AnimatedUniform
+                    ..wgpu::Limits::default()
+                },
                 shader_validation: true,
             },
             None,
@@ -105,7 +107,7 @@ impl WgpuGraphics {
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                bindings: &[
+                entries: &[
                     wgpu::BindGroupLayoutEntry::new(
                         0,
                         wgpu::ShaderStage::all(),
@@ -119,6 +121,7 @@ impl WgpuGraphics {
         );
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout_generic],
+            push_constant_ranges: &[],
         });
 
         let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
@@ -281,7 +284,7 @@ impl WgpuGraphics {
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                bindings: &[
+                entries: &[
                     wgpu::BindGroupLayoutEntry::new(
                         0,
                         wgpu::ShaderStage::all(),
@@ -309,6 +312,7 @@ impl WgpuGraphics {
         );
         let pipeline_model3d_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout_model3d],
+            push_constant_ranges: &[],
         });
 
         let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -502,7 +506,10 @@ impl WgpuGraphics {
             }
             Event::WindowEvent { event, .. } => {
                 if let Some(event) = event.to_static() {
-                    self.event_tx.send(event).unwrap();
+                    if let Err(_) = self.event_tx.send(event) {
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
                 }
             }
             _ => {}
@@ -658,7 +665,7 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                bindings: &[wgpu::Binding {
+                                entries: &[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
                                 }]
@@ -668,7 +675,7 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                bindings: &[wgpu::Binding {
+                                entries: &[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
                                 }]
@@ -678,16 +685,16 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                bindings: &[
-                                    wgpu::Binding {
+                                entries: &[
+                                    wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 1,
                                         resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
@@ -698,16 +705,16 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                bindings: &[
-                                    wgpu::Binding {
+                                entries: &[
+                                    wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 1,
                                         resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
@@ -718,16 +725,16 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                bindings: &[
-                                    wgpu::Binding {
+                                entries: &[
+                                    wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 1,
                                         resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
                                     },
-                                    wgpu::Binding {
+                                    wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
@@ -1820,8 +1827,9 @@ struct TransformUniformCycle {
 #[repr(C)]
 struct AnimatedUniform {
     transform: [[f32; 4]; 4],
-    joint_transforms: [[[f32; 4]; 4]; 500],
+    joint_transforms: JointTransforms,
 }
+type JointTransforms = [[[f32; 4]; 4]; 500];
 
 unsafe impl Pod for AnimatedUniform {}
 unsafe impl Zeroable for AnimatedUniform {}

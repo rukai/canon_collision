@@ -2,11 +2,12 @@ use crate::wgpu::model3d::{Animation, Joint, ChannelOutputs, Channel};
 
 use cgmath::{Matrix4, VectorSpace, InnerSpace};
 use gltf::animation::Interpolation;
+use crate::wgpu::JointTransforms;
 
 // Cubicspline interpolation implemented as per:
 // https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#appendix-c-spline-interpolation
 
-pub fn generate_joint_transforms(animation: &Animation, frame: f32, root_joint: &Joint, parent_transform: Matrix4<f32>, buffer: &mut [[[f32; 4]; 4]; 500]) {
+pub fn generate_joint_transforms(animation: &Animation, frame: f32, root_joint: &Joint, parent_transform: Matrix4<f32>, buffer: &mut JointTransforms) {
     let mut translation = root_joint.translation.clone();
     let mut rotation = root_joint.rotation.clone();
     let mut scale = root_joint.scale.clone();
