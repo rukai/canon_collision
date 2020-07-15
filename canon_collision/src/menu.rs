@@ -6,7 +6,7 @@ use canon_collision_lib::network::{Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use canon_collision_lib::replays_files;
 use crate::camera::Camera;
-use crate::game::{GameSetup, GameState, PlayerSetup};
+use crate::game::{GameSetup, GameState, PlayerSetup, Edit};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::graphics;
 use crate::replays;
@@ -521,6 +521,7 @@ impl Menu {
             debug_players:          Default::default(),
             debug_stage:            Default::default(),
             camera:                 Camera::new(),
+            edit:                   Edit::Stage,
             hot_reload_players:     None,
             hot_reload_stage:       None,
             init_seed,

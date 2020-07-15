@@ -447,28 +447,49 @@ impl Buffers {
     pub fn new_shield(device: &Device, shield: &RenderShield, color: [f32; 4]) -> Rc<Buffers> {
         let mut vertices: Vec<ColorVertex> = vec!();
         let mut indices: Vec<u16> = vec!();
+        let mut index_count = 0;
 
-        let triangles = match shield.distort {
-            0 => 100,
-            1 => 20,
-            2 => 10,
-            3 => 8,
-            4 => 7,
-            5 => 6,
-            _ => 5
+        let segments = match shield.distort {
+            0 => 50,
+            1 => 10,
+            2 => 7,
+            3 => 6,
+            4 => 5,
+            5 => 4,
+            _ => 3
         };
 
-        // triangles are drawn meeting at the centre, forming a circle
-        vertices.push(colorvertex(0.0, 0.0, color));
-        for i in 0..triangles {
-            let angle = i as f32 * 2.0 * consts::PI / (triangles as f32);
-            let (sin, cos) = angle.sin_cos();
-            let x = cos * shield.radius;
-            let y = sin * shield.radius;
-            vertices.push(colorvertex(x, y, color));
-            indices.push(0);
-            indices.push(i + 1);
-            indices.push((i + 1) % triangles + 1);
+        let mut grid = vec!();
+        for iy in 0..segments+1 {
+            let mut vertices_row = vec!();
+            let v = iy as f32 / segments as f32;
+
+            for ix in 0..segments+1 {
+                let u = ix as f32 / segments as f32;
+                let sin_v_pi = (v * consts::PI).sin();
+                let position = [
+                    shield.radius * (u * consts::PI * 2.0).cos() * sin_v_pi,
+                    shield.radius * (v * consts::PI      ).cos(),
+                    shield.radius * (u * consts::PI * 2.0).sin() * sin_v_pi,
+                    1.0
+                ];
+                vertices.push(ColorVertex { position, color });
+                vertices_row.push(index_count);
+                index_count += 1;
+            }
+            grid.push(vertices_row);
+        }
+
+        for iy in 0..segments {
+            for ix in 0..segments {
+                let a = grid[iy][ix + 1];
+                let b = grid[iy][ix];
+                let c = grid[iy + 1][ix];
+                let d = grid[iy + 1][ix + 1];
+
+                indices.extend(&[d, b, a]);
+                indices.extend(&[d, c, b]);
+            }
         }
 
         Buffers::new(device, &vertices, &indices)

@@ -238,7 +238,8 @@ impl Package {
     pub fn delete_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) -> bool {
         let action_frames = &mut self.fighters[fighter].actions[action].frames;
 
-        if action_frames.len() > 1 {
+        // there must always be at least one frame and only delete frames that exist
+        if action_frames.len() > 1 && frame < action_frames.len() {
             action_frames.remove(frame);
 
             self.package_updates.push(PackageUpdate::DeleteFighterFrame {

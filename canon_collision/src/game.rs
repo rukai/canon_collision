@@ -127,7 +127,7 @@ impl Game {
             selected_ais:           setup.ais,
             selected_stage:         setup.stage,
             rules:                  setup.rules,
-            edit:                   Edit::Stage,
+            edit:                   setup.edit,
             debug_output_this_step: false,
             debug_lines:            vec!(),
             selector:               Default::default(),
@@ -1574,6 +1574,7 @@ pub struct GameSetup {
     //       or maybe we should even rewrite to have a single Option<HotReload> field
     pub hot_reload_players:     Option<Vec<Player>>,
     pub hot_reload_stage:       Option<Stage>,
+    pub edit:                   Edit,
 }
 
 impl GameSetup {

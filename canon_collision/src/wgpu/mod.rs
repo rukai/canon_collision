@@ -126,7 +126,7 @@ impl WgpuGraphics {
 
         let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: wgpu::CullMode::None,
+            cull_mode: wgpu::CullMode::Back,
             depth_bias: 0,
             depth_bias_slope_scale: 0.0,
             depth_bias_clamp: 0.0,
@@ -196,7 +196,13 @@ impl WgpuGraphics {
                 module: &color_fs_module,
                 entry_point: "main",
             }),
-            rasterization_state: rasterization_state.clone(),
+            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: wgpu::CullMode::None,
+                depth_bias: 0,
+                depth_bias_slope_scale: 0.0,
+                depth_bias_clamp: 0.0,
+            }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
@@ -1266,7 +1272,7 @@ impl WgpuGraphics {
                             shield.color
                         };
                         let buffers = Buffers::new_shield(&self.device, shield, color);
-                        self.render_color_buffers(&render, buffers, &position);
+                        draws.push(self.render_color_buffers(&render, buffers, &position));
                     }
                 }
                 _ => { }

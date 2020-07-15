@@ -5,7 +5,7 @@ use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::ControllerInput;
 use canon_collision_lib::stage::{Stage, DebugStage};
 use crate::camera::Camera;
-use crate::game::{Game, GameSetup, PlayerSetup, GameState};
+use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
 use crate::player::{Player, DebugPlayer};
 use crate::rules::Rules;
 use canon_collision_lib::replays_files;
@@ -41,6 +41,7 @@ pub struct Replay {
     pub hot_reload_players:       Vec<Player>,
     pub hot_reload_stage:         Stage,
     pub hot_reload_as_running:    bool,
+    pub hot_reload_edit:          Edit,
 }
 
 impl Replay {
@@ -73,6 +74,7 @@ impl Replay {
             hot_reload_debug_stage:   game.debug_stage.clone(),
             hot_reload_players:       game.players.clone(),
             hot_reload_stage:         game.stage.clone(),
+            hot_reload_edit:          game.edit.clone(),
             hot_reload_as_running,
             selected_players,
         }
@@ -138,6 +140,7 @@ impl Replay {
             rules:                  self.rules,
             max_history_frames:     self.max_history_frames,
             deleted_history_frames: self.deleted_history_frames,
+            edit:                   self.hot_reload_edit,
             current_frame:          current_frame,
             debug:                  false,
             camera,

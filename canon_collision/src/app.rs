@@ -11,7 +11,7 @@ use canon_collision_lib::assets::Assets;
 use crate::ai;
 use crate::camera::Camera;
 use crate::cli::{ContinueFrom, CLIResults};
-use crate::game::{Game, GameState, GameSetup, PlayerSetup};
+use crate::game::{Game, GameState, GameSetup, PlayerSetup, Edit};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
 use crate::rules::Rules;
@@ -163,6 +163,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     debug_players:          Default::default(),
                     debug_stage:            Default::default(),
                     camera:                 Camera::new(),
+                    edit:                   Edit::Stage,
                     hot_reload_players:     None,
                     hot_reload_stage:       None,
                     rules,
