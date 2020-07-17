@@ -51,7 +51,8 @@ pub struct WgpuGraphics {
     queue:                        Queue,
     surface:                      Surface,
     wsd:                          Option<WindowSizeDependent>,
-    pipeline_color:               RenderPipeline,
+    pipeline_color_2d:            RenderPipeline,
+    pipeline_color_3d:            RenderPipeline,
     pipeline_hitbox:              RenderPipeline,
     pipeline_debug:               RenderPipeline,
     pipeline_model3d_static:      RenderPipeline,
@@ -124,9 +125,17 @@ impl WgpuGraphics {
             push_constant_ranges: &[],
         });
 
-        let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
+        let rasterization_state_back_face_culling = Some(wgpu::RasterizationStateDescriptor {
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::Back,
+            depth_bias: 0,
+            depth_bias_slope_scale: 0.0,
+            depth_bias_clamp: 0.0,
+        });
+
+        let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: wgpu::CullMode::None,
             depth_bias: 0,
             depth_bias_slope_scale: 0.0,
             depth_bias_clamp: 0.0,
@@ -156,7 +165,7 @@ impl WgpuGraphics {
             stencil_write_mask: 0,
         });
 
-        let pipeline_color = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline_color_2d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
@@ -167,6 +176,36 @@ impl WgpuGraphics {
                 entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state: depth_stencil_state.clone(),
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16,
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                    stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::InputStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float4  // color
+                    ],
+                }],
+            },
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
+        let pipeline_color_3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: &pipeline_layout,
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &color_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &color_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
@@ -331,7 +370,7 @@ impl WgpuGraphics {
                 module: &model3d_standard_fs_module,
                 entry_point: "main",
             }),
-            rasterization_state: rasterization_state.clone(),
+            rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
@@ -361,7 +400,7 @@ impl WgpuGraphics {
                 module: &model3d_lava_fs_module,
                 entry_point: "main",
             }),
-            rasterization_state: rasterization_state.clone(),
+            rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
@@ -391,7 +430,7 @@ impl WgpuGraphics {
                 module: &model3d_standard_fs_module,
                 entry_point: "main",
             }),
-            rasterization_state: rasterization_state.clone(),
+            rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
@@ -455,7 +494,8 @@ impl WgpuGraphics {
             device,
             queue,
             wsd,
-            pipeline_color,
+            pipeline_color_2d,
+            pipeline_color_3d,
             pipeline_hitbox,
             pipeline_debug,
             pipeline_model3d_static,
@@ -754,12 +794,13 @@ impl WgpuGraphics {
 
                 for (i, draw) in draws.iter().enumerate() {
                     let pipeline = match &draw.ty {
-                        DrawType::Color         { debug: false, .. } => &self.pipeline_color,
-                        DrawType::Color         { debug: true, .. }  => &self.pipeline_debug,
-                        DrawType::Hitbox        { .. }               => &self.pipeline_hitbox,
-                        DrawType::ModelAnimated { .. }               => &self.pipeline_model3d_animated,
-                        DrawType::ModelStatic   { .. }               => &self.pipeline_model3d_static,
-                        DrawType::Lava          { .. }               => &self.pipeline_model3d_static_lava,
+                        DrawType::Color         { debug: false, dimension3: false, .. } => &self.pipeline_color_2d,
+                        DrawType::Color         { debug: false, dimension3: true,  .. } => &self.pipeline_color_3d,
+                        DrawType::Color         { debug: true,                     .. } => &self.pipeline_debug,
+                        DrawType::Hitbox        {                                  .. } => &self.pipeline_hitbox,
+                        DrawType::ModelAnimated {                                  .. } => &self.pipeline_model3d_animated,
+                        DrawType::ModelStatic   {                                  .. } => &self.pipeline_model3d_static,
+                        DrawType::Lava          {                                  .. } => &self.pipeline_model3d_static_lava,
                     };
                     rpass.set_pipeline(pipeline);
                     rpass.set_bind_group(0, &bind_groups[i], &[]);
@@ -982,38 +1023,18 @@ impl WgpuGraphics {
 
     fn render_color_buffers(
         &self,
-        render:  &RenderGame,
-        buffers: Rc<Buffers>,
-        entity:  &Matrix4<f32>,
+        render:     &RenderGame,
+        buffers:    Rc<Buffers>,
+        entity:     &Matrix4<f32>,
+        debug:      bool,
+        dimension3: bool
     ) -> Draw {
         let camera = render.camera.transform();
         let transformation = camera * entity;
         let uniform = TransformUniform { transform: transformation.into() };
 
         Draw {
-            ty: DrawType::Color {
-                uniform,
-                debug: false
-            },
-            buffers
-        }
-    }
-
-    fn render_debug_buffers(
-        &self,
-        render:  &RenderGame,
-        buffers: Rc<Buffers>,
-        entity:  &Matrix4<f32>,
-    ) -> Draw {
-        let camera = render.camera.transform();
-        let transformation = camera * entity;
-        let uniform = TransformUniform { transform: transformation.into() };
-
-        Draw {
-            ty: DrawType::Color {
-                uniform,
-                debug: true
-            },
+            ty: DrawType::Color { uniform, debug, dimension3 },
             buffers
         }
     }
@@ -1052,15 +1073,15 @@ impl WgpuGraphics {
 
         if render.render_stage_mode.debug() {
             if let Some(buffers) = Buffers::new_surfaces(&self.device, &render.surfaces) {
-                draws.push(self.render_debug_buffers(&render, buffers, &stage_transformation));
+                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
             }
 
             if let Some(buffers) = Buffers::new_surfaces_fill(&self.device, &render.surfaces) {
-                draws.push(self.render_debug_buffers(&render, buffers, &stage_transformation));
+                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
             }
 
             if let Some(buffers) = Buffers::new_selected_surfaces(&self.device, &render.surfaces, &render.selected_surfaces) {
-                draws.push(self.render_debug_buffers(&render, buffers, &stage_transformation));
+                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
             }
         }
 
@@ -1103,7 +1124,7 @@ impl WgpuGraphics {
                         let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                         let transformation = position * dir;
 
-                        draws.push(self.render_debug_buffers(&render, buffers, &transformation));
+                        draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                     }
 
                     // draw fighter debug overlay
@@ -1165,8 +1186,8 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(x, y, 0.0));
                                 let transformation_bkb = position * rotate * squish_bkb;
                                 let transformation_kbg = position * rotate * squish_kbg;
-                                draws.push(self.render_debug_buffers(&render, kbg_arrow.clone(), &transformation_kbg));
-                                draws.push(self.render_debug_buffers(&render, bkb_arrow.clone(), &transformation_bkb));
+                                draws.push(self.render_color_buffers(&render, kbg_arrow.clone(), &transformation_kbg, false, false));
+                                draws.push(self.render_color_buffers(&render, bkb_arrow.clone(), &transformation_bkb, false, false));
                             }
                         }
                     }
@@ -1179,7 +1200,7 @@ impl WgpuGraphics {
                         let rotate = Matrix4::from_angle_z(Rad(arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0));
                         let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
                         let transformation = position * rotate * squish;
-                        draws.push(self.render_debug_buffers(&render, arrow_buffers, &transformation));
+                        draws.push(self.render_color_buffers(&render, arrow_buffers, &transformation, false, false));
                     }
 
                     // draw particles
@@ -1199,7 +1220,7 @@ impl WgpuGraphics {
                                     // TODO: not wireframe
                                 };
                                 let triangle_buffers = Buffers::new_triangle(&self.device, color);
-                                draws.push(self.render_debug_buffers(&render, triangle_buffers, &transformation));
+                                draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
                             }
                             &ParticleType::AirJump => {
                                 let size = Matrix4::from_nonuniform_scale(3.0 + particle.counter_mult(), 1.15 + particle.counter_mult(), 1.0);
@@ -1207,7 +1228,7 @@ impl WgpuGraphics {
                                 let transformation = position * size;
                                 let color = [c[0], c[1], c[2], (1.0 - particle.counter_mult()) * 0.7];
                                 let jump_buffers = Buffers::new_circle(&self.device, color);
-                                draws.push(self.render_debug_buffers(&render, jump_buffers, &transformation));
+                                draws.push(self.render_color_buffers(&render, jump_buffers, &transformation, false, false));
                             }
                             &ParticleType::Hit { knockback, damage } => {
                                 // needs to rendered last to ensure we dont have anything drawn on top of the inversion
@@ -1217,7 +1238,7 @@ impl WgpuGraphics {
                                 let transformation = position * rotate * size;
                                 let color = [0.5, 0.5, 0.5, 1.5];
                                 let hit_buffers = Buffers::new_circle(&self.device, color);
-                                draws.push(self.render_debug_buffers(&render, hit_buffers, &transformation)); // TODO: Invert
+                                draws.push(self.render_color_buffers(&render, hit_buffers, &transformation, false, false)); // TODO: Invert
                             }
                         }
                     }
@@ -1238,7 +1259,7 @@ impl WgpuGraphics {
                             let color = [c[0], c[1], c[2], 1.0];
                             let triangle_buffers = Buffers::new_triangle(&self.device, color);
 
-                            draws.push(self.render_debug_buffers(&render, triangle_buffers, &transformation));
+                            draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
                         }
                         _ => { }
                     }
@@ -1246,14 +1267,14 @@ impl WgpuGraphics {
                 &RenderEntity::RectOutline (ref render_rect) => {
                     let transformation = Matrix4::identity();
                     let buffers = Buffers::rect_outline_buffers(&self.device, &render_rect);
-                    draws.push(self.render_debug_buffers(&render, buffers, &transformation));
+                    draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                 }
                 &RenderEntity::SpawnPoint (ref render_point) => {
                     let buffers = Buffers::new_spawn_point(&self.device, render_point.color);
                     let flip = Matrix4::from_nonuniform_scale(if render_point.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
                     let position = Matrix4::from_translation(Vector3::new(render_point.x, render_point.y, 0.0));
                     let transformation = position * flip;
-                    draws.push(self.render_debug_buffers(&render, buffers, &transformation));
+                    draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                 }
             }
         }
@@ -1272,7 +1293,7 @@ impl WgpuGraphics {
                             shield.color
                         };
                         let buffers = Buffers::new_shield(&self.device, shield, color);
-                        draws.push(self.render_color_buffers(&render, buffers, &position));
+                        draws.push(self.render_color_buffers(&render, buffers, &position, false, true));
                     }
                 }
                 _ => { }
@@ -1473,7 +1494,8 @@ impl WgpuGraphics {
         Draw {
             ty: DrawType::Color {
                 uniform,
-                debug: true
+                debug: true,
+                dimension3: false,
             },
             buffers
         }
@@ -1704,6 +1726,7 @@ impl WgpuGraphics {
                         ty: DrawType::Color {
                             uniform: uniform.clone(),
                             debug: true,
+                            dimension3: false,
                         },
                         buffers
                     });
@@ -1714,6 +1737,7 @@ impl WgpuGraphics {
                         ty: DrawType::Color {
                             uniform,
                             debug: true,
+                            dimension3: false,
                         },
                         buffers
                     });
@@ -1846,7 +1870,7 @@ struct Draw {
 }
 
 enum DrawType {
-    Color         { uniform: TransformUniform, debug: bool },
+    Color         { uniform: TransformUniform, debug: bool, dimension3: bool },
     Hitbox        { uniform: HitboxUniform },
     ModelAnimated { uniform: AnimatedUniform,  texture: Rc<Texture> },
     ModelStatic   { uniform: TransformUniform, texture: Rc<Texture> },
