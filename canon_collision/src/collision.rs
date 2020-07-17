@@ -27,78 +27,77 @@ pub fn collision_check(players: &[Player], fighters: &KeyedContextVec<Fighter>, 
                 let colboxes_atk = frame_atk.get_hitboxes();
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
-                    // TODO: break this out into a seperate function that can be called by the link checking code
-                    let hitbox_atk = colbox_atk.hitbox_ref();
+                    if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
+                        if colbox_shield_collision_check(player_atk_xy, colbox_atk, player_def_xy, player_def, fighter_def) {
+                            result[player_atk_i].push(CollisionResult::HitShieldAtk {
+                                hitbox: hitbox_atk.clone(),
+                                power_shield: fighter_def.power_shield.clone(),
+                                player_def_i
+                            });
+                            result[player_def_i].push(CollisionResult::HitShieldDef {
+                                hitbox: hitbox_atk.clone(),
+                                power_shield: fighter_def.power_shield.clone(),
+                                player_atk_i
+                            });
+                            break 'hitbox_atk;
+                        }
 
-                    if colbox_shield_collision_check(player_atk_xy, colbox_atk, player_def_xy, player_def, fighter_def) {
-                        result[player_atk_i].push(CollisionResult::HitShieldAtk {
-                            hitbox: hitbox_atk.clone(),
-                            power_shield: fighter_def.power_shield.clone(),
-                            player_def_i
-                        });
-                        result[player_def_i].push(CollisionResult::HitShieldDef {
-                            hitbox: hitbox_atk.clone(),
-                            power_shield: fighter_def.power_shield.clone(),
-                            player_atk_i
-                        });
-                        break 'hitbox_atk;
-                    }
+                        if hitbox_atk.enable_clang {
+                            for colbox_def in frame_def.colboxes.iter() {
+                                match &colbox_def.role {
+                                // TODO: How do we only run the clang handler once?
+                                    &CollisionBoxRole::Hit (ref hitbox_def) => {
+                                        if let ColBoxCollisionResult::Hit (point) = colbox_collision_check(player_atk_xy, colbox_atk, player_def_xy, colbox_def) {
+                                            let damage_diff = hitbox_atk.damage as i64 - hitbox_def.damage as i64; // TODO: retrieve proper damage with move staling etc
 
-                    if hitbox_atk.enable_clang {
-                        for colbox_def in frame_def.colboxes.iter() {
-                            match &colbox_def.role {
-                            // TODO: How do we only run the clang handler once?
-                                &CollisionBoxRole::Hit (ref hitbox_def) => {
-                                    if let ColBoxCollisionResult::Hit (point) = colbox_collision_check(player_atk_xy, colbox_atk, player_def_xy, colbox_def) {
-                                        let damage_diff = hitbox_atk.damage as i64 - hitbox_def.damage as i64; // TODO: retrieve proper damage with move staling etc
-
-                                        if damage_diff >= 9 {
-                                            result[player_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
-                                            result[player_def_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
+                                            if damage_diff >= 9 {
+                                                result[player_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
+                                                result[player_def_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
+                                            }
+                                            else if damage_diff <= -9 {
+                                                result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
+                                                result[player_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
+                                            }
+                                            else {
+                                                result[player_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
+                                                result[player_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
+                                            }
+                                            break 'player_atk;
                                         }
-                                        else if damage_diff <= -9 {
-                                            result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
-                                            result[player_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
-                                        }
-                                        else {
-                                            result[player_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
-                                            result[player_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
-                                        }
-                                        break 'player_atk;
                                     }
+                                    _ => { }
                                 }
-                                _ => { }
                             }
                         }
-                    }
 
-                    for colbox_def in frame_def.colboxes.iter() {
-                        match colbox_collision_check(player_atk_xy, colbox_atk, player_def_xy, colbox_def) {
-                            ColBoxCollisionResult::Hit (point) => {
-                                match &colbox_def.role {
-                                    &CollisionBoxRole::Hurt (ref hurtbox) => {
-                                        result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
-                                        result[player_def_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), player_atk_i: player_atk_i });
-                                        break 'player_atk;
+                        for colbox_def in frame_def.colboxes.iter() {
+                            match colbox_collision_check(player_atk_xy, colbox_atk, player_def_xy, colbox_def) {
+                                ColBoxCollisionResult::Hit (point) => {
+                                    match &colbox_def.role {
+                                        &CollisionBoxRole::Hurt (ref hurtbox) => {
+                                            result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
+                                            result[player_def_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), player_atk_i: player_atk_i });
+                                            break 'player_atk;
+                                        }
+                                        &CollisionBoxRole::Invincible => {
+                                            result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
+                                            break 'player_atk;
+                                        }
+                                        _ => { }
                                     }
-                                    &CollisionBoxRole::Invincible => {
-                                        result[player_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), player_def_i: player_def_i, point });
-                                        break 'player_atk;
-                                    }
-                                    _ => { }
                                 }
-                            }
-                            ColBoxCollisionResult::Phantom (_) => {
-                                match &colbox_def.role {
-                                    &CollisionBoxRole::Hurt (ref hurtbox) => {
-                                        result[player_atk_i].push(CollisionResult::PhantomAtk (hitbox_atk.clone(), player_def_i));
-                                        result[player_def_i].push(CollisionResult::PhantomDef (hitbox_atk.clone(), hurtbox.clone()));
-                                        break 'player_atk;
+                                ColBoxCollisionResult::Phantom (_) => {
+                                    match &colbox_def.role {
+                                        &CollisionBoxRole::Hurt (ref hurtbox) => {
+                                            result[player_atk_i].push(CollisionResult::PhantomAtk (hitbox_atk.clone(), player_def_i));
+                                            result[player_def_i].push(CollisionResult::PhantomDef (hitbox_atk.clone(), hurtbox.clone()));
+                                            break 'player_atk;
+                                        }
+                                        _ => { }
                                     }
-                                    _ => { }
                                 }
+                                ColBoxCollisionResult::None => { }
                             }
-                            ColBoxCollisionResult::None => { }
                         }
                     }
                 }

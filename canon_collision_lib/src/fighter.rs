@@ -290,15 +290,28 @@ impl Default for ActionFrame {
 
 impl ActionFrame {
     pub fn get_hitboxes(&self) -> Vec<&CollisionBox> {
-        let mut result: Vec<&CollisionBox> = self.colboxes.iter().collect();
-        result.retain(|x| matches!(x.role, CollisionBoxRole::Hit(_)));
-        result
+        self.colboxes
+            .iter()
+            .filter(|x|
+                match x.role {
+                    CollisionBoxRole::Hit (_) => true,
+                    CollisionBoxRole::Grab    => true,
+                    _                         => false
+                }
+            )
+            .collect()
     }
 
     pub fn get_hurtboxes(&self) -> Vec<&CollisionBox> {
-        let mut result: Vec<&CollisionBox> = self.colboxes.iter().collect();
-        result.retain(|x| matches!(x.role, CollisionBoxRole::Hurt(_)));
-        result
+        self.colboxes
+            .iter()
+            .filter(|x|
+                match x.role {
+                    CollisionBoxRole::Hurt (_) => true,
+                    _                          => false
+                }
+            )
+            .collect()
     }
 }
 
@@ -512,14 +525,6 @@ impl CollisionBox {
             point:  point,
             radius: 1.0,
             role:   CollisionBoxRole::default()
-        }
-    }
-
-    /// Warning: panics when not a hitbox
-    pub fn hitbox_ref(&self) -> &HitBox {
-        match &self.role {
-            &CollisionBoxRole::Hit (ref hitbox) => hitbox,
-            _ => panic!("Called hitbox_ref on a CollisionBox that is not a HitBox")
         }
     }
 }

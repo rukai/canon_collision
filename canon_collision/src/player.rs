@@ -320,7 +320,7 @@ impl Player {
     pub fn grab_xy(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(players, fighters, surfaces);
         if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
-            (x + fighter_frame.grab_hold_x, y + fighter_frame.grab_hold_y)
+            (x + self.relative_f(fighter_frame.grab_hold_x), y + fighter_frame.grab_hold_y)
         } else {
             (x, y)
         }
@@ -574,6 +574,12 @@ impl Player {
                     self.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                }
+                &CollisionResult::GrabAtk (player_def_i) => {
+                    //self.set_action(context, Action::Grabbing);
+                }
+                &CollisionResult::GrabDef (player_atk_i) => {
+                    self.location = Location::GrabbedByPlayer(player_atk_i);
                 }
                 _ => { }
             }
@@ -1445,7 +1451,8 @@ impl Player {
         let lock = stun_lock && stick_lock;
         let power_shield_len = context.fighter.actions[Action::PowerShield as usize].frames.len();
 
-        if !lock && self.check_jump(context) { }
+        if !lock && self.check_grab_shield(context) { }
+        else if !lock && self.check_jump(context) { }
         else if !lock && self.check_pass_platform(context) { }
         else if context.fighter.power_shield.is_some() && self.frame == 0 && (context.input.l.press || context.input.r.press) {
             // allow the first frame to transition to power shield so that powershield input is more consistent
@@ -1466,7 +1473,8 @@ impl Player {
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
 
-        if !lock && self.check_jump(context) { }
+        if !lock && self.check_grab_shield(context) { }
+        else if !lock && self.check_jump(context) { }
         else if !lock && self.check_pass_platform(context) { }
         else if !stun_lock && context.input[0].l_trigger < 0.165 && context.input[0].r_trigger < 0.165 && !context.input[0].l && !context.input[0].r {
             if self.parry_timer > 0 {
@@ -1489,7 +1497,8 @@ impl Player {
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
 
-        if !lock && self.check_jump(context) { }
+        if !lock && self.check_grab_shield(context) { }
+        else if !lock && self.check_jump(context) { }
         else if !lock && self.check_pass_platform(context) { }
         else {
             self.apply_friction(context.fighter);
@@ -1504,7 +1513,8 @@ impl Player {
 
         match (&context.fighter.shield, &context.fighter.power_shield) {
             (&Some(_), &Some(_)) => {
-                if !lock && self.check_jump(context) { }
+                if !lock && self.check_grab_shield(context) { }
+                else if !lock && self.check_jump(context) { }
                 else if !lock && self.check_pass_platform(context) { }
                 self.shield_shared_action(context);
             }
@@ -1765,6 +1775,15 @@ impl Player {
             true
         }
         else {
+            false
+        }
+    }
+
+    fn check_grab_shield(&mut self, context: &mut StepContext) -> bool {
+        if context.input.a.press || context.input.z.press {
+            self.set_action(context, Action::Grab);
+            true
+        } else {
             false
         }
     }
