@@ -2080,6 +2080,7 @@ version = "0.0.1"
 dependencies = [
  "canon_collision_lib",
  "serde_cbor",
+ "strum",
 ]
 
 [[package]]

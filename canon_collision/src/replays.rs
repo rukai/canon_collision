@@ -12,12 +12,12 @@ use canon_collision_lib::replays_files;
 
 pub fn load_replay(name: &str) -> Result<Replay, String> {
     let replay_path = replays_files::get_replay_path(name);
-    files::load_struct_bincode(replay_path)
+    files::load_struct_bincode(&replay_path)
 }
 
 pub fn save_replay(replay: &Replay) {
     let replay_path = replays_files::get_replay_path(&format!("{}.zip", replay.timestamp.to_rfc2822())); // TODO: could still collide under strange circumstances: check and handle
-    files::save_struct_bincode(replay_path, &replay)
+    files::save_struct_bincode(&replay_path, &replay)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

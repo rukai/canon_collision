@@ -20,7 +20,7 @@ impl ControllerMaps {
     }
 
     pub fn load() -> ControllerMaps {
-        if let Ok (json) = files::load_json(ControllerMaps::get_path()) {
+        if let Ok (json) = files::load_json(&ControllerMaps::get_path()) {
             if let Ok (maps) = serde_json::from_value::<ControllerMaps>(json) {
                 return maps;
             }
@@ -32,7 +32,7 @@ impl ControllerMaps {
     }
 
     pub fn save(&self) {
-        files::save_struct(ControllerMaps::get_path(), self);
+        files::save_struct_json(&ControllerMaps::get_path(), self);
     }
 }
 

@@ -76,6 +76,8 @@ impl Default for Fighter {
             friction:                 0.1,
             aerialdodge_mult:         3.0,
             aerialdodge_drift_frame:  20,
+            ledge_grab_x:             -2.0,
+            ledge_grab_y:             -24.0,
             forward_roll:             false,
             backward_roll:            false,
             spot_dodge:               false,
@@ -131,6 +133,8 @@ pub struct Fighter {
     pub friction:                 f32,
     pub aerialdodge_mult:         f32,
     pub aerialdodge_drift_frame:  u64,
+    pub ledge_grab_x:             f32,
+    pub ledge_grab_y:             f32,
     pub forward_roll:             bool,
     pub backward_roll:            bool,
     pub spot_dodge:               bool,
@@ -248,8 +252,10 @@ pub struct ActionFrame {
     pub colboxes:            ContextVec<CollisionBox>,
     pub item_hold_x:         f32,
     pub item_hold_y:         f32,
-    pub grab_hold_x:         f32,
-    pub grab_hold_y:         f32,
+    pub grabbing_x:          f32,
+    pub grabbing_y:          f32,
+    pub grabbed_x:           f32,
+    pub grabbed_y:           f32,
     pub pass_through:        bool, // only used on aerial actions
     pub ledge_cancel:        bool, // only used on ground actions
     pub use_platform_angle:  bool, // only used on ground actions
@@ -264,6 +270,7 @@ pub struct ActionFrame {
     pub x_vel_temp: f32,
     /// Does not affect the next frames velocity
     pub y_vel_temp: f32,
+
 }
 
 impl Default for ActionFrame {
@@ -273,8 +280,10 @@ impl Default for ActionFrame {
             ecb:                 ECB::default(),
             item_hold_x:         4.0,
             item_hold_y:         11.0,
-            grab_hold_x:         4.0,
-            grab_hold_y:         11.0,
+            grabbing_x:          8.0,
+            grabbing_y:          11.0,
+            grabbed_x:           4.0,
+            grabbed_y:           11.0,
             x_vel_modify:        VelModify::None,
             y_vel_modify:        VelModify::None,
             x_vel_temp:          0.0,
@@ -392,6 +401,7 @@ pub enum Action {
     LedgeJumpSlow,
     LedgeGetup,
     LedgeGetupSlow,
+    LedgeIdleChain, // LedgeIdle when another fighter is holding onto this fighter
 
     // Defense
     PowerShield,
@@ -431,8 +441,23 @@ pub enum Action {
     Usmash,
     Dsmash,
     Fsmash,
+
+    // Grabs
     Grab,
     DashGrab,
+    GrabbingIdle,
+    GrabbingEnd,
+    GrabbedIdleAir,
+    GrabbedIdle,
+    GrabbedEnd,
+
+    // Throws
+    Uthrow,
+    Dthrow,
+    Fthrow,
+    Bthrow,
+
+    // Getup attacks
     LedgeAttack,
     LedgeAttackSlow,
     MissedTechAttack,

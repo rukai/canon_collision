@@ -113,14 +113,14 @@ impl Package {
         }
 
         // save all cbor files
-        files::save_struct_cbor(new_path.join("package_meta.cbor"), &self.meta);
+        files::save_struct_cbor(&new_path.join("package_meta.cbor"), &self.meta);
 
         for (key, fighter) in self.fighters.key_value_iter() {
-            files::save_struct_cbor(new_path.join("Fighters").join(key), fighter);
+            files::save_struct_cbor(&new_path.join("Fighters").join(key), fighter);
         }
         
         for (key, stage) in self.stages.key_value_iter() {
-            files::save_struct_cbor(new_path.join("Stages").join(key), stage);
+            files::save_struct_cbor(&new_path.join("Stages").join(key), stage);
         }
 
         // replace old directory with new directory

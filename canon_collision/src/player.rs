@@ -297,7 +297,14 @@ impl Player {
             }
             Location::GrabbedByPlayer (player_i) => {
                 if let Some(player) = players.get(player_i) {
-                     player.grab_xy(players, fighters, surfaces)
+                    if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
+                        let (grabbing_x, grabbing_y) = player.grabbing_xy(players, fighters, surfaces);
+                        let grabbed_x = self.relative_f(fighter_frame.grabbed_x);
+                        let grabbed_y = fighter_frame.grabbed_y;
+                        (grabbing_x - grabbed_x, grabbing_y - grabbed_y)
+                    } else {
+                        (0.0, 0.0)
+                    }
                 } else {
                     (0.0, 0.0)
                 }
@@ -317,10 +324,10 @@ impl Player {
         }
     }
 
-    pub fn grab_xy(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn grabbing_xy(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(players, fighters, surfaces);
         if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
-            (x + self.relative_f(fighter_frame.grab_hold_x), y + fighter_frame.grab_hold_y)
+            (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
         } else {
             (x, y)
         }
@@ -575,11 +582,13 @@ impl Player {
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
-                &CollisionResult::GrabAtk (player_def_i) => {
-                    //self.set_action(context, Action::Grabbing);
+                &CollisionResult::GrabAtk (_player_def_i) => {
+                    self.set_action(context, Action::GrabbingIdle);
                 }
                 &CollisionResult::GrabDef (player_atk_i) => {
+                    self.face_right = !context.players[player_atk_i].face_right;
                     self.location = Location::GrabbedByPlayer(player_atk_i);
+                    self.set_action(context, Action::GrabbedIdle);
                 }
                 _ => { }
             }
@@ -844,6 +853,8 @@ impl Player {
                 Action::ShieldBreakFall  => self.shield_break_fall_action(context.fighter),
                 Action::ShieldBreakGetup => self.shield_break_getup_action(),
                 Action::Stun             => self.stun_action(context),
+                Action::GrabbingIdle     => self.grabbing_idle_action(context),
+                Action::GrabbedIdle      => self.grabbed_idle_action(context),
                 _ => { }
             }
         }
@@ -1580,6 +1591,35 @@ impl Player {
         }
     }
 
+    fn grabbing_idle_action(&mut self, context: &mut StepContext) {
+        self.apply_friction(context.fighter);
+
+        if self.frame_norestart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
+            self.set_action(context, Action::GrabbingEnd);
+        }
+    }
+
+    // TODO: this state should probably be split into standing and airbourne versions
+    //       for now lets try to squash both cases into this one action
+    fn grabbed_idle_action(&mut self, context: &mut StepContext) {
+        if self.frame_norestart > 60 { // TODO: instead check if grabbing player is still in a grabbing state
+            let bps_xy = self.bps_xy(context);
+            if let Some(frame) = self.get_fighter_frame(context.fighter) {
+                // ignore the x offset, we only want to check straight down.
+                let bps_xy_grab_point = (bps_xy.0, bps_xy.1 + frame.grabbed_y);
+                if let Some(platform_i) = self.land_stage_collision(context, bps_xy_grab_point, bps_xy) {
+                    let x = context.stage.surfaces[platform_i].world_x_to_plat_x(bps_xy.0);
+                    self.land(context, platform_i, x);
+                    self.set_action(context, Action::GrabbedEnd);
+                }
+                else {
+                    self.set_airbourne(context);
+                    self.set_action(context, Action::Fall);
+                }
+            }
+        }
+    }
+
     pub fn shield_size(&self, shield: &Shield) -> f32 {
         let analog_size = (1.0 - self.shield_analog) * 0.6;
         let hp_size = (self.shield_hp / shield.hp_max) * shield.hp_scaling;
@@ -1916,7 +1956,6 @@ impl Player {
             Some(Action::ReSpawn)        => self.set_action(context, Action::ReSpawnIdle),
             Some(Action::ReSpawnIdle)    => self.set_action(context, Action::ReSpawnIdle),
             Some(Action::Idle)           => self.set_action(context, Action::Idle),
-            Some(Action::LedgeIdle)      => self.set_action(context, Action::LedgeIdle),
             Some(Action::Teeter)         => self.set_action(context, Action::TeeterIdle),
             Some(Action::TeeterIdle)     => self.set_action(context, Action::TeeterIdle),
             Some(Action::MissedTechIdle) => self.set_action(context, Action::MissedTechIdle),
@@ -1956,6 +1995,8 @@ impl Player {
             Some(Action::LedgeGetupSlow) => self.set_action_idle_from_ledge(context),
             Some(Action::LedgeJump)      => self.set_action_fall_from_ledge_jump(context),
             Some(Action::LedgeJumpSlow)  => self.set_action_fall_from_ledge_jump(context),
+            Some(Action::LedgeIdle)      => self.set_action(context, Action::LedgeIdle),
+            Some(Action::LedgeIdleChain) => self.set_action(context, Action::LedgeIdleChain),
             Some(Action::LedgeGrab) => {
                 self.ledge_idle_timer = 0;
                 self.set_action(context, Action::LedgeIdle);
@@ -2034,11 +2075,24 @@ impl Player {
             Some(Action::Usmash)           => self.set_action(context, Action::Idle),
             Some(Action::Dsmash)           => self.set_action(context, Action::Idle),
             Some(Action::Fsmash)           => self.set_action(context, Action::Idle),
-            Some(Action::Grab)             => self.set_action(context, Action::Idle),
-            Some(Action::DashGrab)         => self.set_action(context, Action::Idle),
             Some(Action::MissedTechAttack) => self.set_action(context, Action::Idle),
             Some(Action::LedgeAttack)      => self.set_action_idle_from_ledge(context),
             Some(Action::LedgeAttackSlow)  => self.set_action_idle_from_ledge(context),
+
+            // Grab
+            Some(Action::Grab)           => self.set_action(context, Action::Idle),
+            Some(Action::DashGrab)       => self.set_action(context, Action::Idle),
+            Some(Action::GrabbingIdle)   => self.set_action(context, Action::GrabbingIdle),
+            Some(Action::GrabbingEnd)    => self.set_action(context, Action::Idle),
+            Some(Action::GrabbedIdleAir) => self.set_action(context, Action::GrabbedIdleAir),
+            Some(Action::GrabbedIdle)    => self.set_action(context, Action::GrabbedIdle),
+            Some(Action::GrabbedEnd)     => self.set_action(context, Action::Idle),
+
+            // Throws
+            Some(Action::Uthrow) => self.set_action(context, Action::Idle),
+            Some(Action::Dthrow) => self.set_action(context, Action::Idle),
+            Some(Action::Fthrow) => self.set_action(context, Action::Idle),
+            Some(Action::Bthrow) => self.set_action(context, Action::Idle),
 
             // Aerials
             Some(Action::Uair)     => self.set_action(context, Action::Fall),
@@ -2556,7 +2610,9 @@ impl Player {
                 self.fastfalled = false;
                 self.air_jumps_left = context.fighter.air_jumps;
                 self.hit_by = None;
-                self.location = Location::GrabbedLedge { platform_i, d_x: -3.0, d_y: -24.0, logic: LedgeLogic::Hog };
+                let d_x = context.fighter.ledge_grab_x;
+                let d_y = context.fighter.ledge_grab_y;
+                self.location = Location::GrabbedLedge { platform_i, d_x, d_y, logic: LedgeLogic::Hog };
                 self.set_action(context, Action::LedgeGrab);
             }
         }

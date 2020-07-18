@@ -21,7 +21,7 @@ impl Config {
     }
 
     pub fn load() -> Config {
-        if let Ok (json) = files::load_json(Config::get_path()) {
+        if let Ok (json) = files::load_json(&Config::get_path()) {
             if let Ok (config) = serde_json::from_value::<Config>(json) {
                 return config;
             }
@@ -31,7 +31,7 @@ impl Config {
     }
 
     pub fn save(&self) {
-        files::save_struct(Config::get_path(), self);
+        files::save_struct_json(&Config::get_path(), self);
     }
 }
 
