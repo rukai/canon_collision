@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use std::{mem, f32};
+use std::borrow::Cow;
 
 use cgmath::Rad;
 use cgmath::prelude::*;
@@ -100,10 +101,10 @@ impl WgpuGraphics {
         ).await.unwrap();
 
         let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
-        let color_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(color_vs));
+        let color_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(color_vs)));
 
         let color_fs = vk_shader_macros::include_glsl!("src/shaders/color-fragment.glsl", kind: frag);
-        let color_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(color_fs));
+        let color_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(color_fs)));
 
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -225,6 +226,16 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
+        let depth_stencil_state_disable = Some(wgpu::DepthStencilStateDescriptor {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Always,
+            stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
+            stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
+            stencil_read_mask: 0,
+            stencil_write_mask: 0,
+        });
+
         let pipeline_debug = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
@@ -244,15 +255,7 @@ impl WgpuGraphics {
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Always,
-                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_read_mask: 0,
-                stencil_write_mask: 0,
-            }),
+            depth_stencil_state: depth_stencil_state_disable.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
@@ -270,10 +273,10 @@ impl WgpuGraphics {
         });
 
         let hitbox_vs = vk_shader_macros::include_glsl!("src/shaders/hitbox-vertex.glsl", kind: vert);
-        let hitbox_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(hitbox_vs));
+        let hitbox_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(hitbox_vs)));
 
         let hitbox_fs = vk_shader_macros::include_glsl!("src/shaders/hitbox-fragment.glsl", kind: frag);
-        let hitbox_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(hitbox_fs));
+        let hitbox_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(hitbox_fs)));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_layout,
@@ -288,15 +291,7 @@ impl WgpuGraphics {
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: &color_states,
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Always,
-                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_read_mask: 0,
-                stencil_write_mask: 0,
-            }),
+            depth_stencil_state: depth_stencil_state_disable,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
@@ -315,16 +310,16 @@ impl WgpuGraphics {
         });
 
         let model3d_standard_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-standard-fragment.glsl", kind: frag);
-        let model3d_standard_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_standard_fs));
+        let model3d_standard_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_standard_fs)));
 
         let model3d_lava_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-lava-fragment.glsl", kind: frag);
-        let model3d_lava_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_lava_fs));
+        let model3d_lava_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_lava_fs)));
 
         let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
-        let model3d_static_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_static_vs));
+        let model3d_static_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_static_vs)));
 
         let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
-        let model3d_animated_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(model3d_animated_vs));
+        let model3d_animated_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_animated_vs)));
 
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -649,7 +644,7 @@ impl WgpuGraphics {
 
         let mut wsd = self.wsd.take().unwrap();
         {
-            let frame = wsd.swap_chain.get_next_frame().unwrap().output;
+            let frame = wsd.swap_chain.get_current_frame().unwrap().output;
 
             let draws = match render.render_type {
                 RenderType::Game(game) => self.game_render(game, &render.command_output),
