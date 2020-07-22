@@ -1203,10 +1203,12 @@ impl WgpuGraphics {
                         let c = particle.color.clone();
                         match &particle.p_type {
                             &ParticleType::Spark { size, .. } => {
-                                let rotate = Matrix4::from_angle_z(Rad(particle.angle));
+                                let rotate = Matrix4::from_angle_x(Rad(particle.angle))
+                                    * Matrix4::from_angle_y(Rad(particle.angle))
+                                    * Matrix4::from_angle_z(Rad(particle.angle));
                                 let size = size * (1.0 - particle.counter_mult());
                                 let size = Matrix4::from_nonuniform_scale(size, size, 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
                                 let transformation = position * rotate * size;
                                 let color = [c[0], c[1], c[2], 1.0];
                                 if c[0] == 1.0 && c[1] == 1.0 && c[2] == 1.0 {
@@ -1219,7 +1221,7 @@ impl WgpuGraphics {
                             }
                             &ParticleType::AirJump => {
                                 let size = Matrix4::from_nonuniform_scale(3.0 + particle.counter_mult(), 1.15 + particle.counter_mult(), 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
                                 let transformation = position * size;
                                 let color = [c[0], c[1], c[2], (1.0 - particle.counter_mult()) * 0.7];
                                 let jump_buffers = Buffers::new_circle(&self.device, color);
@@ -1229,7 +1231,7 @@ impl WgpuGraphics {
                                 // needs to rendered last to ensure we dont have anything drawn on top of the inversion
                                 let size = Matrix4::from_nonuniform_scale(0.2 * knockback, 0.08 * damage, 1.0);
                                 let rotate = Matrix4::from_angle_z(Rad(particle.angle - f32::consts::PI / 2.0));
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, 0.0));
+                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
                                 let transformation = position * rotate * size;
                                 let color = [0.5, 0.5, 0.5, 1.5];
                                 let hit_buffers = Buffers::new_circle(&self.device, color);

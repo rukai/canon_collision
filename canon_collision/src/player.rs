@@ -680,7 +680,7 @@ impl Player {
     fn action_step(&mut self, context: &mut StepContext) {
         self.knockback_particles(context);
 
-        // TODO: Gankro plz ... https://github.com/rust-lang/rust/issues/43244
+        // TODO: Gankra plz ... https://github.com/rust-lang/rust/issues/43244
         let mut new_particles = vec!();
         for mut particle in self.particles.drain(..) {
             if !particle.step() {
@@ -2803,6 +2803,7 @@ impl Player {
             counter_max: 2,
             x:           point.0,
             y:           point.1,
+            z:           0.0,
             angle:       hitbox.angle.to_radians(),
             p_type:      ParticleType::Hit {
                 knockback: hitbox.bkb + hitbox.kbg * 70.0, // TODO: get actual knockback
@@ -2819,6 +2820,7 @@ impl Player {
             counter_max: 40,
             x:           x,
             y:           y,
+            z:           0.0,
             angle:       0.0,
             p_type:      ParticleType::AirJump
         });
@@ -2836,19 +2838,21 @@ impl Player {
         };
 
         for _ in 0..num {
+            let z = context.rng.gen_range(-1.0, 1.0);
             self.particles.push(Particle {
                 color:       graphics::get_team_color3(self.team),
                 counter:     0,
                 counter_max: 30,
                 x:           x,
                 y:           y + self.ecb.top / 2.0,
+                z,
                 angle:       context.rng.gen_range(0.0, 2.0 * PI),
                 p_type:      ParticleType::Spark {
                     x_vel:      angle.cos() * vec_mult * -1.0,
                     y_vel:      angle.sin() * vec_mult * -1.0,
+                    z_vel:      context.rng.gen_range(0.0, 0.4) * z.signum(),
                     size:       context.rng.gen_range(1.0, 3.0),
                     angle_vel:  context.rng.gen_range(0.0, 1.0),
-                    background: true,
                 }
             });
         }
@@ -2856,10 +2860,10 @@ impl Player {
 
     pub fn land_particles(&mut self, context: &mut StepContext) {
         let num = match self.frame_norestart { // use frame_norestart instead as it doesnt get skipped during lcancel
-            1 => 1,
+            1 => 3,
             2 => 1,
-            3 => 2,
-            4 => 4,
+            3 => 4,
+            4 => 2,
             5 => 3,
             6 => 2,
             _ => 0,
@@ -2878,19 +2882,21 @@ impl Player {
         };
 
         for _ in 0..num {
+            let z = context.rng.gen_range(-3.0, 3.0);
             self.particles.push(Particle {
                 color,
                 counter:     0,
                 counter_max: 40,
                 x:           x,
                 y:           y,
+                z,
                 angle:       context.rng.gen_range(0.0, 2.0 * PI),
                 p_type:      ParticleType::Spark {
                     x_vel:      context.rng.gen_range(-0.3, 0.3),
                     y_vel:      context.rng.gen_range(0.0, 0.2),
+                    z_vel:      context.rng.gen_range(0.0, 0.5) * z.signum(),
                     size:       context.rng.gen_range(1.0, 3.0),
                     angle_vel:  context.rng.gen_range(0.0, 1.0),
-                    background: context.rng.gen::<bool>(),
                 }
             });
         }
@@ -2898,6 +2904,7 @@ impl Player {
 
     pub fn dash_particles(&mut self, context: &mut StepContext) {
         let num = match self.frame {
+            0 => 3,
             1 => 1,
             2 => 1,
             3 => 2,
@@ -2911,19 +2918,21 @@ impl Player {
         let x_offset = self.relative_f(3.0);
 
         for _ in 0..num {
+            let z = context.rng.gen_range(-6.0, 6.0);
             self.particles.push(Particle {
                 color:       graphics::get_team_color3(self.team),
                 counter:     0,
                 counter_max: 40,
                 x:           x + x_offset,
                 y:           y,
+                z,
                 angle:       context.rng.gen_range(0.0, 2.0 * PI),
                 p_type:      ParticleType::Spark {
                     x_vel:      if self.face_right { context.rng.gen_range(-0.3, 0.0) } else { context.rng.gen_range(0.0, 0.3) },
                     y_vel:      context.rng.gen_range(0.0, 0.3),
-                    size:       context.rng.gen_range(1.0, 3.0),
+                    z_vel:      context.rng.gen_range(0.0, 0.3) * z.signum(),
+                    size:       context.rng.gen_range(2.0, 4.0),
                     angle_vel:  context.rng.gen_range(0.0, 1.0),
-                    background: context.rng.gen::<bool>(),
                 }
             });
         }
