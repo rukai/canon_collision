@@ -20,6 +20,7 @@ use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use std::{mem, f32};
 use std::borrow::Cow;
+use std::borrow::Cow::Borrowed;
 
 use cgmath::Rad;
 use cgmath::prelude::*;
@@ -109,7 +110,7 @@ impl WgpuGraphics {
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[
+                entries: Borrowed(&[
                     wgpu::BindGroupLayoutEntry::new(
                         0,
                         wgpu::ShaderStage::all(),
@@ -118,12 +119,12 @@ impl WgpuGraphics {
                             min_binding_size: None,
                         },
                     ),
-                ]
+                ])
             }
         );
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout_generic],
-            push_constant_ranges: &[],
+            bind_group_layouts: Borrowed(&[&bind_group_layout_generic]),
+            push_constant_ranges: Borrowed(&[]),
         });
 
         let rasterization_state_back_face_culling = Some(wgpu::RasterizationStateDescriptor {
@@ -170,26 +171,26 @@ impl WgpuGraphics {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -200,26 +201,26 @@ impl WgpuGraphics {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -240,11 +241,11 @@ impl WgpuGraphics {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Ccw,
@@ -254,18 +255,18 @@ impl WgpuGraphics {
                 depth_bias_clamp: 0.0,
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state_disable.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -282,27 +283,27 @@ impl WgpuGraphics {
             layout: &pipeline_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &hitbox_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &hitbox_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state_disable,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float2, // position
                         1 => Float,  // edge
                         2 => Uint    // render_id
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -324,7 +325,7 @@ impl WgpuGraphics {
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[
+                entries: Borrowed(&[
                     wgpu::BindGroupLayoutEntry::new(
                         0,
                         wgpu::ShaderStage::all(),
@@ -347,38 +348,38 @@ impl WgpuGraphics {
                         wgpu::ShaderStage::FRAGMENT,
                         wgpu::BindingType::Sampler { comparison: false },
                     ),
-                ]
+                ])
             }
         );
         let pipeline_model3d_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout_model3d],
-            push_constant_ranges: &[],
+            bind_group_layouts: Borrowed(&[&bind_group_layout_model3d]),
+            push_constant_ranges: Borrowed(&[]),
         });
 
         let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             layout: &pipeline_model3d_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_standard_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2  // uv
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -389,26 +390,26 @@ impl WgpuGraphics {
             layout: &pipeline_model3d_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_lava_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2  // uv
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -419,28 +420,28 @@ impl WgpuGraphics {
             layout: &pipeline_model3d_layout,
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_animated_vs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_standard_fs_module,
-                entry_point: "main",
+                entry_point: Borrowed("main"),
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: &color_states,
+            color_states: Borrowed(&color_states),
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
+                    attributes: Borrowed(&wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2, // uv
                         2 => Uint4,  // joints
                         3 => Float4  // weights
-                    ],
-                }],
+                    ]),
+                }]),
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -676,14 +677,14 @@ impl WgpuGraphics {
             let mut bind_groups = vec!();
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                    color_attachments: Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &wsd.multisampled_framebuffer,
                         resolve_target: Some(&frame.view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
                         },
-                    }],
+                    }]),
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                         attachment: &wsd.depth_stencil,
                         depth_ops: Some(wgpu::Operations {
@@ -706,27 +707,27 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                entries: &[wgpu::BindGroupEntry {
+                                entries: Borrowed(&[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
-                                }]
+                                }])
                             })
                         }
                         DrawType::Hitbox { .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                entries: &[wgpu::BindGroupEntry {
+                                entries: Borrowed(&[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
-                                }]
+                                }])
                             })
                         }
                         DrawType::ModelAnimated { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: &[
+                                entries: Borrowed(&[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
@@ -739,14 +740,14 @@ impl WgpuGraphics {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ]
+                                ])
                             })
                         }
                         DrawType::ModelStatic { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: &[
+                                entries: Borrowed(&[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
@@ -759,14 +760,14 @@ impl WgpuGraphics {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ]
+                                ])
                             })
                         }
                         DrawType::Lava { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: &[
+                                entries: Borrowed(&[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
@@ -779,7 +780,7 @@ impl WgpuGraphics {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ]
+                                ])
                             })
                         }
                     };

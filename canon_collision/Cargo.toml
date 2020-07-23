@@ -43,9 +43,9 @@ bytemuck = "1"
 
 vk-shader-macros = { version = "0.2", optional = true }
 #wgpu_glyph = { version = "0.9", optional = true }
-wgpu_glyph = { git = "https://github.com/rukai/wgpu_glyph", rev = "7e57959a7232372cc227a425b62baa14b5aaf034", optional = true }
+wgpu_glyph = { git = "https://github.com/rukai/wgpu_glyph", rev = "6d22487ae905abcdade6d2bb06f275ead048af2e", optional = true }
 #wgpu = { version = "0.5", optional = true }
-wgpu = { version = "0.5.0", git = "https://github.com/gfx-rs/wgpu-rs", rev = "96f4dda7567b2ddc04f155b98c1183ce57af8f04", optional = true }
+wgpu = { version = "0.5.0", git = "https://github.com/gfx-rs/wgpu-rs", rev = "a85db74cb899c2615bd6d7ef2dd6dffc4431d444", optional = true }
 raw-window-handle = "0.3"
 
 [features]

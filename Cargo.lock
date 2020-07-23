@@ -430,22 +430,22 @@ dependencies = [
  "bitflags",
  "block",
  "core-foundation 0.7.0",
- "core-graphics 0.19.2",
+ "core-graphics",
  "foreign-types",
  "libc",
  "objc",
 ]
 
 [[package]]
-name = "cocoa"
-version = "0.22.0"
+name = "cocoa-foundation"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "667fdc068627a2816b9ff831201dd9864249d6ee8d190b9532357f1fc0f61ea7"
+checksum = "7ade49b65d560ca58c403a479bb396592b155c0185eada742ee323d1d68d6318"
 dependencies = [
  "bitflags",
  "block",
  "core-foundation 0.9.0",
- "core-graphics 0.21.0",
+ "core-graphics-types",
  "foreign-types",
  "libc",
  "objc",
@@ -524,10 +524,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "core-graphics"
-version = "0.21.0"
+name = "core-graphics-types"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a67c4378cf203eace8fb6567847eb641fd6ff933c1145a115c6ee820ebb978"
+checksum = "e92f5d519093a4178296707dbaa3880eae85a5ef5386675f361a1cf25376e93c"
 dependencies = [
  "bitflags",
  "core-foundation 0.9.0",
@@ -543,7 +543,7 @@ checksum = "34ecad23610ad9757664d644e369246edde1803fcb43ed72876565098a5d3828"
 dependencies = [
  "cfg-if",
  "core-foundation-sys 0.7.0",
- "core-graphics 0.19.2",
+ "core-graphics",
  "libc",
  "objc",
 ]
@@ -565,12 +565,12 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cced8691919c02aac3cb0a1bc2e9b73d89e832bf9a06fc579d4e71b68a2da061"
+checksum = "09ee0cc8804d5393478d743b035099520087a5186f3b93fa58cec08fa62407b6"
 dependencies = [
+ "cfg-if",
  "crossbeam-utils",
- "maybe-uninit",
 ]
 
 [[package]]
@@ -1076,14 +1076,14 @@ dependencies = [
 
 [[package]]
 name = "gfx-backend-metal"
-version = "0.5.5"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77fe42f6685bac32650a52de5fd3adc2f72d316bbf85969b307f42abf5fce9b6"
+checksum = "92804d20b194de6c84cb4bec14ec6a6dcae9c51f0a9186817fb412a590131ae6"
 dependencies = [
  "arrayvec",
  "bitflags",
  "block",
- "cocoa 0.22.0",
+ "cocoa-foundation",
  "copyless",
  "foreign-types",
  "gfx-auxil",
@@ -1102,14 +1102,14 @@ dependencies = [
 
 [[package]]
 name = "gfx-backend-vulkan"
-version = "0.5.10"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84ab530c440abee3e8bb31c3920a9e7047a3a676f8fe9f2541416dd407cf956a"
+checksum = "aec9c919cfc236d2c36aaa38609c1906a92f2df99a3c7f53022b01936f98275a"
 dependencies = [
  "arrayvec",
  "ash",
  "byteorder",
- "core-graphics 0.19.2",
+ "core-graphics-types",
  "gfx-hal",
  "lazy_static",
  "log",
@@ -1785,13 +1785,13 @@ dependencies = [
 
 [[package]]
 name = "metal"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f7ed263bb25a70ee127f56017cfc0916d1fc643be493a7c1e532700a0e57fda"
+checksum = "5c4e8a431536529327e28c9ba6992f2cb0c15d4222f0602a16e6d7695ff3bccf"
 dependencies = [
  "bitflags",
  "block",
- "cocoa 0.22.0",
+ "cocoa-foundation",
  "foreign-types",
  "log",
  "objc",
@@ -3042,9 +3042,9 @@ dependencies = [
 
 [[package]]
 name = "tracing"
-version = "0.1.16"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2e2a2de6b0d5cbb13fc21193a2296888eaab62b6044479aafb3c54c01c29fcd"
+checksum = "dbdf4ccd1652592b01286a5dbe1e2a77d78afaa34beadd9872a5f7396f92aaa9"
 dependencies = [
  "cfg-if",
  "tracing-core",
@@ -3354,7 +3354,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs?rev=96f4dda7567b2ddc04f155b98c1183ce57af8f04#96f4dda7567b2ddc04f155b98c1183ce57af8f04"
+source = "git+https://github.com/gfx-rs/wgpu-rs?rev=a85db74cb899c2615bd6d7ef2dd6dffc4431d444#a85db74cb899c2615bd6d7ef2dd6dffc4431d444"
 dependencies = [
  "arrayvec",
  "futures",
@@ -3376,7 +3376,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=3c6ee8766ae8df8fc5c2b70f7c37d634ff3b79aa#3c6ee8766ae8df8fc5c2b70f7c37d634ff3b79aa"
+source = "git+https://github.com/gfx-rs/wgpu?rev=4ed2c0a313deb48a99f15e8fe0558ad3d095ca01#4ed2c0a313deb48a99f15e8fe0558ad3d095ca01"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -3404,7 +3404,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.5.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=3c6ee8766ae8df8fc5c2b70f7c37d634ff3b79aa#3c6ee8766ae8df8fc5c2b70f7c37d634ff3b79aa"
+source = "git+https://github.com/gfx-rs/wgpu?rev=4ed2c0a313deb48a99f15e8fe0558ad3d095ca01#4ed2c0a313deb48a99f15e8fe0558ad3d095ca01"
 dependencies = [
  "bitflags",
 ]
@@ -3412,7 +3412,7 @@ dependencies = [
 [[package]]
 name = "wgpu_glyph"
 version = "0.9.0"
-source = "git+https://github.com/rukai/wgpu_glyph?rev=7e57959a7232372cc227a425b62baa14b5aaf034#7e57959a7232372cc227a425b62baa14b5aaf034"
+source = "git+https://github.com/rukai/wgpu_glyph?rev=6d22487ae905abcdade6d2bb06f275ead048af2e#6d22487ae905abcdade6d2bb06f275ead048af2e"
 dependencies = [
  "glyph_brush",
  "log",
@@ -3470,9 +3470,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e4ccbf7ddb6627828eace16cacde80fc6bf4dbb3469f88487262a02cf8e7862"
 dependencies = [
  "bitflags",
- "cocoa 0.20.2",
+ "cocoa",
  "core-foundation 0.7.0",
- "core-graphics 0.19.2",
+ "core-graphics",
  "core-video-sys",
  "dispatch",
  "instant",
