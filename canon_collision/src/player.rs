@@ -3,6 +3,7 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
+use crate::entity::{Entity, StepContext};
 
 use canon_collision_lib::fighter::*;
 use canon_collision_lib::geometry::Rect;
@@ -110,16 +111,6 @@ impl Hitlag {
     }
 }
 
-pub struct StepContext<'a> {
-    pub input:    &'a PlayerInput,
-    pub players:  &'a [Player],
-    pub fighters: &'a KeyedContextVec<Fighter>,
-    pub fighter:  &'a Fighter,
-    pub stage:    &'a Stage,
-    pub surfaces: &'a [Surface],
-    pub rng:      &'a mut ChaChaRng,
-}
-
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct Player {
     pub fighter:            String,
@@ -177,12 +168,12 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(fighter: String, team: usize, player_i: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
+    pub fn new(fighter: String, team: usize, entity_i: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
         } else {
-            Some(stage.spawn_points[player_i % stage.spawn_points.len()].clone())
+            Some(stage.spawn_points[entity_i % stage.spawn_points.len()].clone())
         };
 
         let location = if let Some(spawn) = &spawn {
@@ -270,11 +261,11 @@ impl Player {
         }
     }
 
-    fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
-        self.public_bps_xy(&context.players, &context.fighters, &context.surfaces)
+    pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
+        self.public_bps_xy(&context.entities, &context.fighters, &context.surfaces)
     }
 
-    pub fn public_bps_xy(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn public_bps_xy(&self, entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let bps_xy = match self.location {
             Location::Surface { platform_i, x } => {
                 if let Some(platform) = surfaces.get(platform_i) {
@@ -295,10 +286,10 @@ impl Player {
                     (0.0, 0.0)
                 }
             }
-            Location::GrabbedByPlayer (player_i) => {
-                if let Some(player) = players.get(player_i) {
+            Location::GrabbedByPlayer (entity_i) => {
+                if let Some(player) = entities.get(entity_i) {
                     if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
-                        let (grabbing_x, grabbing_y) = player.grabbing_xy(players, fighters, surfaces);
+                        let (grabbing_x, grabbing_y) = player.grabbing_xy(entities, fighters, surfaces);
                         let grabbed_x = self.relative_f(fighter_frame.grabbed_x);
                         let grabbed_y = fighter_frame.grabbed_y;
                         (grabbing_x - grabbed_x, grabbing_y - grabbed_y)
@@ -324,7 +315,7 @@ impl Player {
         }
     }
 
-    pub fn grabbing_xy(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn grabbing_xy(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(players, fighters, surfaces);
         if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
             (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
@@ -435,7 +426,7 @@ impl Player {
         self.frame == fighter.actions[self.action as usize].frames.len() as i64 - 1
     }
 
-    pub fn platform_deleted(&mut self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+    pub fn platform_deleted(&mut self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
         let fall = match &mut self.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
             &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
@@ -468,7 +459,7 @@ impl Player {
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, player_atk_i } => {
-                    let player_atk = &context.players[player_atk_i];
+                    let player_atk = &context.entities[player_atk_i];
 
                     let damage_done = hitbox.damage * hurtbox.damage_mult; // TODO: apply staling
                     self.damage += damage_done;
@@ -528,8 +519,8 @@ impl Player {
                     let angle_rad = angle_deg.to_radians() + if angle_deg < 0.0 { PI * 2.0 } else { 0.0 };
 
                     // handle reverse hits
-                    let behind_player_atk = self.bps_xy(context).0 < player_atk.bps_xy(context).0 && player_atk.face_right ||
-                                            self.bps_xy(context).0 > player_atk.bps_xy(context).0 && !player_atk.face_right;
+                    let behind_player_atk = self.bps_xy(context).0 < player_atk.bps_xy(context).0 && player_atk.face_right() ||
+                                            self.bps_xy(context).0 > player_atk.bps_xy(context).0 && !player_atk.face_right();
                     let angle = if hitbox.enable_reverse_hit && behind_player_atk { PI - angle_rad } else { angle_rad };
 
                     // debug data
@@ -542,21 +533,23 @@ impl Player {
                     self.face_right = self.bps_xy(context).0 < player_atk.bps_xy(context).0;
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, player_def_i} => {
-                    self.hitlist.push(player_def_i);
-                    if let &Some(ref power_shield) = power_shield {
-                        if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(self.action), &power_shield.enemy_stun) {
-                            if stun.window > context.players[player_def_i].frame as u64 {
-                                self.stun_timer = stun.duration;
+                    if let Entity::Player (player_def) = &context.entities[player_def_i] {
+                        self.hitlist.push(player_def_i);
+                        if let &Some(ref power_shield) = power_shield {
+                            if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(self.action), &power_shield.enemy_stun) {
+                                if stun.window > player_def.frame as u64 {
+                                    self.stun_timer = stun.duration;
+                                }
                             }
                         }
-                    }
 
-                    let x_diff = self.bps_xy(context).0 - context.players[player_def_i].bps_xy(context).0;
-                    let vel = hitbox.damage.floor() * (context.players[player_def_i].shield_analog - 0.3) * 0.1 + 0.02;
-                    if self.is_platform() {
-                        self.x_vel += vel * x_diff.signum();
+                        let x_diff = self.bps_xy(context).0 - player_def.bps_xy(context).0;
+                        let vel = hitbox.damage.floor() * (player_def.shield_analog - 0.3) * 0.1 + 0.02;
+                        if self.is_platform() {
+                            self.x_vel += vel * x_diff.signum();
+                        }
+                        self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                     }
-                    self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
                 &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, player_atk_i } => {
                     if let &Some(ref power_shield) = power_shield {
@@ -576,7 +569,7 @@ impl Player {
 
                     let analog_mult = 1.0 - (self.shield_analog - 0.3) / 0.7;
                     let vel_mult = if self.parry_timer > 0 { 1.0 } else { 0.6 };
-                    let x_diff = self.bps_xy(context).0 - context.players[player_atk_i].bps_xy(context).0;
+                    let x_diff = self.bps_xy(context).0 - context.entities[player_atk_i].bps_xy(context).0;
                     let vel = (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
                     self.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
@@ -586,7 +579,7 @@ impl Player {
                     self.set_action(context, Action::GrabbingIdle);
                 }
                 &CollisionResult::GrabDef (player_atk_i) => {
-                    self.face_right = !context.players[player_atk_i].face_right;
+                    self.face_right = !context.entities[player_atk_i].face_right();
                     self.location = Location::GrabbedByPlayer(player_atk_i);
                     self.set_action(context, Action::GrabbedIdle);
                 }
@@ -1628,7 +1621,7 @@ impl Player {
         shield.scaling * (analog_size + hp_size) + hp_size_unscaled
     }
 
-    fn shield_pos(&self, shield: &Shield, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    fn shield_pos(&self, shield: &Shield, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let xy = self.public_bps_xy(players, fighters, surfaces);
         (
             xy.0 + self.shield_offset_x + self.relative_f(shield.offset_x),
@@ -2139,12 +2132,7 @@ impl Player {
     }
 
     pub fn relative_f(&self, input: f32) -> f32 {
-        if self.face_right {
-            input
-        }
-        else {
-            input * -1.0
-        }
+        input * if self.face_right { 1.0 } else { -1.0 }
     }
 
     /// Helper function to safely get the current fighter frame
@@ -2156,7 +2144,7 @@ impl Player {
     /// However the action_hitlag_step logic will correct any invalid indexes
     /// So anything hit by the action_hitlag_step logic doesnt need to use this helper
     /// however its not harmful either.
-    fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
+    pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
         if fighter.actions.len() > self.action as usize {
             let fighter_frames = &fighter.actions[self.action as usize].frames;
             if fighter_frames.len() > self.frame as usize {
@@ -2164,39 +2152,6 @@ impl Player {
             }
         }
         None
-    }
-
-    pub fn relative_frame(&self, fighter: &Fighter, surfaces: &[Surface]) -> ActionFrame {
-        let angle = self.angle(fighter, surfaces);
-        if let Some(fighter_frame) = self.get_fighter_frame(fighter) {
-            let mut fighter_frame = fighter_frame.clone();
-
-            // fix hitboxes
-            for colbox in fighter_frame.colboxes.iter_mut() {
-                let (raw_x, y) = colbox.point;
-                let x = self.relative_f(raw_x);
-                let angled_x = x * angle.cos() - y * angle.sin();
-                let angled_y = x * angle.sin() + y * angle.cos();
-                colbox.point = (angled_x, angled_y);
-                if let &mut CollisionBoxRole::Hit (ref mut hitbox) = &mut colbox.role {
-                    if !self.face_right {
-                        hitbox.angle = 180.0 - hitbox.angle
-                    };
-                }
-            }
-
-            // fix velocity modifier
-            fighter_frame.x_vel_modify = match fighter_frame.x_vel_modify {
-                VelModify::Set (x_vel) => VelModify::Set(self.relative_f(x_vel)),
-                VelModify::Add (x_vel) => VelModify::Add(self.relative_f(x_vel)),
-                VelModify::None        => VelModify::None,
-            };
-            fighter_frame.x_vel_temp = self.relative_f(fighter_frame.x_vel_temp);
-
-            fighter_frame
-        } else {
-            ActionFrame::default()
-        }
     }
 
     fn specialfall_action(&mut self, context: &mut StepContext) {
@@ -2230,7 +2185,7 @@ impl Player {
      *  Begin physics section
      */
 
-    pub fn physics_step(&mut self, context: &mut StepContext, player_i: usize, game_frame: usize, goal: Goal) {
+    pub fn physics_step(&mut self, context: &mut StepContext, entity_i: usize, game_frame: usize, goal: Goal) {
         if let Hitlag::None = self.hitlag {
             let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
 
@@ -2303,7 +2258,7 @@ impl Player {
             let blast = &context.stage.blast;
             let (x, y) = self.bps_xy(context);
             if x < blast.left() || x > blast.right() || y < blast.bot() || y > blast.top() {
-                self.die(context, player_i, game_frame, goal);
+                self.die(context, entity_i, game_frame, goal);
             }
 
             // ledge grabs
@@ -2430,7 +2385,7 @@ impl Player {
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
         match Action::from_u64(self.action) {
             Some(Action::Eliminated) => None,
             _ => {
@@ -2546,12 +2501,12 @@ impl Player {
         self.set_action(context, Action::Dash);
     }
 
-    fn die(&mut self, context: &mut StepContext, player_i: usize, game_frame: usize, goal: Goal) {
+    fn die(&mut self, context: &mut StepContext, entity_i: usize, game_frame: usize, goal: Goal) {
         if context.stage.respawn_points.len() == 0 {
             self.location = Location::Airbourne { x: 0.0, y: 0.0 };
             self.face_right = true;
         } else {
-            let respawn = &context.stage.respawn_points[player_i % context.stage.respawn_points.len()];
+            let respawn = &context.stage.respawn_points[entity_i % context.stage.respawn_points.len()];
             self.location = Location::Airbourne { x: respawn.x, y: respawn.y };
             self.face_right = respawn.face_right;
         }
@@ -2592,8 +2547,8 @@ impl Player {
 
     fn check_ledge_grab(&mut self, context: &mut StepContext, ledge_grab_box: &LedgeGrabBox) {
         for (platform_i, platform) in context.surfaces.iter().enumerate() {
-            let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.players.iter().all(|x| !x.is_hogging_ledge(platform_i, true));
-            let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.players.iter().all(|x| !x.is_hogging_ledge(platform_i, false));
+            let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.entities.iter().all(|x| !x.is_hogging_ledge(platform_i, true));
+            let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.entities.iter().all(|x| !x.is_hogging_ledge(platform_i, false));
 
             // If both left and right ledges are in range then keep the same direction.
             // This prevents always facing left or right on small surfaces.
@@ -2635,7 +2590,8 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, fighter: &Fighter, player_input: &PlayerInput, debug: &DebugPlayer, index: usize) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugPlayer, index: usize) -> Vec<String> {
+        let fighter = &fighters[self.fighter.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
             lines.push(format!("Player: {}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
@@ -2695,7 +2651,7 @@ impl Player {
         }
     }
 
-    fn render_frame(&self, players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayerFrame {
+    fn render_frame(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayerFrame {
         let fighter = &fighters[self.fighter.as_ref()];
         RenderPlayerFrame {
             fighter:     self.fighter.clone(),
@@ -2709,7 +2665,7 @@ impl Player {
         }
     }
 
-    pub fn render(&self, selected_colboxes: HashSet<usize>, fighter_selected: bool, player_selected: bool, debug: DebugPlayer, player_index: usize, player_history: &[Vec<Player>], players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
+    pub fn render(&self, selected_colboxes: HashSet<usize>, fighter_selected: bool, player_selected: bool, debug: DebugPlayer, entity_i: usize, player_history: &[Vec<Entity>], players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
         let fighter_color = graphics::get_team_color3(self.team);
         let fighter = &fighters[self.fighter.as_ref()];
         let mut vector_arrows = vec!();
@@ -2764,10 +2720,11 @@ impl Player {
         let mut frames = vec!(self.render_frame(players, fighters, surfaces));
         let range = player_history.len().saturating_sub(10) .. player_history.len();
         for players in player_history[range].iter().rev() {
-            let player = &players[player_index];
-            // handle deleted frames by just skipping it, only encountered when the editor is used.
-            if fighter.actions[player.action as usize].frames.len() > player.frame as usize {
-                frames.push(players[player_index].render_frame(players, fighters, surfaces));
+            if let Entity::Player (player) = &players[entity_i] {
+                // handle deleted frames by just skipping it, only encountered when the editor is used.
+                if fighter.actions[player.action as usize].frames.len() > player.frame as usize {
+                    frames.push(player.render_frame(players, fighters, surfaces));
+                }
             }
         }
 
@@ -2775,7 +2732,7 @@ impl Player {
             team:        self.team,
             damage:      self.damage,
             stocks:      self.stocks,
-            frame_data:  self.relative_frame(fighter, surfaces),
+            frame_data:  self.get_fighter_frame(fighter).cloned().unwrap_or_default(), // TODO: doesnt take into account player angle/face_right. Fix by moving hitbox rendering to be entity level rather then player level
             particles:   self.particles.clone(),
             frames,
             debug,
@@ -2996,54 +2953,54 @@ pub struct VectorArrow {
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
-pub enum RenderFighter {
+pub enum RenderEntity {
     Normal,
     NormalAndDebug,
     Debug,
     DebugOnionSkin,
 }
 
-impl RenderFighter {
+impl RenderEntity {
     pub fn step(&mut self) {
         *self = match self {
-            RenderFighter::Normal         => RenderFighter::NormalAndDebug,
-            RenderFighter::NormalAndDebug => RenderFighter::Debug,
-            RenderFighter::Debug          => RenderFighter::DebugOnionSkin,
-            RenderFighter::DebugOnionSkin => RenderFighter::Normal,
+            RenderEntity::Normal         => RenderEntity::NormalAndDebug,
+            RenderEntity::NormalAndDebug => RenderEntity::Debug,
+            RenderEntity::Debug          => RenderEntity::DebugOnionSkin,
+            RenderEntity::DebugOnionSkin => RenderEntity::Normal,
         };
     }
 
     pub fn normal(&self) -> bool {
         match self {
-            RenderFighter::Normal         => true,
-            RenderFighter::NormalAndDebug => true,
-            RenderFighter::Debug          => false,
-            RenderFighter::DebugOnionSkin => false,
+            RenderEntity::Normal         => true,
+            RenderEntity::NormalAndDebug => true,
+            RenderEntity::Debug          => false,
+            RenderEntity::DebugOnionSkin => false,
         }
     }
 
     pub fn debug(&self) -> bool {
         match self {
-            RenderFighter::Normal         => false,
-            RenderFighter::NormalAndDebug => true,
-            RenderFighter::Debug          => true,
-            RenderFighter::DebugOnionSkin => true,
+            RenderEntity::Normal         => false,
+            RenderEntity::NormalAndDebug => true,
+            RenderEntity::Debug          => true,
+            RenderEntity::DebugOnionSkin => true,
         }
     }
 
     pub fn onion_skin(&self) -> bool {
         match self {
-            RenderFighter::Normal         => false,
-            RenderFighter::NormalAndDebug => false,
-            RenderFighter::Debug          => false,
-            RenderFighter::DebugOnionSkin => true,
+            RenderEntity::Normal         => false,
+            RenderEntity::NormalAndDebug => false,
+            RenderEntity::Debug          => false,
+            RenderEntity::DebugOnionSkin => true,
         }
     }
 }
 
-impl Default for RenderFighter {
+impl Default for RenderEntity {
     fn default() -> Self {
-        RenderFighter::Normal
+        RenderEntity::Normal
     }
 }
 
@@ -3059,7 +3016,7 @@ pub struct DebugPlayer {
     pub di_vector:      bool,
     pub hitbox_vectors: bool,
     pub ecb:            bool,
-    pub fighter:        RenderFighter,
+    pub fighter:        RenderEntity,
     pub cam_area:       bool,
 }
 
@@ -3121,7 +3078,7 @@ impl DebugPlayer {
             di_vector:      true,
             hitbox_vectors: true,
             ecb:            true,
-            fighter:        RenderFighter::NormalAndDebug,
+            fighter:        RenderEntity::NormalAndDebug,
             cam_area:       true,
         }
     }

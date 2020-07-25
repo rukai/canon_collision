@@ -2,11 +2,12 @@ use crate::camera::Camera;
 use crate::collision::collision_check;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
-use crate::player::{Player, RenderPlayer, DebugPlayer, StepContext};
+use crate::player::{Player, RenderPlayer, DebugPlayer};
 use crate::replays::Replay;
 use crate::replays;
 use crate::results::{GameResults, RawPlayerResult, PlayerResult};
 use crate::rules::{Rules, Goal};
+use crate::entity::{Entity, StepContext};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -43,14 +44,14 @@ pub struct Game {
     pub package:                Package,
     pub init_seed:              u64,
     pub state:                  GameState,
-    pub player_history:         Vec<Vec<Player>>,
+    pub entity_history:         Vec<Vec<Entity>>,
     pub stage_history:          Vec<Stage>,
     pub current_frame:          usize,
     pub saved_frame:            usize,
     pub deleted_history_frames: usize,
     pub max_history_frames:     Option<usize>,
     pub stage:                  Stage,
-    pub players:                Vec<Player>,
+    pub entities:               Vec<Entity>,
     pub debug_stage:            DebugStage,
     pub debug_players:          Vec<DebugPlayer>,
     pub selected_controllers:   Vec<usize>,
@@ -91,14 +92,14 @@ impl Game {
         };
 
         // generate players
-        let mut players:       Vec<Player>      = vec!();
+        let mut entities:      Vec<Entity>      = vec!();
         let mut debug_players: Vec<DebugPlayer> = vec!();
         {
             for (i, player) in setup.players.iter().enumerate() {
                 // Stage can have less spawn points then players
                 let fighter = player.fighter.clone();
                 let team = player.team;
-                players.push(Player::new(fighter, team, i, &stage, &package, &setup.rules));
+                entities.push(Entity::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)));
                 if setup.debug {
                     debug_players.push(DebugPlayer::all());
                 }
@@ -107,8 +108,9 @@ impl Game {
                 }
             }
         }
-        if let Some(overwrite) = setup.hot_reload_players {
-            players = overwrite;
+
+        if let Some(overwrite) = setup.hot_reload_entities {
+            entities = overwrite;
         }
         if let Some(overwrite) = setup.debug_players {
             debug_players = overwrite;
@@ -117,7 +119,7 @@ impl Game {
         Game {
             init_seed:              setup.init_seed,
             state:                  setup.state,
-            player_history:         setup.player_history,
+            entity_history:         setup.entity_history,
             stage_history:          setup.stage_history,
             current_frame:          setup.current_frame,
             saved_frame:            0,
@@ -139,7 +141,7 @@ impl Game {
             prev_mouse_point:       None,
             package,
             stage,
-            players,
+            entities,
             debug_stage,
             debug_players,
         }
@@ -186,7 +188,7 @@ impl Game {
                 self.camera.update_os_input(os_input);
                 self.prev_mouse_point = os_input.mouse();
             }
-            self.camera.update(os_input, &self.players, &self.package.fighters, &self.stage);
+            self.camera.update(os_input, &self.entities, &self.package.fighters, &self.stage);
 
             self.generate_debug(input, netplay);
         }
@@ -240,34 +242,34 @@ impl Game {
 
     fn set_context(&mut self) {
         match self.edit {
-            Edit::Fighter (player) => {
-                let player_fighter  = self.players[player].fighter.as_ref();
-                let player_action   = self.players[player].action as usize;
-                let player_frame    = self.players[player].frame as usize;
-                let player_colboxes = self.selector.colboxes_vec();
+            Edit::Entity (entity_i) => {
+                let entity_def_key  = self.entities[entity_i].entity_def_key().as_ref();
+                let entity_action   = self.entities[entity_i].action() as usize;
+                let entity_frame    = self.entities[entity_i].frame() as usize;
+                let entity_colboxes = self.selector.colboxes_vec();
 
                 let fighters = &mut self.package.fighters;
-                if let Some(fighter_index) = fighters.key_to_index(player_fighter) {
+                if let Some(fighter_index) = fighters.key_to_index(entity_def_key) {
                     fighters.set_context(fighter_index);
                 }
                 else {
                     return;
                 }
 
-                let actions = &mut fighters[player_fighter].actions;
-                if player_action >= actions.len() {
+                let actions = &mut fighters[entity_def_key].actions;
+                if entity_action >= actions.len() {
                     return;
                 }
-                actions.set_context(player_action);
+                actions.set_context(entity_action);
 
-                let frames = &mut actions[player_action].frames;
-                if player_frame >= frames.len() {
+                let frames = &mut actions[entity_action].frames;
+                if entity_frame >= frames.len() {
                     return;
                 }
-                frames.set_context(player_frame);
+                frames.set_context(entity_frame);
 
-                let colboxes = &mut frames[player_frame].colboxes;
-                colboxes.set_context_vec(player_colboxes);
+                let colboxes = &mut frames[entity_frame].colboxes;
+                colboxes.set_context_vec(entity_colboxes);
             }
             Edit::Stage => {
                 self.stage.surfaces.set_context_vec(self.selector.surfaces_vec());
@@ -279,13 +281,13 @@ impl Game {
     }
 
     fn step_local(&mut self, input: &mut Input, netplay: &Netplay) {
-        self.player_history.push(self.players.clone());
+        self.entity_history.push(self.entities.clone());
         self.stage_history.push(self.stage.clone());
         self.current_frame += 1;
 
         // erase any future history
-        for _ in self.current_history_index()..self.player_history.len() {
-            self.player_history.pop();
+        for _ in self.current_history_index()..self.entity_history.len() {
+            self.entity_history.pop();
         }
         for _ in self.current_history_index()..self.stage_history.len() {
             self.stage_history.pop();
@@ -297,10 +299,10 @@ impl Game {
         self.step_game(input, player_inputs);
 
         if let Some(max_history_frames) = self.max_history_frames {
-            let extra_frames = self.player_history.len().saturating_sub(max_history_frames);
+            let extra_frames = self.entity_history.len().saturating_sub(max_history_frames);
             self.deleted_history_frames += extra_frames;
             if extra_frames > 0 {
-                self.player_history.drain(0..extra_frames);
+                self.entity_history.drain(0..extra_frames);
                 self.stage_history.drain(0..extra_frames);
             }
         }
@@ -324,10 +326,10 @@ impl Game {
             let start = self.current_frame - netplay.frames_to_step();
             let end = self.current_frame;
 
-            self.player_history.truncate(start);
+            self.entity_history.truncate(start);
             self.stage_history.truncate(start);
             if start != 0 {
-                self.players = self.player_history.get(start-1).unwrap().clone();
+                self.entities = self.entity_history.get(start-1).unwrap().clone();
                 self.stage   = self.stage_history.get(start-1).unwrap().clone();
             }
 
@@ -337,7 +339,7 @@ impl Game {
                 let player_inputs = &input.players(frame, netplay);
                 self.step_game(input, player_inputs);
 
-                self.player_history.push(self.players.clone());
+                self.entity_history.push(self.entities.clone());
                 self.stage_history.push(self.stage.clone());
             }
         }
@@ -391,75 +393,79 @@ impl Game {
     }
 
     fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
-        let players_len = self.players.len();
+        let entities_len = self.entities.len();
 
         // set current edit state
         if os_input.key_pressed(VirtualKeyCode::Key0) {
             self.edit = Edit::Stage;
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key1) && players_len >= 1 {
+        else if os_input.key_pressed(VirtualKeyCode::Key1) && entities_len >= 1 {
             if os_input.held_shift() {
                 self.edit = Edit::Player (0);
             }
             else {
-                self.edit = Edit::Fighter (0);
+                self.edit = Edit::Entity (0);
             }
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key2) && players_len >= 2 {
+        else if os_input.key_pressed(VirtualKeyCode::Key2) && entities_len >= 2 {
             if os_input.held_shift() {
                 self.edit = Edit::Player (1);
             }
             else {
-                self.edit = Edit::Fighter (1);
+                self.edit = Edit::Entity (1);
             }
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key3) && players_len >= 3 {
+        else if os_input.key_pressed(VirtualKeyCode::Key3) && entities_len >= 3 {
             if os_input.held_shift() {
                 self.edit = Edit::Player (2);
             }
             else {
-                self.edit = Edit::Fighter (2);
+                self.edit = Edit::Entity (2);
             }
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key4) && players_len >= 4 {
+        else if os_input.key_pressed(VirtualKeyCode::Key4) && entities_len >= 4 {
             if os_input.held_shift() {
                 self.edit = Edit::Player (3);
             }
             else {
-                self.edit = Edit::Fighter (3);
+                self.edit = Edit::Entity (3);
             }
             self.update_frame();
         }
 
         match self.edit {
-            Edit::Fighter (player) => {
-                let fighter_string = self.players[player].fighter.clone();
-                let fighter = fighter_string.as_ref();
-                let action = self.players[player].action as usize;
-                let action_enum = Action::from_u64(self.players[player].action);
-                let frame  = self.players[player].frame as usize;
-                let land_frame_skip  = self.players[player].land_frame_skip;
-                self.debug_players[player].step(os_input);
+            Edit::Entity (entity_i) => {
+                let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
+                let fighter = entity_def_key.as_ref();
+                let action = self.entities[entity_i].action() as usize;
+                let action_enum = Action::from_u64(self.entities[entity_i].action());
+                let frame  = self.entities[entity_i].frame() as usize;
+                self.debug_players[entity_i].step(os_input);
 
-                // by adding the same amount of frames that are skipped in the player logic,
+                // by adding the same amount of frames that are skipped in the entity logic,
                 // the user continues to see the same frames as they step through the action
-                let repeat_frames = if action_enum.as_ref().map_or(false, |x| x.is_land()) {
-                     land_frame_skip + 1
+                let repeat_frames = if let Entity::Player (player) = &self.entities[entity_i] {
+                    if action_enum.as_ref().map_or(false, |x| x.is_land()) {
+                        player.land_frame_skip + 1
+                    } else {
+                        1
+                    }
                 } else {
                     1
                 };
 
+
                 // move collisionboxes
                 if self.selector.moving {
-                    // undo the operations used to render the player
+                    // undo the operations used to render the entity
                     let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                    let angle = -self.players[player].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
+                    let angle = -self.entities[entity_i].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
                     let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                     let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
-                    let distance = (self.players[player].relative_f(d_x), d_y); // *= -1 is its own inverse
+                    let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
                     self.package.move_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, distance);
 
                     // end move
@@ -487,7 +493,7 @@ impl Game {
                         for i in 0..repeat_frames {
                             self.package.new_fighter_frame(fighter, action, frame + i as usize);
                         }
-                        // We want to step just the players current frame to simplify the animation work flow
+                        // We want to step just the entities current frame to simplify the animation work flow
                         // However we need to do a proper full step so that the history doesn't get mucked up.
                         self.step_local(input, netplay);
                     }
@@ -495,14 +501,14 @@ impl Game {
                     if os_input.key_pressed(VirtualKeyCode::N) {
                         let i = 0; //for i in 0..repeat_frames { // TODO: Panic
                             if self.package.delete_fighter_frame(fighter, action, frame - i as usize) {
-                                // Correct any players that are now on a nonexistent frame due to the frame deletion.
+                                // Correct any entities that are now on a nonexistent frame due to the frame deletion.
                                 // This is purely to stay on the same action for usability.
-                                // The player itself must handle being on a frame that has been deleted in order for replays to work.
-                                for any_player in &mut self.players {
-                                    if any_player.fighter == fighter && any_player.action as usize == action
-                                        && any_player.frame as usize == self.package.fighters[fighter].actions[action].frames.len()
+                                // The entity itself must handle being on a frame that has been deleted in order for replays to work.
+                                for any_entity in &mut self.entities {
+                                    if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
+                                        && any_entity.frame() as usize == self.package.fighters[fighter].actions[action].frames.len()
                                     {
-                                        any_player.frame -= 1;
+                                        any_entity.set_frame(any_entity.frame() - 1);
                                     }
                                 }
                                 self.update_frame();
@@ -529,10 +535,10 @@ impl Game {
                     if os_input.key_pressed(VirtualKeyCode::F) {
                         if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             let selected = {
-                                let player = &self.players[player];
-                                let (p_x, p_y) = player.public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
+                                let entity = &self.entities[entity_i];
+                                let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
 
-                                let point = (player.relative_f(m_x - p_x), m_y - p_y);
+                                let point = (entity.relative_f(m_x - p_x), m_y - p_y);
                                 let new_colbox = CollisionBox::new(point);
 
                                 self.package.append_fighter_colbox(fighter, action, frame, new_colbox)
@@ -567,10 +573,10 @@ impl Game {
                     // set hitbox angle
                     if os_input.key_pressed(VirtualKeyCode::Q) {
                         if let Some((m_x, m_y)) = self.game_mouse(os_input) {
-                            let player = &self.players[player];
-                            let (p_x, p_y) = player.public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
+                            let entity = &self.entities[entity_i];
+                            let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
 
-                            let x = player.relative_f(m_x - p_x);
+                            let x = entity.relative_f(m_x - p_x);
                             let y = m_y - p_y;
                             self.package.point_hitbox_angles_to(fighter, action, frame, &self.selector.colboxes, x, y);
                         }
@@ -578,12 +584,12 @@ impl Game {
 
                     // handle single selection
                     if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
-                        let (player_x, player_y) = self.players[player].public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
-                        let frame = self.players[player].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+                        let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                        let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
 
                         for (i, colbox) in frame.colboxes.iter().enumerate() {
-                            let hit_x = colbox.point.0 + player_x;
-                            let hit_y = colbox.point.1 + player_y;
+                            let hit_x = colbox.point.0 + entity_x;
+                            let hit_y = colbox.point.1 + entity_y;
 
                             let distance = ((m_x - hit_x).powi(2) + (m_y - hit_y).powi(2)).sqrt();
                             if distance < colbox.radius {
@@ -608,12 +614,12 @@ impl Game {
 
                     // handle multiple selection
                     if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
-                        let (player_x, player_y) = self.players[player].public_bps_xy(&self.players, &self.package.fighters, &self.stage.surfaces);
-                        let frame = self.players[player].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+                        let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                        let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
 
                         for (i, colbox) in frame.colboxes.iter().enumerate() {
-                            let hit_x = colbox.point.0 + player_x;
-                            let hit_y = colbox.point.1 + player_y;
+                            let hit_x = colbox.point.0 + entity_x;
+                            let hit_y = colbox.point.1 + entity_y;
 
                             if rect.contains_point(hit_x, hit_y) {
                                 if os_input.held_alt() {
@@ -627,8 +633,8 @@ impl Game {
                     }
                 }
             }
-            Edit::Player (player) => {
-                self.debug_players[player].step(os_input);
+            Edit::Player (entity_i) => {
+                self.debug_players[entity_i].step(os_input);
             }
             Edit::Stage => {
                 self.debug_stage.step(os_input);
@@ -691,10 +697,10 @@ impl Game {
                         let mut surfaces_to_delete = self.selector.surfaces_vec();
                         surfaces_to_delete.sort();
                         surfaces_to_delete.reverse();
-                        let players = self.players.clone();
+                        let entities = self.entities.clone();
                         for surface_i in surfaces_to_delete {
-                            for player in self.players.iter_mut() {
-                                player.platform_deleted(&players, &self.package.fighters, &self.stage.surfaces, surface_i);
+                            for entity in self.entities.iter_mut() {
+                                entity.platform_deleted(&entities, &self.package.fighters, &self.stage.surfaces, surface_i);
                             }
                             self.stage.surfaces.remove(surface_i);
                         }
@@ -944,7 +950,7 @@ impl Game {
 
     /// next frame is advanced by taking the next frame in history
     fn step_replay_forwards_from_history(&mut self, input: &mut Input) {
-        if self.current_history_index() < self.player_history.len() {
+        if self.current_history_index() < self.entity_history.len() {
             self.jump_frame(self.current_frame + 1);
         }
         else {
@@ -1003,8 +1009,8 @@ impl Game {
     /// Jump to the saved frame in history
     fn jump_frame(&mut self, to_frame: usize) {
         let history_index = to_frame - self.deleted_history_frames;
-        if history_index < self.player_history.len() {
-            self.players = self.player_history.get(history_index).unwrap().clone();
+        if history_index < self.entity_history.len() {
+            self.entities = self.entity_history.get(history_index).unwrap().clone();
             self.stage   = self.stage_history .get(history_index).unwrap().clone();
 
             self.current_frame = to_frame;
@@ -1023,70 +1029,67 @@ impl Game {
         {
             let mut rng = ChaChaRng::from_seed(self.get_seed());
 
-            // To synchronize player stepping, we step through player logic in stages (action logic, physics logic, collision logic)
-            // Modified players are copied from the previous stage so that every player perceives themselves as being stepped first, within that stage.
+            // To synchronize entity stepping, we step through entity logic in stages (action logic, physics logic, collision logic)
+            // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
 
-            // step each player action
-            let mut action_players: Vec<Player> = vec!();
-            for (i, player) in self.players.iter().enumerate() {
-                let mut player = player.clone();
+            // step each entity action
+            let mut action_entities: Vec<Entity> = vec!();
+            for (i, mut entity) in self.entities.iter().cloned().enumerate() {
                 let input = &player_input[self.selected_controllers[i]];
                 let mut context = StepContext {
-                    players:  &self.players,
+                    entities:  &self.entities,
                     fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[player.fighter.as_ref()],
+                    fighter:  &self.package.fighters[entity.entity_def_key()],
                     stage:    &self.stage,
                     surfaces: &self.stage.surfaces,
                     rng:      &mut rng,
                     input,
                 };
-                player.action_hitlag_step(&mut context);
-                action_players.push(player);
+                entity.action_hitlag_step(&mut context);
+                action_entities.push(entity);
             }
 
-            // step each player physics
-            let mut physics_players: Vec<Player> = vec!();
-            for (i, player) in action_players.iter().enumerate() {
-                let mut player = player.clone();
+            // step each entity physics
+            let mut physics_entities: Vec<Entity> = vec!();
+            for (i, mut entity) in action_entities.iter().cloned().enumerate() {
                 let input = &player_input[self.selected_controllers[i]];
                 let mut context = StepContext {
-                    players:  &self.players,
+                    entities:  &self.entities,
                     fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[player.fighter.as_ref()],
+                    fighter:  &self.package.fighters[entity.entity_def_key()],
                     stage:    &self.stage,
                     surfaces: &self.stage.surfaces,
                     rng:      &mut rng,
                     input,
                 };
-                player.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
-                physics_players.push(player);
+                entity.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
+                physics_entities.push(entity);
             }
 
             // check for hits and run hit logic
-            let mut collision_players: Vec<Player> = vec!();
-            let collision_results = collision_check(&physics_players, &self.package.fighters, &self.stage.surfaces);
-            for (i, player) in physics_players.iter().enumerate() {
-                let mut player = player.clone();
+            let mut collision_entities: Vec<Entity> = vec!();
+            let collision_results = collision_check(&physics_entities, &self.package.fighters, &self.stage.surfaces);
+            for (i, mut entity) in physics_entities.iter().cloned().enumerate() {
                 let input = &player_input[self.selected_controllers[i]];
                 let mut context = StepContext {
-                    players:  &self.players,
+                    entities: &self.entities,
                     fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[player.fighter.as_ref()],
+                    fighter:  &self.package.fighters[entity.entity_def_key()],
                     stage:    &self.stage,
                     surfaces: &self.stage.surfaces,
                     rng:      &mut rng,
                     input,
                 };
-                player.step_collision(&mut context, &collision_results[i]);
-                collision_players.push(player);
+                entity.step_collision(&mut context, &collision_results[i]);
+                collision_entities.push(entity);
             }
 
-            self.players = collision_players;
+            self.entities = collision_entities;
         }
 
         if self.time_out() ||
-           (self.players.len() == 1 && self.players.iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (self.players.len() >  1 && self.players.iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
+           (self.entities.len() == 1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
+           (self.entities.len() >  1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }
@@ -1102,9 +1105,16 @@ impl Game {
         }
     }
 
+    fn players_iter(&self) -> impl Iterator<Item=&Player> {
+        self.entities.iter().filter_map(|x| match x {
+            Entity::Player(player) => Some(player),
+            _ => None,
+        })
+    }
+
     pub fn generate_game_results(&self, input: &Input) -> GameState {
-        let raw_player_results: Vec<RawPlayerResult> = self.players.iter().map(|x| x.result()).collect();
-        // TODO: Players on the same team score to the same pool, and share their place.
+        let raw_player_results: Vec<RawPlayerResult> = self.players_iter().map(|x| x.result()).collect();
+        // TODO: Players on the same team score to the same pool and share their place.
         let places: Vec<usize> = match self.rules.goal {
             Goal::LastManStanding => {
                 // most stocks remaining wins
@@ -1200,11 +1210,10 @@ impl Game {
 
         self.debug_lines = self.camera.debug_print();
         self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
-        for (i, player) in self.players.iter().enumerate() {
-            let fighter = &self.package.fighters[self.players[i].fighter.as_ref()];
+        for (i, entity) in self.entities.iter().enumerate() {
             let player_input = &player_inputs[self.selected_controllers[i]];
             let debug_player = &self.debug_players[i];
-            self.debug_lines.extend(player.debug_print(fighter, player_input, debug_player, i));
+            self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_player, i));
         }
 
         if self.debug_output_this_step {
@@ -1215,9 +1224,9 @@ impl Game {
         }
     }
 
-    /// Call this whenever a player's frame is changed, this can be from:
+    /// Call this whenever an entity's frame is changed, this can be from:
     /// *   the fighter's frame data is changed
-    /// *   the player now refers to a different frame.
+    /// *   the entity now refers to a different frame.
     fn update_frame(&mut self) {
         self.selector = Default::default();
         self.debug_output_this_step = true;
@@ -1225,62 +1234,67 @@ impl Game {
 
     #[allow(unused)] // Needed for headless build
     pub fn render(&self) -> RenderGame {
-        let mut entities = vec!();
+        let mut render_entities = vec!();
 
-        for (i, player) in self.players.iter().enumerate() {
-            let mut selected_colboxes = HashSet::new();
-            let mut fighter_selected = false;
-            let mut player_selected = false;
-            if let GameState::Paused = self.state {
-                match self.edit {
-                    Edit::Fighter (player) => {
-                        if i == player {
-                            selected_colboxes = self.selector.colboxes.clone();
-                            fighter_selected = true;
+        for (i, entity) in self.entities.iter().enumerate() {
+            match entity {
+                Entity::Player (player) => {
+                    let mut selected_colboxes = HashSet::new();
+                    let mut fighter_selected = false;
+                    let mut player_selected = false;
+                    if let GameState::Paused = self.state {
+                        match self.edit {
+                            Edit::Entity (entity_i) => {
+                                if i == entity_i {
+                                    selected_colboxes = self.selector.colboxes.clone();
+                                    fighter_selected = true;
+                                }
+                            }
+                            Edit::Player (player) => {
+                                player_selected = player == i;
+                            }
+                            _ => { }
                         }
                     }
-                    Edit::Player (player) => {
-                        player_selected = player == i;
+
+                    let debug = self.debug_players[i].clone();
+                    if debug.cam_area {
+                        if let Some(cam_area) = player.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
+                            render_entities.push(RenderEntity::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                        }
                     }
-                    _ => { }
-                }
-            }
 
-            let debug = self.debug_players[i].clone();
-            if debug.cam_area {
-                if let Some(cam_area) = player.cam_area(&self.stage.camera, &self.players, &self.package.fighters, &self.stage.surfaces) {
-                    entities.push(RenderEntity::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                    let fighters = &self.package.fighters;
+                    let surfaces = &self.stage.surfaces;
+                    let player_render = player.render(selected_colboxes, fighter_selected, player_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+                    render_entities.push(RenderEntity::Player(player_render));
                 }
+                _ => { }
             }
-
-            let fighters = &self.package.fighters;
-            let surfaces = &self.stage.surfaces;
-            let player_render = player.render(selected_colboxes, fighter_selected, player_selected, debug, i, &self.player_history[0..self.current_history_index()], &self.players, fighters, surfaces);
-            entities.push(RenderEntity::Player(player_render));
         }
 
         // render stage debug entities
         if self.debug_stage.blast {
-            entities.push(RenderEntity::rect_outline(self.stage.blast.clone(),  1.0, 0.0, 0.0));
+            render_entities.push(RenderEntity::rect_outline(self.stage.blast.clone(),  1.0, 0.0, 0.0));
         }
         if self.debug_stage.camera {
-            entities.push(RenderEntity::rect_outline(self.stage.camera.clone(), 0.0, 0.0, 1.0));
+            render_entities.push(RenderEntity::rect_outline(self.stage.camera.clone(), 0.0, 0.0, 1.0));
         }
         if self.debug_stage.spawn_points {
             for (i, point) in self.stage.spawn_points.iter().enumerate() {
                 if self.selector.spawn_points.contains(&i) {
-                    entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
+                    render_entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
                 } else {
-                    entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 0.0, 1.0));
+                    render_entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 0.0, 1.0));
                 }
             }
         }
         if self.debug_stage.respawn_points {
             for (i, point) in self.stage.respawn_points.iter().enumerate() {
                 if self.selector.respawn_points.contains(&i) {
-                    entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
+                    render_entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
                 } else {
-                    entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 1.0, 0.0));
+                    render_entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 1.0, 0.0));
                 }
             }
         }
@@ -1289,7 +1303,7 @@ impl Game {
         if let Some(point) = self.selector.point {
             if let Some(mouse) = self.selector.mouse {
                 let render_box = Rect::from_tuples(point, mouse);
-                entities.push(RenderEntity::rect_outline(render_box, 0.0, 1.0, 0.0));
+                render_entities.push(RenderEntity::rect_outline(render_box, 0.0, 1.0, 0.0));
             }
         }
 
@@ -1308,7 +1322,7 @@ impl Game {
             selected_surfaces: self.selector.surfaces.clone(),
             render_stage_mode: self.debug_stage.render_stage_mode.clone(),
             stage_model_name:  self.stage.name.clone(),
-            entities:          entities,
+            entities:          render_entities,
             state:             self.state.clone(),
             camera:            self.camera.clone(),
             debug_lines:       self.debug_lines.clone(),
@@ -1380,8 +1394,8 @@ impl Default for GameState {
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum Edit {
-    Fighter (usize), // index to player
-    Player  (usize),
+    Entity (usize), // index to entity
+    Player (usize), // index to player entity
     Stage
 }
 
@@ -1555,7 +1569,7 @@ pub struct RenderSpawnPoint {
 pub struct GameSetup {
     pub init_seed:              u64,
     pub input_history:          Vec<Vec<ControllerInput>>,
-    pub player_history:         Vec<Vec<Player>>,
+    pub entity_history:         Vec<Vec<Entity>>,
     pub stage_history:          Vec<Stage>,
     pub controllers:            Vec<usize>,
     pub players:                Vec<PlayerSetup>,
@@ -1572,7 +1586,7 @@ pub struct GameSetup {
     pub debug_players:          Option<Vec<DebugPlayer>>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
-    pub hot_reload_players:     Option<Vec<Player>>,
+    pub hot_reload_entities:    Option<Vec<Entity>>,
     pub hot_reload_stage:       Option<Stage>,
     pub edit:                   Edit,
 }

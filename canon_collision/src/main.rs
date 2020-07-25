@@ -9,6 +9,7 @@ pub(crate) mod app;
 pub(crate) mod camera;
 pub(crate) mod cli;
 pub(crate) mod collision;
+pub(crate) mod entity;
 pub(crate) mod game;
 pub(crate) mod graphics;
 pub(crate) mod menu;
@@ -17,6 +18,7 @@ pub(crate) mod player;
 pub(crate) mod replays;
 pub(crate) mod results;
 pub(crate) mod rules;
+pub(crate) mod simple_projectile;
 
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;

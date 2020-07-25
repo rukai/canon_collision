@@ -6,7 +6,8 @@ use canon_collision_lib::input::state::ControllerInput;
 use canon_collision_lib::stage::{Stage, DebugStage};
 use crate::camera::Camera;
 use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
-use crate::player::{Player, DebugPlayer};
+use crate::player::{DebugPlayer};
+use crate::entity::Entity;
 use crate::rules::Rules;
 use canon_collision_lib::replays_files;
 
@@ -25,7 +26,7 @@ pub struct Replay {
     pub init_seed:                u64,
     pub timestamp:                DateTime<Local>,
     pub input_history:            Vec<Vec<ControllerInput>>,
-    pub player_history:           Vec<Vec<Player>>,
+    pub entity_history:           Vec<Vec<Entity>>,
     pub stage_history:            Vec<Stage>,
     pub selected_controllers:     Vec<usize>,
     pub selected_players:         Vec<PlayerSetup>,
@@ -38,7 +39,7 @@ pub struct Replay {
     pub hot_reload_camera:        Camera,
     pub hot_reload_debug_players: Vec<DebugPlayer>,
     pub hot_reload_debug_stage:   DebugStage,
-    pub hot_reload_players:       Vec<Player>,
+    pub hot_reload_entities:      Vec<Entity>,
     pub hot_reload_stage:         Stage,
     pub hot_reload_as_running:    bool,
     pub hot_reload_edit:          Edit,
@@ -46,10 +47,20 @@ pub struct Replay {
 
 impl Replay {
     pub fn new(game: &Game, input: &Input) -> Replay {
-        let selected_players = game.players.iter().map(|x| PlayerSetup {
-            fighter: x.fighter.clone(),
-            team:    x.team,
-        }).collect();
+        let mut selected_players = vec!();
+        for entity in &game.entities {
+            match entity {
+                Entity::Player (player) => {
+                    selected_players.push(
+                        PlayerSetup {
+                            fighter: player.fighter.clone(),
+                            team:    player.team,
+                        }
+                    );
+                }
+                _ => { }
+            }
+        }
 
         let hot_reload_as_running = match game.state {
             GameState::Local => true,
@@ -60,7 +71,7 @@ impl Replay {
             init_seed:                game.init_seed.clone(),
             timestamp:                Local::now(),
             input_history:            input.get_history(),
-            player_history:           game.player_history.clone(),
+            entity_history:           game.entity_history.clone(),
             stage_history:            game.stage_history.clone(),
             selected_controllers:     game.selected_controllers.clone(),
             selected_ais:             game.selected_ais.clone(),
@@ -72,7 +83,7 @@ impl Replay {
             hot_reload_camera:        game.camera.clone(),
             hot_reload_debug_players: game.debug_players.clone(),
             hot_reload_debug_stage:   game.debug_stage.clone(),
-            hot_reload_players:       game.players.clone(),
+            hot_reload_entities:      game.entities.clone(),
             hot_reload_stage:         game.stage.clone(),
             hot_reload_edit:          game.edit.clone(),
             hot_reload_as_running,
@@ -116,8 +127,8 @@ impl Replay {
             Camera::new()
         };
 
-        let hot_reload_players = if hot_reload {
-            Some(self.hot_reload_players)
+        let hot_reload_entities = if hot_reload {
+            Some(self.hot_reload_entities)
         } else {
             None
         };
@@ -131,7 +142,7 @@ impl Replay {
         GameSetup {
             init_seed:              self.init_seed,
             input_history:          self.input_history,
-            player_history:         self.player_history,
+            entity_history:         self.entity_history,
             stage_history:          self.stage_history,
             controllers:            self.selected_controllers,
             players:                self.selected_players,
@@ -146,7 +157,7 @@ impl Replay {
             camera,
             debug_players,
             debug_stage,
-            hot_reload_players,
+            hot_reload_entities,
             hot_reload_stage,
             state,
         }

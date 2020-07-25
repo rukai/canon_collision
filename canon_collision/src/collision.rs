@@ -3,24 +3,25 @@ use treeflection::KeyedContextVec;
 use canon_collision_lib::fighter::{Fighter, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};
 use canon_collision_lib::stage::Surface;
 use crate::player::Player;
+use crate::entity::Entity;
 
 // def - player who was attacked
 // atk - player who attacked
 
 /// returns a list of hit results for each player
-pub fn collision_check(players: &[Player], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
+pub fn collision_check(entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
     let mut result: Vec<Vec<CollisionResult>> = vec!();
-    for _ in players {
+    for _ in entities {
         result.push(vec!());
     }
 
-    'player_atk: for (player_atk_i, player_atk) in players.iter().enumerate() {
-        let player_atk_xy = player_atk.public_bps_xy(players, fighters, surfaces);
-        let fighter_atk = &fighters[player_atk.fighter.as_ref()];
-        for (player_def_i, player_def) in players.iter().enumerate() {
-            let player_def_xy = player_def.public_bps_xy(players, fighters, surfaces);
-            if player_atk_i != player_def_i && player_atk.hitlist.iter().all(|x| *x != player_def_i) {
-                let fighter_def = &fighters[player_def.fighter.as_ref()];
+    'player_atk: for (player_atk_i, player_atk) in entities.iter().enumerate() {
+        let player_atk_xy = player_atk.public_bps_xy(entities, fighters, surfaces);
+        let fighter_atk = &fighters[player_atk.entity_def_key()];
+        for (player_def_i, player_def) in entities.iter().enumerate() {
+            let player_def_xy = player_def.public_bps_xy(entities, fighters, surfaces);
+            if player_atk_i != player_def_i && player_atk.hitlist().iter().all(|x| *x != player_def_i) {
+                let fighter_def = &fighters[player_def.entity_def_key()];
 
                 let frame_atk = &player_atk.relative_frame(fighter_atk, surfaces);
                 let frame_def = &player_def.relative_frame(fighter_def, surfaces);
@@ -28,18 +29,20 @@ pub fn collision_check(players: &[Player], fighters: &KeyedContextVec<Fighter>, 
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
-                        if colbox_shield_collision_check(player_atk_xy, colbox_atk, player_def_xy, player_def, fighter_def) {
-                            result[player_atk_i].push(CollisionResult::HitShieldAtk {
-                                hitbox: hitbox_atk.clone(),
-                                power_shield: fighter_def.power_shield.clone(),
-                                player_def_i
-                            });
-                            result[player_def_i].push(CollisionResult::HitShieldDef {
-                                hitbox: hitbox_atk.clone(),
-                                power_shield: fighter_def.power_shield.clone(),
-                                player_atk_i
-                            });
-                            break 'hitbox_atk;
+                        if let Entity::Player(player_def) = player_def {
+                            if colbox_shield_collision_check(player_atk_xy, colbox_atk, player_def_xy, player_def, fighter_def) {
+                                result[player_atk_i].push(CollisionResult::HitShieldAtk {
+                                    hitbox: hitbox_atk.clone(),
+                                    power_shield: fighter_def.power_shield.clone(),
+                                    player_def_i
+                                });
+                                result[player_def_i].push(CollisionResult::HitShieldDef {
+                                    hitbox: hitbox_atk.clone(),
+                                    power_shield: fighter_def.power_shield.clone(),
+                                    player_atk_i
+                                });
+                                break 'hitbox_atk;
+                            }
                         }
 
                         if hitbox_atk.enable_clang {

@@ -511,7 +511,7 @@ impl Menu {
 
         self.game_setup = Some(GameSetup {
             input_history:          vec!(),
-            player_history:         vec!(),
+            entity_history:         vec!(),
             stage_history:          vec!(),
             rules:                  Default::default(), // TODO: this will be configured by the user in the menu
             debug:                  false,
@@ -522,7 +522,7 @@ impl Menu {
             debug_stage:            Default::default(),
             camera:                 Camera::new(),
             edit:                   Edit::Stage,
-            hot_reload_players:     None,
+            hot_reload_entities:    None,
             hot_reload_stage:       None,
             init_seed,
             controllers,

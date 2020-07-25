@@ -1,7 +1,8 @@
+use crate::entity::Entity;
+
 use canon_collision_lib::fighter::Fighter;
 use canon_collision_lib::stage::Stage;
 use canon_collision_lib::geometry::Rect;
-use crate::player::Player;
 
 use cgmath::{Matrix4, Point3, Vector3, Transform, Rad, Quaternion};
 use winit::event::VirtualKeyCode;
@@ -211,7 +212,7 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, os_input: &WinitInputHelper, players: &[Player], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
+    pub fn update(&mut self, os_input: &WinitInputHelper, players: &[Entity], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
         // process new resolution
         if let Some((width, height)) = os_input.resolution() {
             self.window_width = width as f32;

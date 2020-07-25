@@ -152,7 +152,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 let setup = GameSetup {
                     init_seed:              GameSetup::gen_seed(),
                     input_history:          vec!(),
-                    player_history:         vec!(),
+                    entity_history:         vec!(),
                     stage_history:          vec!(),
                     stage:                  cli_results.stage_name.unwrap(),
                     state:                  GameState::Local,
@@ -164,7 +164,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     debug_stage:            Default::default(),
                     camera:                 Camera::new(),
                     edit:                   Edit::Stage,
-                    hot_reload_players:     None,
+                    hot_reload_entities:    None,
                     hot_reload_stage:       None,
                     rules,
                     controllers,
