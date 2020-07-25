@@ -160,7 +160,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     max_history_frames:     cli_results.max_history_frames,
                     current_frame:          0,
                     deleted_history_frames: 0,
-                    debug_players:          Default::default(),
+                    debug_entities:         Default::default(),
                     debug_stage:            Default::default(),
                     camera:                 Camera::new(),
                     edit:                   Edit::Stage,

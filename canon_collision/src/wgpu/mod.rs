@@ -4,11 +4,11 @@ mod animation;
 
 use buffers::{ColorVertex, Vertex, Buffers};
 use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic};
-use crate::game::{GameState, RenderEntity, RenderGame};
+use crate::entity::{RenderEntity, RenderEntityType, RenderEntityFrame};
+use crate::game::{GameState, RenderObject, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
-use crate::player::{RenderPlayer, RenderPlayerFrame, DebugPlayer};
 use crate::results::PlayerResult;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
@@ -845,56 +845,58 @@ impl WgpuGraphics {
         }
     }
 
-    fn game_hud_render(&mut self, entities: &[RenderEntity]) {
-        let mut players = 0;
-        for entity in entities {
-            if let &RenderEntity::Player(_) = entity {
-                players += 1;
+    fn game_hud_render(&mut self, objects: &[RenderObject]) {
+        let mut entities = 0;
+        for object in objects {
+            if let RenderObject::Entity(_) = object {
+                entities += 1;
             }
         }
-        let distance = (self.width / (players + 1)) as f32;
+        let distance = (self.width / (entities + 1)) as f32;
 
         let mut location = -100.0;
-        for entity in entities {
-            if let &RenderEntity::Player(ref player) = entity {
+        for object in objects {
+            if let RenderObject::Entity (entity) = object {
                 location += distance;
-                match Action::from_u64(player.frames[0].action as u64) {
-                    Some(Action::Eliminated) => { }
-                    _ => {
-                        let c = player.fighter_color.clone();
-                        let color = [c[0], c[1], c[2], 1.0];
+                if let RenderEntityType::Player (player) = &entity.render_type {
+                    match Action::from_u64(entity.frames[0].action as u64) {
+                        Some(Action::Eliminated) => { }
+                        _ => {
+                            let c = entity.fighter_color.clone();
+                            let color = [c[0], c[1], c[2], 1.0];
 
-                        if let Some(stocks) = player.stocks {
-                            let stocks_string = if stocks > 5 {
-                                format!("⬤ x {}", stocks)
-                            } else {
-                                let mut stocks_string = String::new();
-                                for _ in 0..stocks {
-                                    stocks_string.push('⬤');
-                                }
-                                stocks_string
-                            };
+                            if let Some(stocks) = player.stocks {
+                                let stocks_string = if stocks > 5 {
+                                    format!("⬤ x {}", stocks)
+                                } else {
+                                    let mut stocks_string = String::new();
+                                    for _ in 0..stocks {
+                                        stocks_string.push('⬤');
+                                    }
+                                    stocks_string
+                                };
+
+                                self.glyph_brush.queue(Section {
+                                    text: vec!(
+                                        Text::new(stocks_string.as_ref())
+                                            .with_color(color)
+                                            .with_scale(22.0)
+                                    ),
+                                    screen_position: (location + 10.0, self.height as f32 - 130.0),
+                                    .. Section::default()
+                                });
+                            }
 
                             self.glyph_brush.queue(Section {
                                 text: vec!(
-                                    Text::new(stocks_string.as_ref())
-                                        .with_color(color)
-                                        .with_scale(22.0)
+                                    Text::new(format!("{}%", player.damage).as_ref())
+                                    .with_color(color)
+                                    .with_scale(110.0)
                                 ),
-                                screen_position: (location + 10.0, self.height as f32 - 130.0),
+                                screen_position: (location, self.height as f32 - 117.0),
                                 .. Section::default()
                             });
                         }
-
-                        self.glyph_brush.queue(Section {
-                            text: vec!(
-                                Text::new(format!("{}%", player.damage).as_ref())
-                                .with_color(color)
-                                .with_scale(110.0)
-                            ),
-                            screen_position: (location, self.height as f32 - 117.0),
-                            .. Section::default()
-                        });
                     }
                 }
             }
@@ -1083,50 +1085,50 @@ impl WgpuGraphics {
 
         for entity in render.entities.iter() {
             match entity {
-                &RenderEntity::Player(ref player) => {
-                    fn player_matrix(frame: &RenderPlayerFrame) -> Matrix4<f32> {
+                RenderObject::Entity (entity) => {
+                    fn player_matrix(frame: &RenderEntityFrame) -> Matrix4<f32> {
                         let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
                         let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
                         let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
                         position * rotate * dir
                     }
 
-                    let transformation = player_matrix(&player.frames[0]);
+                    let transformation = player_matrix(&entity.frames[0]);
 
                     // draw fighter
-                    let action_index = player.frames[0].action;
+                    let action_index = entity.frames[0].action;
                     match Action::from_u64(action_index as u64) {
                         Some(Action::Eliminated) => { }
                         _ => {
-                            let fighter_model_name = player.frames[0].model_name.replace(" ", "");
-                            if player.debug.fighter.normal() {
-                                let dir      = Matrix4::from_angle_y(if player.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
-                                let rotate   = Matrix4::from_angle_z(Rad(player.frames[0].angle));
-                                let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
+                            let fighter_model_name = entity.frames[0].model_name.replace(" ", "");
+                            if entity.debug.render.normal() {
+                                let dir      = Matrix4::from_angle_y(if entity.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+                                let rotate   = Matrix4::from_angle_z(Rad(entity.frames[0].angle));
+                                let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(&fighter_model_name) {
                                     let action = Action::action_index_to_string(action_index);
-                                    draws.extend(self.render_model3d(&render, &fighter, &transformation, &action, player.frames[0].frame as f32));
+                                    draws.extend(self.render_model3d(&render, &fighter, &transformation, &action, entity.frames[0].frame as f32));
                                 }
                             }
                         }
                     }
 
-                    // draw player ecb
-                    if player.debug.ecb {
+                    // draw entity ecb
+                    if entity.debug.ecb {
                         // TODO: Set individual corner vertex colours to show which points of the ecb are selected
-                        let buffers = Buffers::new_ecb(&self.device, &player);
-                        let dir      = Matrix4::from_nonuniform_scale(if player.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
+                        let buffers  = Buffers::new_ecb(&self.device, &entity);
+                        let dir      = Matrix4::from_nonuniform_scale(if entity.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
+                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
                         let transformation = position * dir;
 
                         draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                     }
 
                     // draw fighter debug overlay
-                    if player.debug.fighter.debug() {
-                        if player.debug.fighter.onion_skin() {
-                            if let Some(frame) = player.frames.get(2) {
+                    if entity.debug.render.debug() {
+                        if entity.debug.render.onion_skin() {
+                            if let Some(frame) = entity.frames.get(2) {
                                 if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
                                     let transformation = player_matrix(frame);
                                     let onion_color = [0.4, 0.4, 0.4, 0.4];
@@ -1134,7 +1136,7 @@ impl WgpuGraphics {
                                 }
                             }
 
-                            if let Some(frame) = player.frames.get(1) {
+                            if let Some(frame) = entity.frames.get(1) {
                                 if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
                                     let transformation = player_matrix(frame);
                                     let onion_color = [0.80, 0.80, 0.80, 0.9];
@@ -1144,12 +1146,12 @@ impl WgpuGraphics {
                         }
 
                         // draw fighter
-                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &player.frames[0].fighter, player.frames[0].action, player.frames[0].frame) {
+                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].fighter, entity.frames[0].action, entity.frames[0].frame) {
                             let color = [0.9, 0.9, 0.9, 1.0];
-                            let edge_color = if player.fighter_selected {
+                            let edge_color = if entity.entity_selected {
                                 [0.0, 1.0, 0.0, 1.0]
                             } else {
-                                let c = player.fighter_color.clone();
+                                let c = entity.fighter_color.clone();
                                 [c[0], c[1], c[2], 1.0]
                             };
                             draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, edge_color, color));
@@ -1160,25 +1162,26 @@ impl WgpuGraphics {
                     }
 
                     // draw selected colboxes
-                    if player.selected_colboxes.len() > 0 {
+                    if entity.selected_colboxes.len() > 0 {
                         let color = [0.0, 1.0, 0.0, 1.0];
-                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &player.frames[0].fighter, player.frames[0].action, player.frames[0].frame, &player.selected_colboxes);
+                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].fighter, entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
                         draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, color, color));
                     }
 
                     // draw hitbox debug arrows
-                    if player.debug.hitbox_vectors {
+                    // TODO: this should be usable for all entities
+                    if entity.debug.hitbox_vectors {
                         // TODO: lets move these to the WgpuGraphics struct
                         let kbg_arrow = Buffers::new_arrow(&self.device, [1.0,  1.0,  1.0, 1.0]);
                         let bkb_arrow = Buffers::new_arrow(&self.device, [0.17, 0.17, 1.0, 1.0]);
-                        for colbox in player.frame_data.colboxes.iter() {
+                        for colbox in entity.frame_data.colboxes.iter() {
                             if let CollisionBoxRole::Hit(ref hitbox) = colbox.role {
                                 let kb_squish = 0.5;
                                 let squish_kbg = Matrix4::from_nonuniform_scale(0.6, hitbox.kbg * kb_squish, 1.0);
                                 let squish_bkb = Matrix4::from_nonuniform_scale(0.3, (hitbox.bkb / 100.0) * kb_squish, 1.0); // divide by 100 so the arrows are comparable if the hit fighter is on 100%
                                 let rotate = Matrix4::from_angle_z(Rad(hitbox.angle.to_radians() - f32::consts::PI / 2.0));
-                                let x = player.frames[0].bps.0 + colbox.point.0;
-                                let y = player.frames[0].bps.1 + colbox.point.1;
+                                let x = entity.frames[0].bps.0 + colbox.point.0;
+                                let y = entity.frames[0].bps.1 + colbox.point.1;
                                 let position = Matrix4::from_translation(Vector3::new(x, y, 0.0));
                                 let transformation_bkb = position * rotate * squish_bkb;
                                 let transformation_kbg = position * rotate * squish_kbg;
@@ -1189,18 +1192,18 @@ impl WgpuGraphics {
                     }
 
                     // draw debug vector arrows
-                    let num_arrows = player.vector_arrows.len() as f32;
-                    for (i, arrow) in player.vector_arrows.iter().enumerate() {
+                    let num_arrows = entity.vector_arrows.len() as f32;
+                    for (i, arrow) in entity.vector_arrows.iter().enumerate() {
                         let arrow_buffers = Buffers::new_arrow(&self.device, arrow.color.clone());
                         let squish = Matrix4::from_nonuniform_scale((num_arrows - i as f32) / num_arrows, 1.0, 1.0); // consecutive arrows are drawn slightly thinner so we can see arrows behind
                         let rotate = Matrix4::from_angle_z(Rad(arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0));
-                        let position = Matrix4::from_translation(Vector3::new(player.frames[0].bps.0, player.frames[0].bps.1, 0.0));
+                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
                         let transformation = position * rotate * squish;
                         draws.push(self.render_color_buffers(&render, arrow_buffers, &transformation, false, false));
                     }
 
                     // draw particles
-                    for particle in &player.particles {
+                    for particle in &entity.particles {
                         let c = particle.color.clone();
                         match &particle.p_type {
                             &ParticleType::Spark { size, .. } => {
@@ -1242,32 +1245,34 @@ impl WgpuGraphics {
                     }
 
                     // Draw spawn plat
-                    match Action::from_u64(player.frames[0].action as u64) {
-                        Some(Action::ReSpawn) | Some(Action::ReSpawnIdle) => {
-                            // TODO: get width from player dimensions
-                            let width = 15.0;
-                            let height = width / 4.0;
-                            let scale = Matrix4::from_nonuniform_scale(width, -height, 1.0); // negative y to point triangle downwards.
-                            let rotate = Matrix4::from_angle_z(Rad(player.frames[0].angle));
-                            let bps = &player.frames[0].bps;
-                            let position = Matrix4::from_translation(Vector3::new(bps.0, bps.1, 0.0));
-                            let transformation = position * rotate * scale;
+                    if let RenderEntityType::Player (_) = entity.render_type {
+                        match Action::from_u64(entity.frames[0].action as u64) {
+                            Some(Action::ReSpawn) | Some(Action::ReSpawnIdle) => {
+                                // TODO: get width from player dimensions
+                                let width = 15.0;
+                                let height = width / 4.0;
+                                let scale = Matrix4::from_nonuniform_scale(width, -height, 1.0); // negative y to point triangle downwards.
+                                let rotate = Matrix4::from_angle_z(Rad(entity.frames[0].angle));
+                                let bps = &entity.frames[0].bps;
+                                let position = Matrix4::from_translation(Vector3::new(bps.0, bps.1, 0.0));
+                                let transformation = position * rotate * scale;
 
-                            let c = player.fighter_color.clone();
-                            let color = [c[0], c[1], c[2], 1.0];
-                            let triangle_buffers = Buffers::new_triangle(&self.device, color);
+                                let c = entity.fighter_color.clone();
+                                let color = [c[0], c[1], c[2], 1.0];
+                                let triangle_buffers = Buffers::new_triangle(&self.device, color);
 
-                            draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
+                                draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
+                            }
+                            _ => { }
                         }
-                        _ => { }
                     }
                 }
-                &RenderEntity::RectOutline (ref render_rect) => {
+                RenderObject::RectOutline (render_rect) => {
                     let transformation = Matrix4::identity();
                     let buffers = Buffers::rect_outline_buffers(&self.device, &render_rect);
                     draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                 }
-                &RenderEntity::SpawnPoint (ref render_point) => {
+                RenderObject::SpawnPoint (render_point) => {
                     let buffers = Buffers::new_spawn_point(&self.device, render_point.color);
                     let flip = Matrix4::from_nonuniform_scale(if render_point.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
                     let position = Matrix4::from_translation(Vector3::new(render_point.x, render_point.y, 0.0));
@@ -1280,18 +1285,20 @@ impl WgpuGraphics {
         // Some things need to be rendered after everything else as they are transparent
         for entity in render.entities.iter() {
             match entity {
-                &RenderEntity::Player(ref player) => {
-                    // draw shield
-                    if let &Some(ref shield) = &player.shield {
-                        let position = Matrix4::from_translation(Vector3::new(shield.pos.0, shield.pos.1, 0.0));
-                        let color = if shield.distort > 0 {
-                            let c = shield.color;
-                            [c[0] * rng.gen_range(0.75, 1.25), c[1] * rng.gen_range(0.75, 1.25), c[2] * rng.gen_range(0.75, 1.25), c[3] * rng.gen_range(0.8, 1.2)]
-                        } else {
-                            shield.color
-                        };
-                        let buffers = Buffers::new_shield(&self.device, shield, color);
-                        draws.push(self.render_color_buffers(&render, buffers, &position, false, true));
+                RenderObject::Entity (entity) => {
+                    if let RenderEntityType::Player (player) = &entity.render_type {
+                        // draw shield
+                        if let Some(shield) = &player.shield {
+                            let position = Matrix4::from_translation(Vector3::new(shield.pos.0, shield.pos.1, 0.0));
+                            let color = if shield.distort > 0 {
+                                let c = shield.color;
+                                [c[0] * rng.gen_range(0.75, 1.25), c[1] * rng.gen_range(0.75, 1.25), c[2] * rng.gen_range(0.75, 1.25), c[3] * rng.gen_range(0.8, 1.2)]
+                            } else {
+                                shield.color
+                            };
+                            let buffers = Buffers::new_shield(&self.device, shield, color);
+                            draws.push(self.render_color_buffers(&render, buffers, &position, false, true));
+                        }
                     }
                 }
                 _ => { }
@@ -1618,7 +1625,7 @@ impl WgpuGraphics {
                         Action::Idle.to_u64().unwrap() as usize
                     };
 
-                    let frames = vec!(RenderPlayerFrame {
+                    let frames = vec!(RenderEntityFrame {
                         fighter:    fighter_key.clone(),
                         model_name: "TODO".into(),
                         bps:        (0.0, 0.0),
@@ -1630,17 +1637,13 @@ impl WgpuGraphics {
                     });
 
                     // draw fighter
-                    let player = RenderPlayer {
-                        team:              selection.team,
-                        debug:             DebugPlayer::default(),
-                        damage:            0.0,
-                        stocks:            None,
+                    let player = RenderEntity {
+                        render_type:       RenderEntityType::Generic,
+                        debug:             Default::default(),
                         frame_data:        ActionFrame::default(),
                         fighter_color:     graphics::get_team_color3(selection.team),
-                        fighter_selected:  false,
-                        player_selected:   false,
+                        entity_selected:   false,
                         selected_colboxes: HashSet::new(),
-                        shield:            None,
                         vector_arrows:     vec!(),
                         particles:         vec!(),
                         frames,

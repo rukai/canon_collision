@@ -2,12 +2,12 @@ use crate::camera::Camera;
 use crate::collision::collision_check;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
-use crate::player::{Player, RenderPlayer, DebugPlayer};
+use crate::player::{Player};
 use crate::replays::Replay;
 use crate::replays;
 use crate::results::{GameResults, RawPlayerResult, PlayerResult};
 use crate::rules::{Rules, Goal};
-use crate::entity::{Entity, StepContext};
+use crate::entity::{Entity, StepContext, RenderEntity, DebugEntity};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -53,7 +53,7 @@ pub struct Game {
     pub stage:                  Stage,
     pub entities:               Vec<Entity>,
     pub debug_stage:            DebugStage,
-    pub debug_players:          Vec<DebugPlayer>,
+    pub debug_entities:         Vec<DebugEntity>,
     pub selected_controllers:   Vec<usize>,
     pub selected_ais:           Vec<usize>,
     pub selected_stage:         String,
@@ -92,8 +92,8 @@ impl Game {
         };
 
         // generate players
-        let mut entities:      Vec<Entity>      = vec!();
-        let mut debug_players: Vec<DebugPlayer> = vec!();
+        let mut entities:       Vec<Entity>      = vec!();
+        let mut debug_entities: Vec<DebugEntity> = vec!();
         {
             for (i, player) in setup.players.iter().enumerate() {
                 // Stage can have less spawn points then players
@@ -101,10 +101,10 @@ impl Game {
                 let team = player.team;
                 entities.push(Entity::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)));
                 if setup.debug {
-                    debug_players.push(DebugPlayer::all());
+                    debug_entities.push(DebugEntity::all());
                 }
                 else {
-                    debug_players.push(Default::default());
+                    debug_entities.push(Default::default());
                 }
             }
         }
@@ -112,8 +112,8 @@ impl Game {
         if let Some(overwrite) = setup.hot_reload_entities {
             entities = overwrite;
         }
-        if let Some(overwrite) = setup.debug_players {
-            debug_players = overwrite;
+        if let Some(overwrite) = setup.debug_entities {
+            debug_entities = overwrite;
         }
 
         Game {
@@ -143,7 +143,7 @@ impl Game {
             stage,
             entities,
             debug_stage,
-            debug_players,
+            debug_entities,
         }
     }
 
@@ -443,7 +443,7 @@ impl Game {
                 let action = self.entities[entity_i].action() as usize;
                 let action_enum = Action::from_u64(self.entities[entity_i].action());
                 let frame  = self.entities[entity_i].frame() as usize;
-                self.debug_players[entity_i].step(os_input);
+                self.debug_entities[entity_i].step(os_input);
 
                 // by adding the same amount of frames that are skipped in the entity logic,
                 // the user continues to see the same frames as they step through the action
@@ -634,7 +634,7 @@ impl Game {
                 }
             }
             Edit::Player (entity_i) => {
-                self.debug_players[entity_i].step(os_input);
+                self.debug_entities[entity_i].step(os_input);
             }
             Edit::Stage => {
                 self.debug_stage.step(os_input);
@@ -1212,7 +1212,7 @@ impl Game {
         self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
         for (i, entity) in self.entities.iter().enumerate() {
             let player_input = &player_inputs[self.selected_controllers[i]];
-            let debug_player = &self.debug_players[i];
+            let debug_player = &self.debug_entities[i];
             self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_player, i));
         }
 
@@ -1237,64 +1237,55 @@ impl Game {
         let mut render_entities = vec!();
 
         for (i, entity) in self.entities.iter().enumerate() {
-            match entity {
-                Entity::Player (player) => {
-                    let mut selected_colboxes = HashSet::new();
-                    let mut fighter_selected = false;
-                    let mut player_selected = false;
-                    if let GameState::Paused = self.state {
-                        match self.edit {
-                            Edit::Entity (entity_i) => {
-                                if i == entity_i {
-                                    selected_colboxes = self.selector.colboxes.clone();
-                                    fighter_selected = true;
-                                }
-                            }
-                            Edit::Player (player) => {
-                                player_selected = player == i;
-                            }
-                            _ => { }
+            let mut selected_colboxes = HashSet::new();
+            let mut entity_selected = false;
+            if let GameState::Paused = self.state {
+                match self.edit {
+                    Edit::Entity (entity_i) => {
+                        if i == entity_i {
+                            selected_colboxes = self.selector.colboxes.clone();
+                            entity_selected = true;
                         }
                     }
-
-                    let debug = self.debug_players[i].clone();
-                    if debug.cam_area {
-                        if let Some(cam_area) = player.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
-                            render_entities.push(RenderEntity::rect_outline(cam_area, 0.0, 0.0, 1.0));
-                        }
-                    }
-
-                    let fighters = &self.package.fighters;
-                    let surfaces = &self.stage.surfaces;
-                    let player_render = player.render(selected_colboxes, fighter_selected, player_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
-                    render_entities.push(RenderEntity::Player(player_render));
+                    _ => { }
                 }
-                _ => { }
             }
+
+            let debug = self.debug_entities[i].clone();
+            if debug.cam_area {
+                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
+                    render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                }
+            }
+
+            let fighters = &self.package.fighters;
+            let surfaces = &self.stage.surfaces;
+            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+            render_entities.push(RenderObject::Entity(player_render));
         }
 
         // render stage debug entities
         if self.debug_stage.blast {
-            render_entities.push(RenderEntity::rect_outline(self.stage.blast.clone(),  1.0, 0.0, 0.0));
+            render_entities.push(RenderObject::rect_outline(self.stage.blast.clone(),  1.0, 0.0, 0.0));
         }
         if self.debug_stage.camera {
-            render_entities.push(RenderEntity::rect_outline(self.stage.camera.clone(), 0.0, 0.0, 1.0));
+            render_entities.push(RenderObject::rect_outline(self.stage.camera.clone(), 0.0, 0.0, 1.0));
         }
         if self.debug_stage.spawn_points {
             for (i, point) in self.stage.spawn_points.iter().enumerate() {
                 if self.selector.spawn_points.contains(&i) {
-                    render_entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
+                    render_entities.push(RenderObject::spawn_point(point.clone(), 0.0, 1.0, 0.0));
                 } else {
-                    render_entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 0.0, 1.0));
+                    render_entities.push(RenderObject::spawn_point(point.clone(), 1.0, 0.0, 1.0));
                 }
             }
         }
         if self.debug_stage.respawn_points {
             for (i, point) in self.stage.respawn_points.iter().enumerate() {
                 if self.selector.respawn_points.contains(&i) {
-                    render_entities.push(RenderEntity::spawn_point(point.clone(), 0.0, 1.0, 0.0));
+                    render_entities.push(RenderObject::spawn_point(point.clone(), 0.0, 1.0, 0.0));
                 } else {
-                    render_entities.push(RenderEntity::spawn_point(point.clone(), 1.0, 1.0, 0.0));
+                    render_entities.push(RenderObject::spawn_point(point.clone(), 1.0, 1.0, 0.0));
                 }
             }
         }
@@ -1303,7 +1294,7 @@ impl Game {
         if let Some(point) = self.selector.point {
             if let Some(mouse) = self.selector.mouse {
                 let render_box = Rect::from_tuples(point, mouse);
-                render_entities.push(RenderEntity::rect_outline(render_box, 0.0, 1.0, 0.0));
+                render_entities.push(RenderObject::rect_outline(render_box, 0.0, 1.0, 0.0));
             }
         }
 
@@ -1518,22 +1509,22 @@ pub struct RenderGame {
     pub selected_surfaces: HashSet<SurfaceSelection>,
     pub render_stage_mode: RenderStageMode,
     pub stage_model_name:  String,
-    pub entities:          Vec<RenderEntity>,
+    pub entities:          Vec<RenderObject>,
     pub state:             GameState,
     pub camera:            Camera,
     pub debug_lines:       Vec<String>,
     pub timer:             Option<Duration>,
 }
 
-pub enum RenderEntity {
-    Player      (RenderPlayer),
+pub enum RenderObject {
+    Entity      (RenderEntity),
     RectOutline (RenderRect),
     SpawnPoint  (RenderSpawnPoint),
 }
 
-impl RenderEntity {
-    pub fn rect_outline(rect: Rect, r: f32, g: f32, b: f32) -> RenderEntity {
-        RenderEntity::RectOutline (
+impl RenderObject {
+    pub fn rect_outline(rect: Rect, r: f32, g: f32, b: f32) -> RenderObject {
+        RenderObject::RectOutline (
             RenderRect {
                 rect,
                 color: [r, g, b, 1.0]
@@ -1541,8 +1532,8 @@ impl RenderEntity {
         )
     }
 
-    pub fn spawn_point(point: SpawnPoint, r: f32, g: f32, b: f32) -> RenderEntity {
-        RenderEntity::SpawnPoint (
+    pub fn spawn_point(point: SpawnPoint, r: f32, g: f32, b: f32) -> RenderObject {
+        RenderObject::SpawnPoint (
             RenderSpawnPoint {
                 x: point.x,
                 y: point.y,
@@ -1583,7 +1574,7 @@ pub struct GameSetup {
     pub current_frame:          usize,
     pub camera:                 Camera,
     pub debug_stage:            Option<DebugStage>,
-    pub debug_players:          Option<Vec<DebugPlayer>>,
+    pub debug_entities:         Option<Vec<DebugEntity>>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
     pub hot_reload_entities:    Option<Vec<Entity>>,

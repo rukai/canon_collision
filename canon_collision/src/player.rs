@@ -3,7 +3,7 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::{Entity, StepContext};
+use crate::entity::{Entity, StepContext, DebugEntity, VectorArrow};
 
 use canon_collision_lib::fighter::*;
 use canon_collision_lib::geometry::Rect;
@@ -16,12 +16,9 @@ use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use num_traits::{FromPrimitive, ToPrimitive};
-use winit::event::VirtualKeyCode;
-use winit_input_helper::WinitInputHelper;
 
 use std::f32;
 use std::f32::consts::PI;
-use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Node)]
 pub enum LockTimer {
@@ -180,7 +177,7 @@ impl Player {
             // find the floor directly beneath the player
             struct FoundFloor {
                 surface_i: usize,
-                world_y: f32, // The y coordinate of the point on the floor corresponding to the spawnpoints x coordinate.
+                world_y:   f32, // The y coordinate of the point on the floor corresponding to the spawnpoints x coordinate.
             }
             let mut found_floor = None;
             for (surface_i, surface) in stage.surfaces.iter().enumerate() {
@@ -2590,7 +2587,7 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugPlayer, index: usize) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugEntity, index: usize) -> Vec<String> {
         let fighter = &fighters[self.fighter.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
@@ -2648,100 +2645,6 @@ impl Player {
             }
         } else {
             0.0
-        }
-    }
-
-    fn render_frame(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayerFrame {
-        let fighter = &fighters[self.fighter.as_ref()];
-        RenderPlayerFrame {
-            fighter:     self.fighter.clone(),
-            model_name:  fighter.name.clone(),
-            bps:         self.public_bps_xy(players, fighters, surfaces),
-            ecb:         self.ecb.clone(),
-            frame:       self.frame as usize,
-            action:      self.action as usize,
-            face_right:  self.face_right,
-            angle:       self.angle(fighter, surfaces),
-        }
-    }
-
-    pub fn render(&self, selected_colboxes: HashSet<usize>, fighter_selected: bool, player_selected: bool, debug: DebugPlayer, entity_i: usize, player_history: &[Vec<Entity>], players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
-        let fighter_color = graphics::get_team_color3(self.team);
-        let fighter = &fighters[self.fighter.as_ref()];
-        let mut vector_arrows = vec!();
-        if debug.stick_vector {
-            if let Some((x, y)) = self.stick {
-                vector_arrows.push(VectorArrow {
-                    x,
-                    y,
-                    color: [0.7, 0.7, 0.7, 1.0]
-                });
-            }
-        }
-        if debug.c_stick_vector {
-            if let Some((x, y)) = self.c_stick {
-                vector_arrows.push(VectorArrow {
-                    x,
-                    y,
-                    color: [1.0, 1.0, 0.0, 1.0]
-                });
-            }
-        }
-        if debug.di_vector {
-            if let Some(angle) = self.hit_angle_pre_di {
-                vector_arrows.push(VectorArrow {
-                    x: angle.cos(),
-                    y: angle.sin(),
-                    color: [1.0, 0.0, 0.0, 1.0]
-                });
-            }
-            if let Some(angle) = self.hit_angle_post_di {
-                vector_arrows.push(VectorArrow {
-                    x: angle.cos(),
-                    y: angle.sin(),
-                    color: [0.0, 1.0, 0.0, 1.0]
-                });
-            }
-        }
-
-        let shield = if self.is_shielding() {
-            if let &Some(ref shield) = &fighter.shield {
-                let c = &fighter_color;
-                let m =  1.0 - self.shield_analog;
-                Some(RenderShield {
-                    distort: self.shield_stun_timer,
-                    color:   [c[0] + (1.0 - c[0]) * m, c[1] + (1.0 - c[1]) * m, c[2] + (1.0 - c[2]) * m, 0.2 + self.shield_analog / 2.0],
-                    radius:  self.shield_size(shield),
-                    pos:     self.shield_pos(shield, players, fighters, surfaces),
-                })
-            } else { None }
-        } else { None };
-
-        let mut frames = vec!(self.render_frame(players, fighters, surfaces));
-        let range = player_history.len().saturating_sub(10) .. player_history.len();
-        for players in player_history[range].iter().rev() {
-            if let Entity::Player (player) = &players[entity_i] {
-                // handle deleted frames by just skipping it, only encountered when the editor is used.
-                if fighter.actions[player.action as usize].frames.len() > player.frame as usize {
-                    frames.push(player.render_frame(players, fighters, surfaces));
-                }
-            }
-        }
-
-        RenderPlayer {
-            team:        self.team,
-            damage:      self.damage,
-            stocks:      self.stocks,
-            frame_data:  self.get_fighter_frame(fighter).cloned().unwrap_or_default(), // TODO: doesnt take into account player angle/face_right. Fix by moving hitbox rendering to be entity level rather then player level
-            particles:   self.particles.clone(),
-            frames,
-            debug,
-            fighter_color,
-            fighter_selected,
-            player_selected,
-            selected_colboxes,
-            shield,
-            vector_arrows,
         }
     }
 
@@ -2894,6 +2797,72 @@ impl Player {
             });
         }
     }
+
+    pub fn render(&self, entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
+        let shield = if self.is_shielding() {
+            let fighter_color = graphics::get_team_color3(self.team);
+            let fighter = &fighters[self.fighter.as_ref()];
+
+            if let &Some(ref shield) = &fighter.shield {
+                let c = &fighter_color;
+                let m =  1.0 - self.shield_analog;
+                Some(RenderShield {
+                    distort: self.shield_stun_timer,
+                    color:   [c[0] + (1.0 - c[0]) * m, c[1] + (1.0 - c[1]) * m, c[2] + (1.0 - c[2]) * m, 0.2 + self.shield_analog / 2.0],
+                    radius:  self.shield_size(shield),
+                    pos:     self.shield_pos(shield, entities, fighters, surfaces),
+                })
+            } else { None }
+        } else { None };
+
+        RenderPlayer {
+            team:        self.team,
+            damage:      self.damage,
+            stocks:      self.stocks,
+            shield,
+        }
+    }
+
+    pub fn vector_arrows(&self, debug: &DebugEntity) -> Vec<VectorArrow> {
+        let mut vector_arrows = vec!();
+
+        if debug.stick_vector {
+            if let Some((x, y)) = self.stick {
+                vector_arrows.push(VectorArrow {
+                    x,
+                    y,
+                    color: [0.7, 0.7, 0.7, 1.0]
+                });
+            }
+        }
+        if debug.c_stick_vector {
+            if let Some((x, y)) = self.c_stick {
+                vector_arrows.push(VectorArrow {
+                    x,
+                    y,
+                    color: [1.0, 1.0, 0.0, 1.0]
+                });
+            }
+        }
+        if debug.di_vector {
+            if let Some(angle) = self.hit_angle_pre_di {
+                vector_arrows.push(VectorArrow {
+                    x: angle.cos(),
+                    y: angle.sin(),
+                    color: [1.0, 0.0, 0.0, 1.0]
+                });
+            }
+            if let Some(angle) = self.hit_angle_post_di {
+                vector_arrows.push(VectorArrow {
+                    x: angle.cos(),
+                    y: angle.sin(),
+                    color: [0.0, 1.0, 0.0, 1.0]
+                });
+            }
+        }
+
+        vector_arrows
+    }
 }
 
 enum JumpResult {
@@ -2912,31 +2881,10 @@ impl JumpResult {
 }
 
 pub struct RenderPlayer {
-    /// Gauranteed to have at least one value (the current frame), and can have up to and including 10 values
-    pub frames: Vec<RenderPlayerFrame>,
-    pub team:              usize,
-    pub debug:             DebugPlayer,
-    pub damage:            f32,
-    pub stocks:            Option<u64>,
-    pub frame_data:        ActionFrame,
-    pub fighter_color:     [f32; 3],
-    pub fighter_selected:  bool,
-    pub player_selected:   bool,
-    pub selected_colboxes: HashSet<usize>,
-    pub shield:            Option<RenderShield>,
-    pub vector_arrows:     Vec<VectorArrow>,
-    pub particles:         Vec<Particle>,
-}
-
-pub struct RenderPlayerFrame {
-    pub fighter:    String,
-    pub model_name: String,
-    pub bps:        (f32, f32),
-    pub ecb:        ECB,
-    pub frame:      usize,
-    pub action:     usize,
-    pub face_right: bool,
-    pub angle:      f32,
+    pub team:   usize,
+    pub damage: f32,
+    pub stocks: Option<u64>,
+    pub shield: Option<RenderShield>,
 }
 
 pub struct RenderShield {
@@ -2944,142 +2892,4 @@ pub struct RenderShield {
     pub color:   [f32; 4],
     pub radius:  f32,
     pub pos:     (f32, f32),
-}
-
-pub struct VectorArrow {
-    pub x:     f32,
-    pub y:     f32,
-    pub color: [f32; 4]
-}
-
-#[derive(Clone, Serialize, Deserialize, Node)]
-pub enum RenderEntity {
-    Normal,
-    NormalAndDebug,
-    Debug,
-    DebugOnionSkin,
-}
-
-impl RenderEntity {
-    pub fn step(&mut self) {
-        *self = match self {
-            RenderEntity::Normal         => RenderEntity::NormalAndDebug,
-            RenderEntity::NormalAndDebug => RenderEntity::Debug,
-            RenderEntity::Debug          => RenderEntity::DebugOnionSkin,
-            RenderEntity::DebugOnionSkin => RenderEntity::Normal,
-        };
-    }
-
-    pub fn normal(&self) -> bool {
-        match self {
-            RenderEntity::Normal         => true,
-            RenderEntity::NormalAndDebug => true,
-            RenderEntity::Debug          => false,
-            RenderEntity::DebugOnionSkin => false,
-        }
-    }
-
-    pub fn debug(&self) -> bool {
-        match self {
-            RenderEntity::Normal         => false,
-            RenderEntity::NormalAndDebug => true,
-            RenderEntity::Debug          => true,
-            RenderEntity::DebugOnionSkin => true,
-        }
-    }
-
-    pub fn onion_skin(&self) -> bool {
-        match self {
-            RenderEntity::Normal         => false,
-            RenderEntity::NormalAndDebug => false,
-            RenderEntity::Debug          => false,
-            RenderEntity::DebugOnionSkin => true,
-        }
-    }
-}
-
-impl Default for RenderEntity {
-    fn default() -> Self {
-        RenderEntity::Normal
-    }
-}
-
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
-pub struct DebugPlayer {
-    pub physics:        bool,
-    pub input:          bool,
-    pub input_diff:     bool,
-    pub action:         bool,
-    pub frame:          bool,
-    pub stick_vector:   bool,
-    pub c_stick_vector: bool,
-    pub di_vector:      bool,
-    pub hitbox_vectors: bool,
-    pub ecb:            bool,
-    pub fighter:        RenderEntity,
-    pub cam_area:       bool,
-}
-
-impl DebugPlayer {
-    pub fn step(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::F1) {
-            self.physics = !self.physics;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F2) {
-            if os_input.held_shift() {
-                self.input_diff = !self.input_diff;
-            }
-            else {
-                self.input = !self.input;
-            }
-        }
-        if os_input.key_pressed(VirtualKeyCode::F3) {
-            self.action = !self.action;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F4) {
-            self.frame = !self.frame;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F5) {
-            self.stick_vector = !self.stick_vector;
-            self.c_stick_vector = !self.c_stick_vector;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F6) {
-            self.di_vector = !self.di_vector;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F7) {
-            self.hitbox_vectors = !self.hitbox_vectors;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F8) {
-            self.ecb = !self.ecb;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F9) {
-            self.fighter.step();
-        }
-        if os_input.key_pressed(VirtualKeyCode::F10) {
-            self.cam_area = !self.cam_area;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F11) {
-            *self = DebugPlayer::all();
-        }
-        if os_input.key_pressed(VirtualKeyCode::F12) {
-            *self = DebugPlayer::default();
-        }
-    }
-
-    pub fn all() -> Self {
-        DebugPlayer {
-            physics:        true,
-            input:          true,
-            input_diff:     true,
-            action:         true,
-            frame:          true,
-            stick_vector:   true,
-            c_stick_vector: true,
-            di_vector:      true,
-            hitbox_vectors: true,
-            ecb:            true,
-            fighter:        RenderEntity::NormalAndDebug,
-            cam_area:       true,
-        }
-    }
 }

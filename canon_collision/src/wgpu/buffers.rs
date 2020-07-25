@@ -4,7 +4,7 @@ use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Surface;
 use crate::player::RenderShield;
 use crate::graphics;
-use crate::player::RenderPlayer;
+use crate::entity::RenderEntity;
 use crate::game::{SurfaceSelection, RenderRect};
 
 use wgpu::{Device, Buffer};
@@ -301,7 +301,7 @@ impl Buffers {
     }
 
     /// TODO: Set individual corner vertex colours to show which points of the ecb are selected
-    pub fn new_ecb(device: &Device, player: &RenderPlayer) -> Rc<Buffers> {
+    pub fn new_ecb(device: &Device, player: &RenderEntity) -> Rc<Buffers> {
         let color = [1.0, 1.0, 1.0, 1.0];
         let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
         let vertices: [ColorVertex; 12] = [

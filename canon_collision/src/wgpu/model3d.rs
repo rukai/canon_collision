@@ -1,5 +1,5 @@
 use canon_collision_lib::assets::Assets;
-use crate::game::{RenderEntity, RenderGame};
+use crate::game::{RenderObject, RenderGame};
 use crate::wgpu::buffers::Buffers;
 
 use std::collections::HashMap;
@@ -65,12 +65,12 @@ impl Models {
 
         // load current fighters
         for entity in render.entities.iter() {
-            if let RenderEntity::Player(ref player) = entity {
-                let fighter_model_name = player.frames[0].model_name.replace(" ", "");
+            if let RenderObject::Entity(entity) = entity {
+                let fighter_model_name = entity.frames[0].model_name.replace(" ", "");
                 if !self.models.contains_key(&fighter_model_name) {
                     // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
                     if let Some(data) = self.assets.get_model(&fighter_model_name) {
-                        self.models.insert(fighter_model_name.clone(), Model3D::from_gltf(device, queue, &data));
+                        self.models.insert(fighter_model_name.to_string(), Model3D::from_gltf(device, queue, &data));
                     }
                 }
             }

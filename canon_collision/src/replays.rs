@@ -6,8 +6,7 @@ use canon_collision_lib::input::state::ControllerInput;
 use canon_collision_lib::stage::{Stage, DebugStage};
 use crate::camera::Camera;
 use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
-use crate::player::{DebugPlayer};
-use crate::entity::Entity;
+use crate::entity::{Entity, DebugEntity};
 use crate::rules::Rules;
 use canon_collision_lib::replays_files;
 
@@ -23,26 +22,26 @@ pub fn save_replay(replay: &Replay) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Replay {
-    pub init_seed:                u64,
-    pub timestamp:                DateTime<Local>,
-    pub input_history:            Vec<Vec<ControllerInput>>,
-    pub entity_history:           Vec<Vec<Entity>>,
-    pub stage_history:            Vec<Stage>,
-    pub selected_controllers:     Vec<usize>,
-    pub selected_players:         Vec<PlayerSetup>,
-    pub selected_ais:             Vec<usize>,
-    pub selected_stage:           String,
-    pub rules:                    Rules,
-    pub max_history_frames:       Option<usize>,
-    pub deleted_history_frames:   usize,
-    pub hot_reload_current_frame: usize,
-    pub hot_reload_camera:        Camera,
-    pub hot_reload_debug_players: Vec<DebugPlayer>,
-    pub hot_reload_debug_stage:   DebugStage,
-    pub hot_reload_entities:      Vec<Entity>,
-    pub hot_reload_stage:         Stage,
-    pub hot_reload_as_running:    bool,
-    pub hot_reload_edit:          Edit,
+    pub init_seed:                 u64,
+    pub timestamp:                 DateTime<Local>,
+    pub input_history:             Vec<Vec<ControllerInput>>,
+    pub entity_history:            Vec<Vec<Entity>>,
+    pub stage_history:             Vec<Stage>,
+    pub selected_controllers:      Vec<usize>,
+    pub selected_players:          Vec<PlayerSetup>,
+    pub selected_ais:              Vec<usize>,
+    pub selected_stage:            String,
+    pub rules:                     Rules,
+    pub max_history_frames:        Option<usize>,
+    pub deleted_history_frames:    usize,
+    pub hot_reload_current_frame:  usize,
+    pub hot_reload_camera:         Camera,
+    pub hot_reload_debug_entities: Vec<DebugEntity>,
+    pub hot_reload_debug_stage:    DebugStage,
+    pub hot_reload_entities:       Vec<Entity>,
+    pub hot_reload_stage:          Stage,
+    pub hot_reload_as_running:     bool,
+    pub hot_reload_edit:           Edit,
 }
 
 impl Replay {
@@ -68,24 +67,24 @@ impl Replay {
         };
 
         Replay {
-            init_seed:                game.init_seed.clone(),
-            timestamp:                Local::now(),
-            input_history:            input.get_history(),
-            entity_history:           game.entity_history.clone(),
-            stage_history:            game.stage_history.clone(),
-            selected_controllers:     game.selected_controllers.clone(),
-            selected_ais:             game.selected_ais.clone(),
-            selected_stage:           game.selected_stage.clone(),
-            rules:                    game.rules.clone(),
-            max_history_frames:       game.max_history_frames,
-            deleted_history_frames:   game.deleted_history_frames,
-            hot_reload_current_frame: game.current_frame,
-            hot_reload_camera:        game.camera.clone(),
-            hot_reload_debug_players: game.debug_players.clone(),
-            hot_reload_debug_stage:   game.debug_stage.clone(),
-            hot_reload_entities:      game.entities.clone(),
-            hot_reload_stage:         game.stage.clone(),
-            hot_reload_edit:          game.edit.clone(),
+            init_seed:                 game.init_seed.clone(),
+            timestamp:                 Local::now(),
+            input_history:             input.get_history(),
+            entity_history:            game.entity_history.clone(),
+            stage_history:             game.stage_history.clone(),
+            selected_controllers:      game.selected_controllers.clone(),
+            selected_ais:              game.selected_ais.clone(),
+            selected_stage:            game.selected_stage.clone(),
+            rules:                     game.rules.clone(),
+            max_history_frames:        game.max_history_frames,
+            deleted_history_frames:    game.deleted_history_frames,
+            hot_reload_current_frame:  game.current_frame,
+            hot_reload_camera:         game.camera.clone(),
+            hot_reload_debug_entities: game.debug_entities.clone(),
+            hot_reload_debug_stage:    game.debug_stage.clone(),
+            hot_reload_entities:       game.entities.clone(),
+            hot_reload_stage:          game.stage.clone(),
+            hot_reload_edit:           game.edit.clone(),
             hot_reload_as_running,
             selected_players,
         }
@@ -109,8 +108,8 @@ impl Replay {
             self.deleted_history_frames
         };
 
-        let debug_players = if hot_reload {
-            Some(self.hot_reload_debug_players)
+        let debug_entities = if hot_reload {
+            Some(self.hot_reload_debug_entities)
         } else {
             None
         };
@@ -155,7 +154,7 @@ impl Replay {
             current_frame:          current_frame,
             debug:                  false,
             camera,
-            debug_players,
+            debug_entities,
             debug_stage,
             hot_reload_entities,
             hot_reload_stage,
