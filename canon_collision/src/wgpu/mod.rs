@@ -10,6 +10,7 @@ use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::results::PlayerResult;
+use crate::player::RenderPlayer;
 use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
@@ -1088,16 +1089,16 @@ impl WgpuGraphics {
         for entity in render.entities.iter() {
             match entity {
                 RenderObject::Entity (entity) => {
-                    fn player_matrix(frame: &RenderEntityFrame) -> Matrix4<f32> {
+                    fn entity_matrix(frame: &RenderEntityFrame) -> Matrix4<f32> {
                         let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
                         let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
                         let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
                         position * rotate * dir
                     }
 
-                    let transformation = player_matrix(&entity.frames[0]);
+                    let transformation = entity_matrix(&entity.frames[0]);
 
-                    // draw fighter
+                    // draw entity
                     let action_index = entity.frames[0].action;
                     match Action::from_u64(action_index as u64) {
                         Some(Action::Eliminated) => { }
@@ -1109,7 +1110,7 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(&fighter_model_name) {
-                                    let action = Action::action_index_to_string(action_index);
+                                    let action = entity.render_type.action_index_to_string(action_index);
                                     draws.extend(self.render_model3d(&render, &fighter, &transformation, &action, entity.frames[0].frame as f32));
                                 }
                             }
@@ -1132,7 +1133,7 @@ impl WgpuGraphics {
                         if entity.debug.render.onion_skin() {
                             if let Some(frame) = entity.frames.get(2) {
                                 if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
-                                    let transformation = player_matrix(frame);
+                                    let transformation = entity_matrix(frame);
                                     let onion_color = [0.4, 0.4, 0.4, 0.4];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
                                 }
@@ -1140,7 +1141,7 @@ impl WgpuGraphics {
 
                             if let Some(frame) = entity.frames.get(1) {
                                 if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
-                                    let transformation = player_matrix(frame);
+                                    let transformation = entity_matrix(frame);
                                     let onion_color = [0.80, 0.80, 0.80, 0.9];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
                                 }
@@ -1640,7 +1641,12 @@ impl WgpuGraphics {
 
                     // draw fighter
                     let player = RenderEntity {
-                        render_type:       RenderEntityType::Generic,
+                        render_type: RenderEntityType::Player(RenderPlayer {
+                            team: 0,
+                            damage: 0.0,
+                            stocks: None,
+                            shield: None,
+                        }),
                         debug:             Default::default(),
                         frame_data:        ActionFrame::default(),
                         fighter_color:     graphics::get_team_color3(selection.team),

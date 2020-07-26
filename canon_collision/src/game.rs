@@ -1045,10 +1045,13 @@ impl Game {
                     surfaces:     &self.stage.surfaces,
                     rng:          &mut rng,
                     new_entities: &mut new_entities,
+                    delete_self:  false,
                     input,
                 };
                 entity.action_hitlag_step(&mut context);
-                action_entities.push(entity);
+                if !context.delete_self {
+                    action_entities.push(entity);
+                }
             }
 
             // step each entity physics
@@ -1064,10 +1067,13 @@ impl Game {
                     surfaces:     &self.stage.surfaces,
                     rng:          &mut rng,
                     new_entities: &mut new_entities,
+                    delete_self:  false,
                     input,
                 };
                 entity.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
-                physics_entities.push(entity);
+                if !context.delete_self {
+                    physics_entities.push(entity);
+                }
             }
 
             // check for hits and run hit logic
@@ -1084,10 +1090,13 @@ impl Game {
                     surfaces:     &self.stage.surfaces,
                     rng:          &mut rng,
                     new_entities: &mut new_entities,
+                    delete_self:  false,
                     input,
                 };
                 entity.step_collision(&mut context, &collision_results[i]);
-                collision_entities.push(entity);
+                if !context.delete_self {
+                    collision_entities.push(entity);
+                }
             }
 
             collision_entities.append(&mut new_entities);

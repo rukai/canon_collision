@@ -1,15 +1,16 @@
 use crate::player::{Player, RenderPlayer};
 use crate::rules::Goal;
-use crate::simple_projectile::SimpleProjectile;
+use crate::projectile::{Projectile, ProjectileAction};
 use crate::collision::CollisionResult;
 use crate::particle::Particle;
 use crate::graphics;
 
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::fighter::{Fighter, ActionFrame, CollisionBoxRole, ECB};
+use canon_collision_lib::fighter::{Fighter, ActionFrame, CollisionBoxRole, ECB, Action};
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
+use num_traits::FromPrimitive;
 use rand_chacha::ChaChaRng;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 use winit::event::VirtualKeyCode;
@@ -20,7 +21,7 @@ use std::collections::HashSet;
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum Entity {
     Player (Player),
-    SimpleProjectile (SimpleProjectile)
+    Projectile (Projectile)
 }
 
 impl Default for Entity {
@@ -40,14 +41,14 @@ impl Entity {
     pub fn face_right(&self) -> bool {
         match self {
             Entity::Player (player) => player.face_right,
-            Entity::SimpleProjectile (projectile) => projectile.angle > 0.0 && projectile.angle < 180.0, // TODO: what is the actual range?
+            Entity::Projectile (projectile) => projectile.angle > 0.0 && projectile.angle < 180.0, // TODO: what is the actual range?
         }
     }
 
     pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
         match self {
             Entity::Player (player) => player.bps_xy(context),
-            Entity::SimpleProjectile (projectile) => (projectile.x, projectile.y)
+            Entity::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
 
@@ -55,28 +56,28 @@ impl Entity {
     pub fn public_bps_xy(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         match self {
             Entity::Player (player) => player.public_bps_xy(players, fighters, surfaces),
-            Entity::SimpleProjectile (projectile) => (projectile.x, projectile.y)
+            Entity::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, player_i: usize, game_frame: usize, goal: Goal) {
         match self {
             Entity::Player (player) => player.physics_step(context, player_i, game_frame, goal),
-            Entity::SimpleProjectile (_) => { }
+            Entity::Projectile (_) => { }
         }
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         match self {
             Entity::Player (player) => player.step_collision(context, col_results),
-            Entity::SimpleProjectile (_) => { }
+            Entity::Projectile (projectile) => projectile.step_collision(context, col_results),
         }
     }
 
     pub fn action_hitlag_step(&mut self, context: &mut StepContext) {
         match self {
             Entity::Player (player) => player.action_hitlag_step(context),
-            Entity::SimpleProjectile (_) => { }
+            Entity::Projectile (projectile) => projectile.action_hitlag_step(context),
         }
     }
 
@@ -90,21 +91,21 @@ impl Entity {
     pub fn platform_deleted(&mut self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
         match self {
             Entity::Player (player) => player.platform_deleted(players, fighters, surfaces, deleted_platform_i),
-            Entity::SimpleProjectile (_) => { }
+            Entity::Projectile (_) => { }
         }
     }
 
     pub fn entity_def_key(&self) -> &str {
         match self {
             Entity::Player (player) => player.fighter.as_ref(),
-            Entity::SimpleProjectile (projectile) => projectile.entity_def_key.as_ref(),
+            Entity::Projectile (projectile) => projectile.entity_def_key.as_ref(),
         }
     }
 
     pub fn angle(&self, fighter: &Fighter, surfaces: &[Surface]) -> f32 {
         match self {
             Entity::Player (player) => player.angle(fighter, surfaces),
-            Entity::SimpleProjectile (projectile) => projectile.angle,
+            Entity::Projectile (projectile) => projectile.angle,
         }
     }
 
@@ -115,7 +116,7 @@ impl Entity {
     pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
         match self {
             Entity::Player (player) => player.get_fighter_frame(fighter),
-            Entity::SimpleProjectile (projectile) => projectile.get_fighter_frame(fighter),
+            Entity::Projectile (projectile) => projectile.get_fighter_frame(fighter),
         }
     }
 
@@ -147,63 +148,63 @@ impl Entity {
     pub fn frame(&self) -> i64 {
         match self {
             Entity::Player (player) => player.frame,
-            Entity::SimpleProjectile (projectile) => projectile.frame,
+            Entity::Projectile (projectile) => projectile.frame,
         }
     }
 
     pub fn set_frame(&mut self, frame: i64) {
         match self {
             Entity::Player (player) => player.frame = frame,
-            Entity::SimpleProjectile (projectile) => projectile.frame = frame,
+            Entity::Projectile (projectile) => projectile.frame = frame,
         }
     }
 
     pub fn action(&self) -> u64 {
         match self {
             Entity::Player (player) => player.action,
-            Entity::SimpleProjectile (projectile) => projectile.action,
+            Entity::Projectile (projectile) => projectile.action,
         }
     }
 
     pub fn cam_area(&self, cam_max: &Rect, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
         match self {
             Entity::Player (player) => player.cam_area(cam_max, players, fighters, surfaces),
-            Entity::SimpleProjectile (_) => None
+            Entity::Projectile (_) => None
         }
     }
 
     pub fn hitlist(&self) -> &[usize] {
         match self {
             Entity::Player (player) => &player.hitlist,
-            Entity::SimpleProjectile (_) => &[]
+            Entity::Projectile (_) => &[]
         }
     }
 
     pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: Option<&PlayerInput>, debug: &DebugEntity, index: usize) -> Vec<String> {
         match self {
-            Entity::Player (player) => player.debug_print(fighters, player_input.unwrap(), debug, index),
-            _ => vec!()
+            Entity::Player (player)         => player.debug_print(fighters, player_input.unwrap(), debug, index),
+            Entity::Projectile (projectile) => projectile.debug_print(fighters, debug, index),
         }
     }
 
     pub fn ecb(&self) -> ECB {
         match self {
-            Entity::Player (player)      => player.ecb.clone(),
-            Entity::SimpleProjectile (_) => ECB::default(),
+            Entity::Player (player) => player.ecb.clone(),
+            Entity::Projectile (_)  => ECB::default(),
         }
     }
 
     pub fn team(&self) -> usize {
         match self {
             Entity::Player (player) => player.team,
-            Entity::SimpleProjectile (_) => 0,
+            Entity::Projectile (_) => 0,
         }
     }
 
     pub fn particles(&self) -> Vec<Particle> {
         match self {
             Entity::Player (player) => player.particles.clone(),
-            Entity::SimpleProjectile (_) => vec!(),
+            Entity::Projectile (_) => vec!(),
         }
     }
 
@@ -231,7 +232,7 @@ impl Entity {
 
         let render_type = match self {
             Entity::Player (player) => RenderEntityType::Player (player.render(entities, fighters, surfaces)),
-            Entity::SimpleProjectile (_) => RenderEntityType::Generic,
+            Entity::Projectile (_) => RenderEntityType::Projectile,
         };
 
         RenderEntity {
@@ -277,7 +278,33 @@ pub struct RenderEntity {
 
 pub enum RenderEntityType {
     Player (RenderPlayer),
-    Generic,
+    Projectile,
+}
+
+impl RenderEntityType {
+    /// TODO: figure out a better spot to put this so we can access from the hurtbox generator.
+    pub fn action_index_to_string(&self, action_index: usize) -> String {
+        match self {
+            RenderEntityType::Player (_) => {
+                match Action::from_u64(action_index as u64) {
+                    Some(action) => {
+                        let action: &str = action.into();
+                        action.to_string()
+                    }
+                    None => format!("{}", action_index),
+                }
+            }
+            RenderEntityType::Projectile => {
+                match ProjectileAction::from_u64(action_index as u64) {
+                    Some(action) => {
+                        let action: &str = action.into();
+                        action.to_string()
+                    }
+                    None => format!("{}", action_index),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Node)]
@@ -438,4 +465,5 @@ pub struct StepContext<'a> {
     pub surfaces:     &'a [Surface],
     pub rng:          &'a mut ChaChaRng,
     pub new_entities: &'a mut Vec<Entity>,
+    pub delete_self:  bool,
 }
