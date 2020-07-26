@@ -97,7 +97,7 @@ impl Entity {
     pub fn entity_def_key(&self) -> &str {
         match self {
             Entity::Player (player) => player.fighter.as_ref(),
-            Entity::SimpleProjectile (_) => "unimplemented",
+            Entity::SimpleProjectile (projectile) => projectile.entity_def_key.as_ref(),
         }
     }
 
@@ -179,9 +179,9 @@ impl Entity {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugEntity, index: usize) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: Option<&PlayerInput>, debug: &DebugEntity, index: usize) -> Vec<String> {
         match self {
-            Entity::Player (player) => player.debug_print(fighters, player_input, debug, index),
+            Entity::Player (player) => player.debug_print(fighters, player_input.unwrap(), debug, index),
             _ => vec!()
         }
     }
@@ -220,10 +220,12 @@ impl Entity {
         let mut frames = vec!(self.render_frame(entities, fighters, surfaces));
         let range = entity_history.len().saturating_sub(10) .. entity_history.len();
         for entities in entity_history[range].iter().rev() {
-            let entity = &entities[entity_i];
-            // handle deleted frames by just skipping it, only encountered when the editor is used.
-            if fighter.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
-                frames.push(entity.render_frame(entities, fighters, surfaces));
+            // TODO: Uh oh ... we cant rely on indexes remaining valid anymore, we need a way to map indices back to previous frames.
+            if let Some(entity) = entities.get(entity_i) {
+                // handle deleted frames by just skipping it, only encountered when the editor is used.
+                if fighter.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
+                    frames.push(entity.render_frame(entities, fighters, surfaces));
+                }
             }
         }
 
@@ -278,7 +280,7 @@ pub enum RenderEntityType {
     Generic,
 }
 
-#[derive(Clone, Serialize, Deserialize, Node)]
+#[derive(Copy, Clone, Serialize, Deserialize, Node)]
 pub enum RenderDebugType {
     Normal,
     NormalAndDebug,
@@ -330,7 +332,7 @@ impl RenderDebugType {
     }
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize, Node)]
 pub struct DebugEntity {
     pub render:         RenderDebugType,
     pub physics:        bool,
@@ -428,11 +430,12 @@ pub struct VectorArrow {
 }
 
 pub struct StepContext<'a> {
-    pub input:    &'a PlayerInput,
-    pub entities: &'a [Entity],
-    pub fighters: &'a KeyedContextVec<Fighter>,
-    pub fighter:  &'a Fighter,
-    pub stage:    &'a Stage,
-    pub surfaces: &'a [Surface],
-    pub rng:      &'a mut ChaChaRng,
+    pub input:        &'a PlayerInput,
+    pub entities:     &'a [Entity],
+    pub fighters:     &'a KeyedContextVec<Fighter>,
+    pub fighter:      &'a Fighter,
+    pub stage:        &'a Stage,
+    pub surfaces:     &'a [Surface],
+    pub rng:          &'a mut ChaChaRng,
+    pub new_entities: &'a mut Vec<Entity>,
 }

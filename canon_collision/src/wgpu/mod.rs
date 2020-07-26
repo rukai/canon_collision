@@ -848,8 +848,10 @@ impl WgpuGraphics {
     fn game_hud_render(&mut self, objects: &[RenderObject]) {
         let mut entities = 0;
         for object in objects {
-            if let RenderObject::Entity(_) = object {
-                entities += 1;
+            if let RenderObject::Entity (entity) = object {
+                if let RenderEntityType::Player (_) = &entity.render_type {
+                    entities += 1;
+                }
             }
         }
         let distance = (self.width / (entities + 1)) as f32;

@@ -36,7 +36,7 @@ pub struct Replay {
     pub deleted_history_frames:    usize,
     pub hot_reload_current_frame:  usize,
     pub hot_reload_camera:         Camera,
-    pub hot_reload_debug_entities: Vec<DebugEntity>,
+    pub hot_reload_debug_entities: [DebugEntity; 9],
     pub hot_reload_debug_stage:    DebugStage,
     pub hot_reload_entities:       Vec<Entity>,
     pub hot_reload_stage:          Stage,

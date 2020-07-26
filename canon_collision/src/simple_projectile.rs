@@ -4,6 +4,7 @@ use treeflection::{Node, NodeRunner, NodeToken};
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct SimpleProjectile {
+    pub entity_def_key: String,
     pub action: u64,
     pub frame: i64,
     pub angle: f32,

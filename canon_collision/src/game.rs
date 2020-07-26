@@ -53,7 +53,7 @@ pub struct Game {
     pub stage:                  Stage,
     pub entities:               Vec<Entity>,
     pub debug_stage:            DebugStage,
-    pub debug_entities:         Vec<DebugEntity>,
+    pub debug_entities:         [DebugEntity; 9], // one for each number key (except 0)
     pub selected_controllers:   Vec<usize>,
     pub selected_ais:           Vec<usize>,
     pub selected_stage:         String,
@@ -92,28 +92,26 @@ impl Game {
         };
 
         // generate players
-        let mut entities:       Vec<Entity>      = vec!();
-        let mut debug_entities: Vec<DebugEntity> = vec!();
+        let mut entities: Vec<Entity> = vec!();
         {
             for (i, player) in setup.players.iter().enumerate() {
                 // Stage can have less spawn points then players
                 let fighter = player.fighter.clone();
                 let team = player.team;
                 entities.push(Entity::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)));
-                if setup.debug {
-                    debug_entities.push(DebugEntity::all());
-                }
-                else {
-                    debug_entities.push(Default::default());
-                }
             }
         }
 
+        let debug_entities = if let Some(value) = setup.debug_entities {
+            value
+        } else if setup.debug {
+            [DebugEntity::all(); 9]
+        } else {
+            [DebugEntity::default(); 9]
+        };
+
         if let Some(overwrite) = setup.hot_reload_entities {
             entities = overwrite;
-        }
-        if let Some(overwrite) = setup.debug_entities {
-            debug_entities = overwrite;
         }
 
         Game {
@@ -243,40 +241,41 @@ impl Game {
     fn set_context(&mut self) {
         match self.edit {
             Edit::Entity (entity_i) => {
-                let entity_def_key  = self.entities[entity_i].entity_def_key().as_ref();
-                let entity_action   = self.entities[entity_i].action() as usize;
-                let entity_frame    = self.entities[entity_i].frame() as usize;
-                let entity_colboxes = self.selector.colboxes_vec();
+                if let Some(entity) = self.entities.get(entity_i) {
+                    let entity_def_key  = entity.entity_def_key().as_ref();
+                    let entity_action   = entity.action() as usize;
+                    let entity_frame    = entity.frame() as usize;
+                    let entity_colboxes = self.selector.colboxes_vec();
 
-                let fighters = &mut self.package.fighters;
-                if let Some(fighter_index) = fighters.key_to_index(entity_def_key) {
-                    fighters.set_context(fighter_index);
-                }
-                else {
-                    return;
-                }
+                    let fighters = &mut self.package.fighters;
+                    if let Some(fighter_index) = fighters.key_to_index(entity_def_key) {
+                        fighters.set_context(fighter_index);
+                    }
+                    else {
+                        return;
+                    }
 
-                let actions = &mut fighters[entity_def_key].actions;
-                if entity_action >= actions.len() {
-                    return;
-                }
-                actions.set_context(entity_action);
+                    let actions = &mut fighters[entity_def_key].actions;
+                    if entity_action >= actions.len() {
+                        return;
+                    }
+                    actions.set_context(entity_action);
 
-                let frames = &mut actions[entity_action].frames;
-                if entity_frame >= frames.len() {
-                    return;
-                }
-                frames.set_context(entity_frame);
+                    let frames = &mut actions[entity_action].frames;
+                    if entity_frame >= frames.len() {
+                        return;
+                    }
+                    frames.set_context(entity_frame);
 
-                let colboxes = &mut frames[entity_frame].colboxes;
-                colboxes.set_context_vec(entity_colboxes);
+                    let colboxes = &mut frames[entity_frame].colboxes;
+                    colboxes.set_context_vec(entity_colboxes);
+                }
             }
             Edit::Stage => {
                 self.stage.surfaces.set_context_vec(self.selector.surfaces_vec());
                 self.stage.spawn_points.set_context_vec(self.selector.spawn_points.iter().cloned().collect());
                 self.stage.respawn_points.set_context_vec(self.selector.respawn_points.iter().cloned().collect());
             }
-            _ => { }
         }
     }
 
@@ -393,248 +392,245 @@ impl Game {
     }
 
     fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
-        let entities_len = self.entities.len();
-
         // set current edit state
         if os_input.key_pressed(VirtualKeyCode::Key0) {
             self.edit = Edit::Stage;
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key1) && entities_len >= 1 {
-            if os_input.held_shift() {
-                self.edit = Edit::Player (0);
-            }
-            else {
-                self.edit = Edit::Entity (0);
-            }
+        else if os_input.key_pressed(VirtualKeyCode::Key1) {
+            self.edit = Edit::Entity (0);
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key2) && entities_len >= 2 {
-            if os_input.held_shift() {
-                self.edit = Edit::Player (1);
-            }
-            else {
-                self.edit = Edit::Entity (1);
-            }
+        else if os_input.key_pressed(VirtualKeyCode::Key2) {
+            self.edit = Edit::Entity (1);
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key3) && entities_len >= 3 {
-            if os_input.held_shift() {
-                self.edit = Edit::Player (2);
-            }
-            else {
-                self.edit = Edit::Entity (2);
-            }
+        else if os_input.key_pressed(VirtualKeyCode::Key3) {
+            self.edit = Edit::Entity (2);
             self.update_frame();
         }
-        else if os_input.key_pressed(VirtualKeyCode::Key4) && entities_len >= 4 {
-            if os_input.held_shift() {
-                self.edit = Edit::Player (3);
-            }
-            else {
-                self.edit = Edit::Entity (3);
-            }
+        else if os_input.key_pressed(VirtualKeyCode::Key4) {
+            self.edit = Edit::Entity (3);
+            self.update_frame();
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Key5) {
+            self.edit = Edit::Entity (4);
+            self.update_frame();
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Key6) {
+            self.edit = Edit::Entity (5);
+            self.update_frame();
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Key7) {
+            self.edit = Edit::Entity (6);
+            self.update_frame();
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Key8) {
+            self.edit = Edit::Entity (7);
+            self.update_frame();
+        }
+        else if os_input.key_pressed(VirtualKeyCode::Key9) {
+            self.edit = Edit::Entity (8);
             self.update_frame();
         }
 
         match self.edit {
             Edit::Entity (entity_i) => {
-                let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
-                let fighter = entity_def_key.as_ref();
-                let action = self.entities[entity_i].action() as usize;
-                let action_enum = Action::from_u64(self.entities[entity_i].action());
-                let frame  = self.entities[entity_i].frame() as usize;
-                self.debug_entities[entity_i].step(os_input);
+                if entity_i < self.entities.len() {
+                    let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
+                    let fighter = entity_def_key.as_ref();
+                    let action = self.entities[entity_i].action() as usize;
+                    let action_enum = Action::from_u64(self.entities[entity_i].action());
+                    let frame  = self.entities[entity_i].frame() as usize;
+                    self.debug_entities[entity_i].step(os_input);
 
-                // by adding the same amount of frames that are skipped in the entity logic,
-                // the user continues to see the same frames as they step through the action
-                let repeat_frames = if let Entity::Player (player) = &self.entities[entity_i] {
-                    if action_enum.as_ref().map_or(false, |x| x.is_land()) {
-                        player.land_frame_skip + 1
+                    // by adding the same amount of frames that are skipped in the entity logic,
+                    // the user continues to see the same frames as they step through the action
+                    let repeat_frames = if let Entity::Player (player) = &self.entities[entity_i] {
+                        if action_enum.as_ref().map_or(false, |x| x.is_land()) {
+                            player.land_frame_skip + 1
+                        } else {
+                            1
+                        }
                     } else {
                         1
-                    }
-                } else {
-                    1
-                };
+                    };
 
 
-                // move collisionboxes
-                if self.selector.moving {
-                    // undo the operations used to render the entity
-                    let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                    let angle = -self.entities[entity_i].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
-                    let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
-                    let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
-                    let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
-                    self.package.move_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, distance);
+                    // move collisionboxes
+                    if self.selector.moving {
+                        // undo the operations used to render the entity
+                        let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
+                        let angle = -self.entities[entity_i].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
+                        let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
+                        let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
+                        let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
+                        self.package.move_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, distance);
 
-                    // end move
-                    if os_input.mouse_pressed(0) {
-                        self.update_frame();
-                    }
-                }
-                else {
-                    // copy frame
-                    if os_input.key_pressed(VirtualKeyCode::V) {
-                        let frame = self.package.fighters[fighter].actions[action].frames[frame].clone();
-                        self.copied_frame = Some(frame);
-                    }
-                    // paste over current frame
-                    if os_input.key_pressed(VirtualKeyCode::B) {
-                        let action_frame = self.copied_frame.clone();
-                        if let Some(action_frame) = action_frame {
-                            self.package.insert_fighter_frame(fighter, action, frame, action_frame);
-                            self.package.delete_fighter_frame(fighter, action, frame+1);
+                        // end move
+                        if os_input.mouse_pressed(0) {
+                            self.update_frame();
                         }
                     }
-
-                    // new frame
-                    if os_input.key_pressed(VirtualKeyCode::M) {
-                        for i in 0..repeat_frames {
-                            self.package.new_fighter_frame(fighter, action, frame + i as usize);
+                    else {
+                        // copy frame
+                        if os_input.key_pressed(VirtualKeyCode::V) {
+                            let frame = self.package.fighters[fighter].actions[action].frames[frame].clone();
+                            self.copied_frame = Some(frame);
                         }
-                        // We want to step just the entities current frame to simplify the animation work flow
-                        // However we need to do a proper full step so that the history doesn't get mucked up.
-                        self.step_local(input, netplay);
-                    }
-                    // delete frame
-                    if os_input.key_pressed(VirtualKeyCode::N) {
-                        let i = 0; //for i in 0..repeat_frames { // TODO: Panic
-                            if self.package.delete_fighter_frame(fighter, action, frame - i as usize) {
-                                // Correct any entities that are now on a nonexistent frame due to the frame deletion.
-                                // This is purely to stay on the same action for usability.
-                                // The entity itself must handle being on a frame that has been deleted in order for replays to work.
-                                for any_entity in &mut self.entities {
-                                    if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
-                                        && any_entity.frame() as usize == self.package.fighters[fighter].actions[action].frames.len()
-                                    {
-                                        any_entity.set_frame(any_entity.frame() - 1);
-                                    }
-                                }
-                                self.update_frame();
+                        // paste over current frame
+                        if os_input.key_pressed(VirtualKeyCode::B) {
+                            let action_frame = self.copied_frame.clone();
+                            if let Some(action_frame) = action_frame {
+                                self.package.insert_fighter_frame(fighter, action, frame, action_frame);
+                                self.package.delete_fighter_frame(fighter, action, frame+1);
                             }
-                        //}
-                    }
-
-                    // start move collisionbox
-                    if os_input.key_pressed(VirtualKeyCode::A) {
-                        if self.selector.colboxes.len() > 0 {
-                            self.selector.moving = true;
                         }
-                    }
-                    // enter pivot mode
-                    if os_input.key_pressed(VirtualKeyCode::S) {
-                        // TODO
-                    }
-                    // delete collisionbox
-                    if os_input.key_pressed(VirtualKeyCode::D) {
-                        self.package.delete_fighter_colboxes(fighter, action, frame, &self.selector.colboxes);
-                        self.update_frame();
-                    }
-                    // add collisionbox
-                    if os_input.key_pressed(VirtualKeyCode::F) {
-                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
-                            let selected = {
+
+                        // new frame
+                        if os_input.key_pressed(VirtualKeyCode::M) {
+                            for i in 0..repeat_frames {
+                                self.package.new_fighter_frame(fighter, action, frame + i as usize);
+                            }
+                            // We want to step just the entities current frame to simplify the animation work flow
+                            // However we need to do a proper full step so that the history doesn't get mucked up.
+                            self.step_local(input, netplay);
+                        }
+                        // delete frame
+                        if os_input.key_pressed(VirtualKeyCode::N) {
+                            let i = 0; //for i in 0..repeat_frames { // TODO: Panic
+                                if self.package.delete_fighter_frame(fighter, action, frame - i as usize) {
+                                    // Correct any entities that are now on a nonexistent frame due to the frame deletion.
+                                    // This is purely to stay on the same action for usability.
+                                    // The entity itself must handle being on a frame that has been deleted in order for replays to work.
+                                    for any_entity in &mut self.entities {
+                                        if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
+                                            && any_entity.frame() as usize == self.package.fighters[fighter].actions[action].frames.len()
+                                        {
+                                            any_entity.set_frame(any_entity.frame() - 1);
+                                        }
+                                    }
+                                    self.update_frame();
+                                }
+                            //}
+                        }
+
+                        // start move collisionbox
+                        if os_input.key_pressed(VirtualKeyCode::A) {
+                            if self.selector.colboxes.len() > 0 {
+                                self.selector.moving = true;
+                            }
+                        }
+                        // enter pivot mode
+                        if os_input.key_pressed(VirtualKeyCode::S) {
+                            // TODO
+                        }
+                        // delete collisionbox
+                        if os_input.key_pressed(VirtualKeyCode::D) {
+                            self.package.delete_fighter_colboxes(fighter, action, frame, &self.selector.colboxes);
+                            self.update_frame();
+                        }
+                        // add collisionbox
+                        if os_input.key_pressed(VirtualKeyCode::F) {
+                            if let Some((m_x, m_y)) = self.game_mouse(os_input) {
+                                let selected = {
+                                    let entity = &self.entities[entity_i];
+                                    let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+
+                                    let point = (entity.relative_f(m_x - p_x), m_y - p_y);
+                                    let new_colbox = CollisionBox::new(point);
+
+                                    self.package.append_fighter_colbox(fighter, action, frame, new_colbox)
+                                };
+                                self.update_frame();
+                                self.selector.colboxes.insert(selected);
+                            }
+                        }
+                        // resize collisionbox
+                        if os_input.key_pressed(VirtualKeyCode::LBracket) {
+                            self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, -0.1);
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::RBracket) {
+                            self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, 0.1);
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::Comma) {
+                            if os_input.held_shift() {
+                                self.package.fighter_colboxes_order_set_first(fighter, action, frame, &self.selector.colboxes)
+                            }
+                            else {
+                                self.package.fighter_colboxes_order_decrease(fighter, action, frame, &self.selector.colboxes)
+                            }
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::Period) {
+                            if os_input.held_shift() {
+                                self.package.fighter_colboxes_order_set_last(fighter, action, frame, &self.selector.colboxes)
+                            }
+                            else {
+                                self.package.fighter_colboxes_order_increase(fighter, action, frame, &self.selector.colboxes)
+                            }
+                        }
+                        // set hitbox angle
+                        if os_input.key_pressed(VirtualKeyCode::Q) {
+                            if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let entity = &self.entities[entity_i];
                                 let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
 
-                                let point = (entity.relative_f(m_x - p_x), m_y - p_y);
-                                let new_colbox = CollisionBox::new(point);
-
-                                self.package.append_fighter_colbox(fighter, action, frame, new_colbox)
-                            };
-                            self.update_frame();
-                            self.selector.colboxes.insert(selected);
-                        }
-                    }
-                    // resize collisionbox
-                    if os_input.key_pressed(VirtualKeyCode::LBracket) {
-                        self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, -0.1);
-                    }
-                    if os_input.key_pressed(VirtualKeyCode::RBracket) {
-                        self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, 0.1);
-                    }
-                    if os_input.key_pressed(VirtualKeyCode::Comma) {
-                        if os_input.held_shift() {
-                            self.package.fighter_colboxes_order_set_first(fighter, action, frame, &self.selector.colboxes)
-                        }
-                        else {
-                            self.package.fighter_colboxes_order_decrease(fighter, action, frame, &self.selector.colboxes)
-                        }
-                    }
-                    if os_input.key_pressed(VirtualKeyCode::Period) {
-                        if os_input.held_shift() {
-                            self.package.fighter_colboxes_order_set_last(fighter, action, frame, &self.selector.colboxes)
-                        }
-                        else {
-                            self.package.fighter_colboxes_order_increase(fighter, action, frame, &self.selector.colboxes)
-                        }
-                    }
-                    // set hitbox angle
-                    if os_input.key_pressed(VirtualKeyCode::Q) {
-                        if let Some((m_x, m_y)) = self.game_mouse(os_input) {
-                            let entity = &self.entities[entity_i];
-                            let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
-
-                            let x = entity.relative_f(m_x - p_x);
-                            let y = m_y - p_y;
-                            self.package.point_hitbox_angles_to(fighter, action, frame, &self.selector.colboxes, x, y);
-                        }
-                    }
-
-                    // handle single selection
-                    if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
-                        let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
-                        let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
-
-                        for (i, colbox) in frame.colboxes.iter().enumerate() {
-                            let hit_x = colbox.point.0 + entity_x;
-                            let hit_y = colbox.point.1 + entity_y;
-
-                            let distance = ((m_x - hit_x).powi(2) + (m_y - hit_y).powi(2)).sqrt();
-                            if distance < colbox.radius {
-                                if os_input.held_alt() {
-                                    self.selector.colboxes.remove(&i);
-                                } else {
-                                    self.selector.colboxes.insert(i);
-                                }
+                                let x = entity.relative_f(m_x - p_x);
+                                let y = m_y - p_y;
+                                self.package.point_hitbox_angles_to(fighter, action, frame, &self.selector.colboxes, x, y);
                             }
                         }
 
-                        // Select topmost colbox
-                        // TODO: Broken by the addition of ActionFrame.render_order, fix by taking it into account
-                        if os_input.held_control() {
-                            let mut selector_vec = self.selector.colboxes_vec();
-                            selector_vec.sort();
-                            selector_vec.reverse();
-                            selector_vec.truncate(1);
-                            self.selector.colboxes = selector_vec.into_iter().collect();
-                        }
-                    }
+                        // handle single selection
+                        if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
 
-                    // handle multiple selection
-                    if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
-                        let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
-                        let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+                            for (i, colbox) in frame.colboxes.iter().enumerate() {
+                                let hit_x = colbox.point.0 + entity_x;
+                                let hit_y = colbox.point.1 + entity_y;
 
-                        for (i, colbox) in frame.colboxes.iter().enumerate() {
-                            let hit_x = colbox.point.0 + entity_x;
-                            let hit_y = colbox.point.1 + entity_y;
-
-                            if rect.contains_point(hit_x, hit_y) {
-                                if os_input.held_alt() {
-                                    self.selector.colboxes.remove(&i);
-                                } else {
-                                    self.selector.colboxes.insert(i);
+                                let distance = ((m_x - hit_x).powi(2) + (m_y - hit_y).powi(2)).sqrt();
+                                if distance < colbox.radius {
+                                    if os_input.held_alt() {
+                                        self.selector.colboxes.remove(&i);
+                                    } else {
+                                        self.selector.colboxes.insert(i);
+                                    }
                                 }
                             }
+
+                            // Select topmost colbox
+                            // TODO: Broken by the addition of ActionFrame.render_order, fix by taking it into account
+                            if os_input.held_control() {
+                                let mut selector_vec = self.selector.colboxes_vec();
+                                selector_vec.sort();
+                                selector_vec.reverse();
+                                selector_vec.truncate(1);
+                                self.selector.colboxes = selector_vec.into_iter().collect();
+                            }
                         }
-                        self.selector.point = None;
+
+                        // handle multiple selection
+                        if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+
+                            for (i, colbox) in frame.colboxes.iter().enumerate() {
+                                let hit_x = colbox.point.0 + entity_x;
+                                let hit_y = colbox.point.1 + entity_y;
+
+                                if rect.contains_point(hit_x, hit_y) {
+                                    if os_input.held_alt() {
+                                        self.selector.colboxes.remove(&i);
+                                    } else {
+                                        self.selector.colboxes.insert(i);
+                                    }
+                                }
+                            }
+                            self.selector.point = None;
+                        }
                     }
                 }
-            }
-            Edit::Player (entity_i) => {
-                self.debug_entities[entity_i].step(os_input);
             }
             Edit::Stage => {
                 self.debug_stage.step(os_input);
@@ -1025,8 +1021,9 @@ impl Game {
         seed
     }
 
-    fn step_game(&mut self, input: &Input, player_input: &Vec<PlayerInput>) {
+    fn step_game(&mut self, input: &Input, player_inputs: &[PlayerInput]) {
         {
+            let default_input = PlayerInput::empty();
             let mut rng = ChaChaRng::from_seed(self.get_seed());
 
             // To synchronize entity stepping, we step through entity logic in stages (action logic, physics logic, collision logic)
@@ -1034,15 +1031,20 @@ impl Game {
 
             // step each entity action
             let mut action_entities: Vec<Entity> = vec!();
+            let mut new_entities = vec!();
             for (i, mut entity) in self.entities.iter().cloned().enumerate() {
-                let input = &player_input[self.selected_controllers[i]];
+                // TODO: to let non player entities access inputs we should provide all inputs then
+                // let the entity choose which one they want.
+                let input_i = self.selected_controllers.get(i);
+                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
-                    entities:  &self.entities,
-                    fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[entity.entity_def_key()],
-                    stage:    &self.stage,
-                    surfaces: &self.stage.surfaces,
-                    rng:      &mut rng,
+                    entities:     &self.entities,
+                    fighters:     &self.package.fighters,
+                    fighter:      &self.package.fighters[entity.entity_def_key()],
+                    stage:        &self.stage,
+                    surfaces:     &self.stage.surfaces,
+                    rng:          &mut rng,
+                    new_entities: &mut new_entities,
                     input,
                 };
                 entity.action_hitlag_step(&mut context);
@@ -1052,14 +1054,16 @@ impl Game {
             // step each entity physics
             let mut physics_entities: Vec<Entity> = vec!();
             for (i, mut entity) in action_entities.iter().cloned().enumerate() {
-                let input = &player_input[self.selected_controllers[i]];
+                let input_i = self.selected_controllers.get(i);
+                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
-                    entities:  &self.entities,
-                    fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[entity.entity_def_key()],
-                    stage:    &self.stage,
-                    surfaces: &self.stage.surfaces,
-                    rng:      &mut rng,
+                    entities:     &action_entities,
+                    fighters:     &self.package.fighters,
+                    fighter:      &self.package.fighters[entity.entity_def_key()],
+                    stage:        &self.stage,
+                    surfaces:     &self.stage.surfaces,
+                    rng:          &mut rng,
+                    new_entities: &mut new_entities,
                     input,
                 };
                 entity.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
@@ -1070,19 +1074,23 @@ impl Game {
             let mut collision_entities: Vec<Entity> = vec!();
             let collision_results = collision_check(&physics_entities, &self.package.fighters, &self.stage.surfaces);
             for (i, mut entity) in physics_entities.iter().cloned().enumerate() {
-                let input = &player_input[self.selected_controllers[i]];
+                let input_i = self.selected_controllers.get(i);
+                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
-                    entities: &self.entities,
-                    fighters: &self.package.fighters,
-                    fighter:  &self.package.fighters[entity.entity_def_key()],
-                    stage:    &self.stage,
-                    surfaces: &self.stage.surfaces,
-                    rng:      &mut rng,
+                    entities:     &physics_entities,
+                    fighters:     &self.package.fighters,
+                    fighter:      &self.package.fighters[entity.entity_def_key()],
+                    stage:        &self.stage,
+                    surfaces:     &self.stage.surfaces,
+                    rng:          &mut rng,
+                    new_entities: &mut new_entities,
                     input,
                 };
                 entity.step_collision(&mut context, &collision_results[i]);
                 collision_entities.push(entity);
             }
+
+            collision_entities.append(&mut new_entities);
 
             self.entities = collision_entities;
         }
@@ -1210,10 +1218,11 @@ impl Game {
 
         self.debug_lines = self.camera.debug_print();
         self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
-        for (i, entity) in self.entities.iter().enumerate() {
-            let player_input = &player_inputs[self.selected_controllers[i]];
-            let debug_player = &self.debug_entities[i];
-            self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_player, i));
+        for (i, debug_entity) in self.debug_entities.iter().enumerate() {
+            if let Some(entity) = self.entities.get(i) {
+                let player_input = self.selected_controllers.get(i).and_then(|x| player_inputs.get(*x));
+                self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_entity, i));
+            }
         }
 
         if self.debug_output_this_step {
@@ -1251,7 +1260,7 @@ impl Game {
                 }
             }
 
-            let debug = self.debug_entities[i].clone();
+            let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
             if debug.cam_area {
                 if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
                     render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
@@ -1386,7 +1395,6 @@ impl Default for GameState {
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum Edit {
     Entity (usize), // index to entity
-    Player (usize), // index to player entity
     Stage
 }
 
@@ -1574,7 +1582,7 @@ pub struct GameSetup {
     pub current_frame:          usize,
     pub camera:                 Camera,
     pub debug_stage:            Option<DebugStage>,
-    pub debug_entities:         Option<Vec<DebugEntity>>,
+    pub debug_entities:         Option<[DebugEntity; 9]>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
     pub hot_reload_entities:    Option<Vec<Entity>>,

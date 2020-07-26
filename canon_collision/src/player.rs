@@ -4,6 +4,7 @@ use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
 use crate::entity::{Entity, StepContext, DebugEntity, VectorArrow};
+use crate::simple_projectile::SimpleProjectile;
 
 use canon_collision_lib::fighter::*;
 use canon_collision_lib::geometry::Rect;
@@ -1199,6 +1200,22 @@ impl Player {
     }
 
     fn ground_idle_action(&mut self, context: &mut StepContext) {
+        if let Some(Action::Jab) = Action::from_u64(self.action) {
+            if self.frame == 5 {
+                let (x, y) = self.bps_xy(context);
+                context.new_entities.push(Entity::SimpleProjectile(
+                    SimpleProjectile {
+                        entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
+                        action: 0,
+                        frame: 0,
+                        angle: 0.0,
+                        x: x + self.relative_f(10.0),
+                        y: y + 10.0,
+                    }
+                ));
+            }
+        }
+
         if self.interruptible(&context.fighter) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
