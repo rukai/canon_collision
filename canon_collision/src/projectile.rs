@@ -62,6 +62,11 @@ impl Projectile {
         if self.frame > last_action_frame {
             self.action_expired(context);
         }
+
+        let blast = &context.stage.blast;
+        if self.x < blast.left() || self.x > blast.right() || self.y < blast.bot() || self.y > blast.top() {
+            context.delete_self = true;
+        }
     }
 
     fn action_expired(&mut self, context: &mut StepContext) {
@@ -92,7 +97,20 @@ impl Projectile {
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         for col_result in col_results {
             match col_result {
+                &CollisionResult::Clang { .. } => {
+                    self.set_action(context, ProjectileAction::Hit);
+                }
                 &CollisionResult::HitAtk { .. } => {
+                    self.set_action(context, ProjectileAction::Hit);
+                }
+                &CollisionResult::HitShieldAtk { .. } => {
+                    self.set_action(context, ProjectileAction::Hit);
+                }
+                &CollisionResult::ReflectAtk { .. } => {
+                    // TODO
+                    self.set_action(context, ProjectileAction::Hit);
+                }
+                &CollisionResult::AbsorbAtk { .. } => {
                     self.set_action(context, ProjectileAction::Hit);
                 }
                 _ => { }

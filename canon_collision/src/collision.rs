@@ -10,17 +10,14 @@ use crate::entity::Entity;
 
 /// returns a list of hit results for each player
 pub fn collision_check(entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
-    let mut result: Vec<Vec<CollisionResult>> = vec!();
-    for _ in entities {
-        result.push(vec!());
-    }
+    let mut result: Vec<Vec<CollisionResult>> = entities.iter().map(|_| vec!()).collect();
 
     'player_atk: for (player_atk_i, player_atk) in entities.iter().enumerate() {
         let player_atk_xy = player_atk.public_bps_xy(entities, fighters, surfaces);
         let fighter_atk = &fighters[player_atk.entity_def_key()];
         for (player_def_i, player_def) in entities.iter().enumerate() {
             let player_def_xy = player_def.public_bps_xy(entities, fighters, surfaces);
-            if player_atk_i != player_def_i && player_atk.hitlist().iter().all(|x| *x != player_def_i) {
+            if player_atk_i != player_def_i && player_atk.can_hit(player_def) && player_atk.hitlist().iter().all(|x| *x != player_def_i) {
                 let fighter_def = &fighters[player_def.entity_def_key()];
 
                 let frame_atk = &player_atk.relative_frame(fighter_atk, surfaces);

@@ -145,6 +145,19 @@ impl Entity {
         }
     }
 
+    pub fn can_hit(&self, other: &Entity) -> bool {
+        self.owned_by() != other.owned_by()
+    }
+
+    // TODO: Lets implement generational indices before we continue with this.
+    // Otherwise we'll just end up sad.
+    pub fn owned_by(&self) -> usize {
+        match self {
+            Entity::Player (player) => player.team,
+            Entity::Projectile (_) => 99999,
+        }
+    }
+
     pub fn frame(&self) -> i64 {
         match self {
             Entity::Player (player) => player.frame,
