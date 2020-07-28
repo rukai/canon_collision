@@ -3,7 +3,7 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::{Entity, StepContext, DebugEntity, VectorArrow};
+use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow};
 use crate::projectile::Projectile;
 
 use canon_collision_lib::fighter::*;
@@ -13,15 +13,16 @@ use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::{Stage, Surface};
 
-use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
+use treeflection::KeyedContextVec;
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use num_traits::{FromPrimitive, ToPrimitive};
+use generational_arena::{Arena, Index};
 
 use std::f32;
 use std::f32::consts::PI;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Node)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LockTimer {
     Active (u64),
     Locked (u64),
@@ -43,7 +44,7 @@ impl Default for LockTimer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Node)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LedgeLogic {
     Hog,
     Share,
@@ -51,11 +52,11 @@ pub enum LedgeLogic {
 }
 
 // Describes the player location by offsets from other locations
-#[derive(Debug, Clone, Serialize, Deserialize, Node)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Location {
     Surface { platform_i: usize, x: f32 },
     GrabbedLedge { platform_i: usize, d_x: f32, d_y: f32, logic: LedgeLogic }, // player.face_right determines which edge on the platform
-    GrabbedByPlayer (usize),
+    GrabbedByPlayer (Index),
     Airbourne { x: f32, y: f32 },
 }
 
@@ -71,7 +72,7 @@ impl Default for LedgeLogic {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Node)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Hitlag {
     Some (u64), // TODO: rename Some
     Launch { counter: u64, kb_vel: f32, angle: f32, wobble_x: f32 },
@@ -109,9 +110,10 @@ impl Hitlag {
     }
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Player {
     pub fighter:            String,
+    pub id:                 usize, // unique id among players
     pub team:               usize,
     pub action:             u64, // always change through next_action
     pub set_action_called:  bool,
@@ -149,10 +151,10 @@ pub struct Player {
     pub lcancel_timer:      u64,
     pub land_frame_skip:    u8,
     pub ecb:                ECB,
-    pub hitlist:            Vec<usize>,
+    pub hitlist:            Vec<Index>,
     pub hitlag:             Hitlag,
     pub hitstun:            f32,
-    pub hit_by:             Option<usize>,
+    pub hit_by:             Option<Index>,
     pub particles:          Vec<Particle>,
     pub aerial_dodge_frame: Option<u64>,
     pub result:             RawPlayerResult,
@@ -166,7 +168,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(fighter: String, team: usize, entity_i: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
+    pub fn new(fighter: String, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
@@ -246,6 +248,7 @@ impl Player {
             particles:          vec!(),
             aerial_dodge_frame: None,
             result:             RawPlayerResult::default(),
+            id,
             team,
             fighter,
             location,
@@ -263,7 +266,7 @@ impl Player {
         self.public_bps_xy(&context.entities, &context.fighters, &context.surfaces)
     }
 
-    pub fn public_bps_xy(&self, entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn public_bps_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let bps_xy = match self.location {
             Location::Surface { platform_i, x } => {
                 if let Some(platform) = surfaces.get(platform_i) {
@@ -313,7 +316,7 @@ impl Player {
         }
     }
 
-    pub fn grabbing_xy(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn grabbing_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(players, fighters, surfaces);
         if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
             (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
@@ -424,7 +427,7 @@ impl Player {
         self.frame == fighter.actions[self.action as usize].frames.len() as i64 - 1
     }
 
-    pub fn platform_deleted(&mut self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+    pub fn platform_deleted(&mut self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
         let fall = match &mut self.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
             &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
@@ -531,7 +534,7 @@ impl Player {
                     self.face_right = self.bps_xy(context).0 < player_atk.bps_xy(context).0;
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, player_def_i} => {
-                    if let Entity::Player (player_def) = &context.entities[player_def_i] {
+                    if let EntityType::Player (player_def) = &context.entities[player_def_i].ty {
                         self.hitlist.push(player_def_i);
                         if let &Some(ref power_shield) = power_shield {
                             if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(self.action), &power_shield.enemy_stun) {
@@ -1203,18 +1206,20 @@ impl Player {
         if let Some(Action::Jab) = Action::from_u64(self.action) {
             if self.frame == 5 {
                 let (x, y) = self.bps_xy(context);
-                context.new_entities.push(Entity::Projectile(
-                    Projectile {
-                        entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
-                        action: 0,
-                        frame: 0,
-                        frame_no_restart: 0,
-                        speed: 0.6,
-                        angle: if self.face_right { 0.0 } else { PI },
-                        x: x + self.relative_f(10.0),
-                        y: y + 10.0,
-                    }
-                ));
+                context.new_entities.push(Entity {
+                    ty: EntityType::Projectile(
+                        Projectile {
+                            entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
+                            action: 0,
+                            frame: 0,
+                            frame_no_restart: 0,
+                            speed: 0.6,
+                            angle: if self.face_right { 0.0 } else { PI },
+                            x: x + self.relative_f(10.0),
+                            y: y + 10.0,
+                        }
+                    )
+                });
             }
         }
 
@@ -1637,7 +1642,7 @@ impl Player {
         shield.scaling * (analog_size + hp_size) + hp_size_unscaled
     }
 
-    fn shield_pos(&self, shield: &Shield, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    fn shield_pos(&self, shield: &Shield, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let xy = self.public_bps_xy(players, fighters, surfaces);
         (
             xy.0 + self.shield_offset_x + self.relative_f(shield.offset_x),
@@ -2401,11 +2406,11 @@ impl Player {
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
         match Action::from_u64(self.action) {
             Some(Action::Eliminated) => None,
             _ => {
-                let (x, y) = self.public_bps_xy(players, fighters, surfaces);
+                let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
                 let mut left  = x;
                 let mut right = x;
                 let mut bot   = y - 5.0;
@@ -2537,7 +2542,7 @@ impl Player {
         self.hitlag = Hitlag::None;
 
         self.result.deaths.push(DeathRecord {
-            player: self.hit_by,
+            player: self.hit_by.map(|x| entities.get(x).id),
             frame: game_frame,
         });
 
@@ -2563,8 +2568,8 @@ impl Player {
 
     fn check_ledge_grab(&mut self, context: &mut StepContext, ledge_grab_box: &LedgeGrabBox) {
         for (platform_i, platform) in context.surfaces.iter().enumerate() {
-            let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.entities.iter().all(|x| !x.is_hogging_ledge(platform_i, true));
-            let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.entities.iter().all(|x| !x.is_hogging_ledge(platform_i, false));
+            let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, true));
+            let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, false));
 
             // If both left and right ledges are in range then keep the same direction.
             // This prevents always facing left or right on small surfaces.
@@ -2817,7 +2822,7 @@ impl Player {
         }
     }
 
-    pub fn render(&self, entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
+    pub fn render(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
         let shield = if self.is_shielding() {
             let fighter_color = graphics::get_team_color3(self.team);
             let fighter = &fighters[self.fighter.as_ref()];

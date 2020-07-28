@@ -3,11 +3,11 @@ use crate::entity::{DebugEntity, StepContext};
 
 use canon_collision_lib::fighter::{Fighter, ActionFrame};
 
+use treeflection::KeyedContextVec;
 use num_traits::FromPrimitive;
-use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
 #[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize, Node)]
+#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
 pub enum ProjectileAction {
     Spawn,
     Travel,
@@ -20,7 +20,7 @@ impl Default for ProjectileAction {
     }
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Projectile {
     pub entity_def_key: String,
     pub action: u64,

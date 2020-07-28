@@ -4,15 +4,17 @@ use canon_collision_lib::fighter::{Fighter, HurtBox, HitBox, CollisionBox, Colli
 use canon_collision_lib::stage::Surface;
 use crate::player::Player;
 use crate::entity::Entity;
+use generational_arena::{Arena, Index};
 
 // def - player who was attacked
 // atk - player who attacked
 
 /// returns a list of hit results for each player
-pub fn collision_check(entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
+pub fn collision_check(entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
+    // TODO: probably need slotmap's secondary maps here
     let mut result: Vec<Vec<CollisionResult>> = entities.iter().map(|_| vec!()).collect();
 
-    'player_atk: for (player_atk_i, player_atk) in entities.iter().enumerate() {
+    'player_atk: for (player_atk_i, player_atk) in entities.iter() {
         let player_atk_xy = player_atk.public_bps_xy(entities, fighters, surfaces);
         let fighter_atk = &fighters[player_atk.entity_def_key()];
         for (player_def_i, player_def) in entities.iter().enumerate() {
@@ -181,16 +183,16 @@ fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,
 pub enum CollisionResult {
     PhantomDef   (HitBox, HurtBox),
     PhantomAtk   (HitBox, usize),
-    HitDef       { hitbox: HitBox, hurtbox: HurtBox, player_atk_i: usize },
-    HitAtk       { hitbox: HitBox, player_def_i: usize, point: (f32, f32) },
-    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, player_def_i: usize },
-    HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, player_atk_i: usize },
+    HitDef       { hitbox: HitBox, hurtbox: HurtBox, player_atk_i: Index },
+    HitAtk       { hitbox: HitBox, player_def_i: Index, point: (f32, f32) },
+    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, player_def_i: Index },
+    HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, player_atk_i: Index },
     ReflectDef   (HitBox), // TODO: add further details required for recreating projectile
     ReflectAtk   (HitBox),
     AbsorbDef    (HitBox),
     AbsorbAtk    (HitBox),
-    GrabDef      (usize),
-    GrabAtk      (usize),
+    GrabDef      (Index),
+    GrabAtk      (Index),
     Clang        { rebound: bool },
 }
 

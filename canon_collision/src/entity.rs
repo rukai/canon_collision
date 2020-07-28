@@ -10,102 +10,105 @@ use canon_collision_lib::fighter::{Fighter, ActionFrame, CollisionBoxRole, ECB, 
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
+use treeflection::KeyedContextVec;
 use num_traits::FromPrimitive;
 use rand_chacha::ChaChaRng;
-use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
+use generational_arena::{Arena, Index};
 
 use std::collections::HashSet;
 
-#[derive(Clone, Serialize, Deserialize, Node)]
-pub enum Entity {
+#[derive(Clone, Serialize, Deserialize)]
+pub enum EntityType {
     Player (Player),
     Projectile (Projectile)
 }
 
-impl Default for Entity {
-    fn default() -> Self {
-        Entity::Player(Default::default())
-    }
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub ty: EntityType,
+    // TODO: Already split into struct + enum and ill probs need it anyway so ill leave it as is.
+    // I can probably create another sub struct which I pass into the ty.step for processing.
+    // if none of that works out, lets just squish into a single enum again.
 }
 
 impl Entity {
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
-        match self {
-            Entity::Player (player) => player.is_hogging_ledge(check_platform_i, face_right),
+        match self.ty {
+            EntityType::Player (player) => player.is_hogging_ledge(check_platform_i, face_right),
             _ => false,
         }
     }
 
     pub fn face_right(&self) -> bool {
-        match self {
-            Entity::Player (player) => player.face_right,
-            Entity::Projectile (projectile) => projectile.angle > 0.0 && projectile.angle < 180.0, // TODO: what is the actual range?
+        match self.ty {
+            EntityType::Player (player) => player.face_right,
+            EntityType::Projectile (projectile) => projectile.angle > 0.0 && projectile.angle < 180.0, // TODO: what is the actual range?
         }
     }
 
     pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
-        match self {
-            Entity::Player (player) => player.bps_xy(context),
-            Entity::Projectile (projectile) => (projectile.x, projectile.y)
+        match self.ty {
+            EntityType::Player (player) => player.bps_xy(context),
+            EntityType::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
 
     // TODO: uhhh.... surely I merge these
-    pub fn public_bps_xy(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
-        match self {
-            Entity::Player (player) => player.public_bps_xy(players, fighters, surfaces),
-            Entity::Projectile (projectile) => (projectile.x, projectile.y)
+    pub fn public_bps_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+        match self.ty {
+            EntityType::Player (player) => player.public_bps_xy(entities, fighters, surfaces),
+            EntityType::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, player_i: usize, game_frame: usize, goal: Goal) {
-        match self {
-            Entity::Player (player) => player.physics_step(context, player_i, game_frame, goal),
-            Entity::Projectile (_) => { }
+        match self.ty {
+            EntityType::Player (player) => player.physics_step(context, player_i, game_frame, goal),
+            EntityType::Projectile (_) => { }
         }
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
-        match self {
-            Entity::Player (player) => player.step_collision(context, col_results),
-            Entity::Projectile (projectile) => projectile.step_collision(context, col_results),
+        match self.ty {
+            EntityType::Player (player) => player.step_collision(context, col_results),
+            EntityType::Projectile (projectile) => projectile.step_collision(context, col_results),
         }
     }
 
     pub fn action_hitlag_step(&mut self, context: &mut StepContext) {
-        match self {
-            Entity::Player (player) => player.action_hitlag_step(context),
-            Entity::Projectile (projectile) => projectile.action_hitlag_step(context),
+        match self.ty {
+            EntityType::Player (player) => player.action_hitlag_step(context),
+            EntityType::Projectile (projectile) => projectile.action_hitlag_step(context),
         }
     }
 
-    pub fn grabbing_xy(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
-        match self {
-            Entity::Player (player) => player.grabbing_xy(players, fighters, surfaces),
+    pub fn grabbing_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+        match self.ty {
+            EntityType::Player (player) => player.grabbing_xy(entities, fighters, surfaces),
             _ => (0.0, 0.0),
         }
     }
 
-    pub fn platform_deleted(&mut self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
-        match self {
-            Entity::Player (player) => player.platform_deleted(players, fighters, surfaces, deleted_platform_i),
-            Entity::Projectile (_) => { }
+    pub fn platform_deleted(&mut self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+        match self.ty {
+            EntityType::Player (player) => player.platform_deleted(entities, fighters, surfaces, deleted_platform_i),
+            EntityType::Projectile (_) => { }
         }
     }
 
     pub fn entity_def_key(&self) -> &str {
-        match self {
-            Entity::Player (player) => player.fighter.as_ref(),
-            Entity::Projectile (projectile) => projectile.entity_def_key.as_ref(),
+        match self.ty {
+            EntityType::Player (player) => player.fighter.as_ref(),
+            EntityType::Projectile (projectile) => projectile.entity_def_key.as_ref(),
         }
     }
 
     pub fn angle(&self, fighter: &Fighter, surfaces: &[Surface]) -> f32 {
-        match self {
-            Entity::Player (player) => player.angle(fighter, surfaces),
-            Entity::Projectile (projectile) => projectile.angle,
+        match self.ty {
+            EntityType::Player (player) => player.angle(fighter, surfaces),
+            EntityType::Projectile (projectile) => projectile.angle,
         }
     }
 
@@ -114,9 +117,9 @@ impl Entity {
     }
 
     pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
-        match self {
-            Entity::Player (player) => player.get_fighter_frame(fighter),
-            Entity::Projectile (projectile) => projectile.get_fighter_frame(fighter),
+        match self.ty {
+            EntityType::Player (player) => player.get_fighter_frame(fighter),
+            EntityType::Projectile (projectile) => projectile.get_fighter_frame(fighter),
         }
     }
 
@@ -149,83 +152,86 @@ impl Entity {
         self.owned_by() != other.owned_by()
     }
 
-    // TODO: Lets implement generational indices before we continue with this.
-    // Otherwise we'll just end up sad.
-    pub fn owned_by(&self) -> usize {
-        match self {
-            Entity::Player (player) => player.team,
-            Entity::Projectile (_) => 99999,
+
+    /// The players id
+    /// or owning players id
+    /// or none if not owned by a player
+    pub fn player_id(&self) -> Option<usize> {
+        match self.ty {
+            EntityType::Player (player) => Some(player.id),
+            // TODO: Look up owner based on generational id
+            EntityType::Projectile (_) => None,
         }
     }
 
     pub fn frame(&self) -> i64 {
-        match self {
-            Entity::Player (player) => player.frame,
-            Entity::Projectile (projectile) => projectile.frame,
+        match self.ty {
+            EntityType::Player (player) => player.frame,
+            EntityType::Projectile (projectile) => projectile.frame,
         }
     }
 
     pub fn set_frame(&mut self, frame: i64) {
-        match self {
-            Entity::Player (player) => player.frame = frame,
-            Entity::Projectile (projectile) => projectile.frame = frame,
+        match self.ty {
+            EntityType::Player (player) => player.frame = frame,
+            EntityType::Projectile (projectile) => projectile.frame = frame,
         }
     }
 
     pub fn action(&self) -> u64 {
-        match self {
-            Entity::Player (player) => player.action,
-            Entity::Projectile (projectile) => projectile.action,
+        match self.ty {
+            EntityType::Player (player) => player.action,
+            EntityType::Projectile (projectile) => projectile.action,
         }
     }
 
-    pub fn cam_area(&self, cam_max: &Rect, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
-        match self {
-            Entity::Player (player) => player.cam_area(cam_max, players, fighters, surfaces),
-            Entity::Projectile (_) => None
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+        match self.ty {
+            EntityType::Player (player) => player.cam_area(cam_max, entities, fighters, surfaces),
+            EntityType::Projectile (_) => None
         }
     }
 
     pub fn hitlist(&self) -> &[usize] {
-        match self {
-            Entity::Player (player) => &player.hitlist,
-            Entity::Projectile (_) => &[]
+        match self.ty {
+            EntityType::Player (player) => &player.hitlist,
+            EntityType::Projectile (_) => &[]
         }
     }
 
     pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: Option<&PlayerInput>, debug: &DebugEntity, index: usize) -> Vec<String> {
-        match self {
-            Entity::Player (player)         => player.debug_print(fighters, player_input.unwrap(), debug, index),
-            Entity::Projectile (projectile) => projectile.debug_print(fighters, debug, index),
+        match self.ty {
+            EntityType::Player (player)         => player.debug_print(fighters, player_input.unwrap(), debug, index),
+            EntityType::Projectile (projectile) => projectile.debug_print(fighters, debug, index),
         }
     }
 
     pub fn ecb(&self) -> ECB {
-        match self {
-            Entity::Player (player) => player.ecb.clone(),
-            Entity::Projectile (_)  => ECB::default(),
+        match self.ty {
+            EntityType::Player (player) => player.ecb.clone(),
+            EntityType::Projectile (_)  => ECB::default(),
         }
     }
 
     pub fn team(&self) -> usize {
-        match self {
-            Entity::Player (player) => player.team,
-            Entity::Projectile (_) => 0,
+        match self.ty {
+            EntityType::Player (player) => player.team,
+            EntityType::Projectile (_) => 0,
         }
     }
 
     pub fn particles(&self) -> Vec<Particle> {
-        match self {
-            Entity::Player (player) => player.particles.clone(),
-            Entity::Projectile (_) => vec!(),
+        match self.ty {
+            EntityType::Player (player) => player.particles.clone(),
+            EntityType::Projectile (_) => vec!(),
         }
     }
 
-    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: usize, entity_history: &[Vec<Entity>], entities: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntity {
+    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: Index, entity_history: &[Arena<Entity>], entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntity {
         let fighter_color = graphics::get_team_color3(self.team());
         let fighter = &fighters[self.entity_def_key()];
 
-        let vector_arrows = if let Entity::Player (player) = self {
+        let vector_arrows = if let EntityType::Player (player) = self {
             player.vector_arrows(&debug)
         } else {
             vec!()
@@ -235,6 +241,8 @@ impl Entity {
         let range = entity_history.len().saturating_sub(10) .. entity_history.len();
         for entities in entity_history[range].iter().rev() {
             // TODO: Uh oh ... we cant rely on indexes remaining valid anymore, we need a way to map indices back to previous frames.
+            // TODO: uh oh generational indices doesnt automatically solve this either, as indices
+            // cant go into the past >.>
             if let Some(entity) = entities.get(entity_i) {
                 // handle deleted frames by just skipping it, only encountered when the editor is used.
                 if fighter.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
@@ -243,9 +251,9 @@ impl Entity {
             }
         }
 
-        let render_type = match self {
-            Entity::Player (player) => RenderEntityType::Player (player.render(entities, fighters, surfaces)),
-            Entity::Projectile (_) => RenderEntityType::Projectile,
+        let render_type = match self.ty {
+            EntityType::Player (player) => RenderEntityType::Player (player.render(entities, fighters, surfaces)),
+            EntityType::Projectile (_) => RenderEntityType::Projectile,
         };
 
         RenderEntity {
@@ -261,12 +269,12 @@ impl Entity {
         }
     }
 
-    fn render_frame(&self, players: &[Entity], fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntityFrame {
+    fn render_frame(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntityFrame {
         let fighter = &fighters[self.entity_def_key()];
         RenderEntityFrame {
             fighter:     self.entity_def_key().to_string(),
             model_name:  fighter.name.clone(),
-            bps:         self.public_bps_xy(players, fighters, surfaces),
+            bps:         self.public_bps_xy(entities, fighters, surfaces),
             ecb:         self.ecb(),
             frame:       self.frame() as usize,
             action:      self.action() as usize,
@@ -320,7 +328,7 @@ impl RenderEntityType {
     }
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Node)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum RenderDebugType {
     Normal,
     NormalAndDebug,
@@ -372,7 +380,8 @@ impl RenderDebugType {
     }
 }
 
-#[derive(Copy, Clone, Default, Serialize, Deserialize, Node)]
+// TODO: Split player specific debug into a DebugPlayer stored in Player
+#[derive(Copy, Clone, Default, Serialize, Deserialize)]
 pub struct DebugEntity {
     pub render:         RenderDebugType,
     pub physics:        bool,
@@ -389,6 +398,7 @@ pub struct DebugEntity {
 }
 
 impl DebugEntity {
+    // TODO: move into game logic, then we can keep all the debug keys together (across entity/player/other)
     pub fn step(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::F1) {
             self.physics = !self.physics;
@@ -471,7 +481,7 @@ pub struct VectorArrow {
 
 pub struct StepContext<'a> {
     pub input:        &'a PlayerInput,
-    pub entities:     &'a [Entity],
+    pub entities:     &'a Arena<Entity>,
     pub fighters:     &'a KeyedContextVec<Fighter>,
     pub fighter:      &'a Fighter,
     pub stage:        &'a Stage,

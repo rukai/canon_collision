@@ -1,5 +1,3 @@
-use treeflection::{Node, NodeRunner, NodeToken};
-
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Particle {
     pub color:       [f32; 3],
@@ -12,13 +10,7 @@ pub struct Particle {
     pub p_type:      ParticleType
 }
 
-impl Node for Particle {
-    fn node_step(&mut self, _: NodeRunner) -> String {
-        String::from("TODO: Unimplemented")
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Node)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum ParticleType {
     AirJump,
     Hit { knockback: f32, damage: f32 },

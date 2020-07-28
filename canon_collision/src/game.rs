@@ -32,6 +32,7 @@ use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 use byteorder::{LittleEndian, WriteBytesExt};
+use generational_arena::{Arena, Index};
 
 #[NodeActions(
     NodeAction(function="save_replay", return_string),
@@ -44,14 +45,14 @@ pub struct Game {
     pub package:                Package,
     pub init_seed:              u64,
     pub state:                  GameState,
-    pub entity_history:         Vec<Vec<Entity>>,
+    entity_history:             Vec<Arena<Entity>>,
     pub stage_history:          Vec<Stage>,
     pub current_frame:          usize,
     pub saved_frame:            usize,
     pub deleted_history_frames: usize,
     pub max_history_frames:     Option<usize>,
     pub stage:                  Stage,
-    pub entities:               Vec<Entity>,
+    pub entities:               Arena<Entity>,
     pub debug_stage:            DebugStage,
     pub debug_entities:         [DebugEntity; 9], // one for each number key (except 0)
     pub selected_controllers:   Vec<usize>,
@@ -397,39 +398,57 @@ impl Game {
             self.edit = Edit::Stage;
         }
         else if os_input.key_pressed(VirtualKeyCode::Key1) {
-            self.edit = Edit::Entity (0);
+            if let Some((_, i)) = self.entities.get_unknown_gen(0) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key2) {
-            self.edit = Edit::Entity (1);
+            if let Some((_, i)) = self.entities.get_unknown_gen(1) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key3) {
-            self.edit = Edit::Entity (2);
+            if let Some((_, i)) = self.entities.get_unknown_gen(2) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key4) {
-            self.edit = Edit::Entity (3);
+            if let Some((_, i)) = self.entities.get_unknown_gen(3) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key5) {
-            self.edit = Edit::Entity (4);
+            if let Some((_, i)) = self.entities.get_unknown_gen(4) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key6) {
-            self.edit = Edit::Entity (5);
+            if let Some((_, i)) = self.entities.get_unknown_gen(5) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key7) {
-            self.edit = Edit::Entity (6);
+            if let Some((_, i)) = self.entities.get_unknown_gen(6) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key8) {
-            self.edit = Edit::Entity (7);
+            if let Some((_, i)) = self.entities.get_unknown_gen(7) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key9) {
-            self.edit = Edit::Entity (8);
+            if let Some((_, i)) = self.entities.get_unknown_gen(8) {
+                self.edit = Edit::Entity (i);
+            }
             self.update_frame();
         }
 
@@ -441,7 +460,8 @@ impl Game {
                     let action = self.entities[entity_i].action() as usize;
                     let action_enum = Action::from_u64(self.entities[entity_i].action());
                     let frame  = self.entities[entity_i].frame() as usize;
-                    self.debug_entities[entity_i].step(os_input);
+                    // TODO: lets try this out once we get generational-arena working so we have a point to compare to
+                    //self.debug_entities[entity_i].step(os_input);
 
                     // by adding the same amount of frames that are skipped in the entity logic,
                     // the user continues to see the same frames as they step through the action
@@ -695,7 +715,7 @@ impl Game {
                         surfaces_to_delete.reverse();
                         let entities = self.entities.clone();
                         for surface_i in surfaces_to_delete {
-                            for entity in self.entities.iter_mut() {
+                            for (_, entity) in self.entities.iter_mut() {
                                 entity.platform_deleted(&entities, &self.package.fighters, &self.stage.surfaces, surface_i);
                             }
                             self.stage.surfaces.remove(surface_i);
@@ -1030,9 +1050,9 @@ impl Game {
             // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
 
             // step each entity action
-            let mut action_entities: Vec<Entity> = vec!();
+            let mut action_entities = self.entities.clone();
             let mut new_entities = vec!();
-            for (i, mut entity) in self.entities.iter().cloned().enumerate() {
+            for (i, mut entity) in &mut action_entities {
                 // TODO: to let non player entities access inputs we should provide all inputs then
                 // let the entity choose which one they want.
                 let input_i = self.selected_controllers.get(i);
@@ -1049,14 +1069,14 @@ impl Game {
                     input,
                 };
                 entity.action_hitlag_step(&mut context);
-                if !context.delete_self {
-                    action_entities.push(entity);
+                if context.delete_self {
+                    action_entities.remove(i);
                 }
             }
 
             // step each entity physics
-            let mut physics_entities: Vec<Entity> = vec!();
-            for (i, mut entity) in action_entities.iter().cloned().enumerate() {
+            let mut physics_entities = action_entities.clone();
+            for (i, mut entity) in &mut action_entities {
                 let input_i = self.selected_controllers.get(i);
                 let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
@@ -1071,15 +1091,15 @@ impl Game {
                     input,
                 };
                 entity.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
-                if !context.delete_self {
-                    physics_entities.push(entity);
+                if context.delete_self {
+                    physics_entities.remove(i);
                 }
             }
 
             // check for hits and run hit logic
-            let mut collision_entities: Vec<Entity> = vec!();
+            let mut collision_entities = physics_entities.clone();
             let collision_results = collision_check(&physics_entities, &self.package.fighters, &self.stage.surfaces);
-            for (i, mut entity) in physics_entities.iter().cloned().enumerate() {
+            for (i, mut entity) in &mut collision_entities {
                 let input_i = self.selected_controllers.get(i);
                 let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
@@ -1094,12 +1114,14 @@ impl Game {
                     input,
                 };
                 entity.step_collision(&mut context, &collision_results[i]);
-                if !context.delete_self {
-                    collision_entities.push(entity);
+                if context.delete_self {
+                    collision_entities.remove(i);
                 }
             }
 
-            collision_entities.append(&mut new_entities);
+            for entity in new_entities {
+                collision_entities.insert(entity);
+            }
 
             self.entities = collision_entities;
         }
@@ -1123,7 +1145,7 @@ impl Game {
     }
 
     fn players_iter(&self) -> impl Iterator<Item=&Player> {
-        self.entities.iter().filter_map(|x| match x {
+        self.entities.iter().filter_map(|(_, x)| match x {
             Entity::Player(player) => Some(player),
             _ => None,
         })
@@ -1227,12 +1249,12 @@ impl Game {
 
         self.debug_lines = self.camera.debug_print();
         self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
-        for (i, debug_entity) in self.debug_entities.iter().enumerate() {
-            if let Some(entity) = self.entities.get(i) {
-                let player_input = self.selected_controllers.get(i).and_then(|x| player_inputs.get(*x));
-                self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_entity, i));
-            }
-        }
+        //for (i, debug_entity) in self.debug_entities.iter().enumerate() {
+        //    if let Some(entity) = self.entities.get(i) {
+        //        let player_input = self.selected_controllers.get(i).and_then(|x| player_inputs.get(*x));
+        //        self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_entity, i));
+        //    }
+        //}
 
         if self.debug_output_this_step {
             self.debug_output_this_step = false;
@@ -1254,7 +1276,7 @@ impl Game {
     pub fn render(&self) -> RenderGame {
         let mut render_entities = vec!();
 
-        for (i, entity) in self.entities.iter().enumerate() {
+        for (i, entity) in self.entities.iter() {
             let mut selected_colboxes = HashSet::new();
             let mut entity_selected = false;
             if let GameState::Paused = self.state {
@@ -1269,16 +1291,18 @@ impl Game {
                 }
             }
 
-            let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
-            if debug.cam_area {
-                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
-                    render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
-                }
-            }
+            // TODO: lets try this out once we get generational-arena working so we have a point to compare to
+            //let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
+            //if debug.cam_area {
+            //    if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
+            //        render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
+            //    }
+            //}
 
             let fighters = &self.package.fighters;
             let surfaces = &self.stage.surfaces;
-            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+            //let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+            let player_render = entity.render(selected_colboxes, entity_selected, Default::default(), i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
             render_entities.push(RenderObject::Entity(player_render));
         }
 
@@ -1360,6 +1384,12 @@ impl Game {
     pub fn reclaim(self) -> Package {
         self.package
     }
+
+    /// hacky...
+    /// lets add the ability to skip public fields to treefleciton instead
+    pub fn entity_history(&self) -> Vec<Arena<Entity>> {
+        self.entity_history.clone()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
@@ -1401,12 +1431,13 @@ impl Default for GameState {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Node)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Edit {
-    Entity (usize), // index to entity
+    Entity (Index),
     Stage
 }
 
+// TODO: delete if I can remove Default from Game
 impl Default for Edit {
     fn default() -> Edit {
         Edit::Stage
@@ -1416,7 +1447,7 @@ impl Default for Edit {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Selector {
     colboxes:       HashSet<usize>,
-    surfaces:      HashSet<SurfaceSelection>,
+    surfaces:       HashSet<SurfaceSelection>,
     spawn_points:   HashSet<usize>,
     respawn_points: HashSet<usize>,
     moving:         bool,
@@ -1577,7 +1608,7 @@ pub struct RenderSpawnPoint {
 pub struct GameSetup {
     pub init_seed:              u64,
     pub input_history:          Vec<Vec<ControllerInput>>,
-    pub entity_history:         Vec<Vec<Entity>>,
+    pub entity_history:         Vec<Arena<Entity>>,
     pub stage_history:          Vec<Stage>,
     pub controllers:            Vec<usize>,
     pub players:                Vec<PlayerSetup>,
@@ -1594,7 +1625,7 @@ pub struct GameSetup {
     pub debug_entities:         Option<[DebugEntity; 9]>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
-    pub hot_reload_entities:    Option<Vec<Entity>>,
+    pub hot_reload_entities:    Option<Arena<Entity>>,
     pub hot_reload_stage:       Option<Stage>,
     pub edit:                   Edit,
 }
