@@ -1,4 +1,4 @@
-use crate::entity::Entity;
+use crate::entity::Entities;
 
 use canon_collision_lib::fighter::Fighter;
 use canon_collision_lib::stage::Stage;
@@ -212,7 +212,7 @@ impl Camera {
         }
     }
 
-    pub fn update(&mut self, os_input: &WinitInputHelper, players: &[Entity], fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
+    pub fn update(&mut self, os_input: &WinitInputHelper, entities: &Entities, fighters: &KeyedContextVec<Fighter>, stage: &Stage) {
         // process new resolution
         if let Some((width, height)) = os_input.resolution() {
             self.window_width = width as f32;
@@ -222,10 +222,10 @@ impl Camera {
 
         if let CameraControlState::Auto = self.control_state {
             // initialise new_rect using only the first player
-            let mut player_iter = players.iter();
+            let mut player_iter = entities.values();
             let new_rect = player_iter
                 .next()
-                .and_then(|x| x.cam_area(&stage.camera, players, fighters, &stage.surfaces));
+                .and_then(|x| x.cam_area(&stage.camera, entities, fighters, &stage.surfaces));
             let mut new_rect = match new_rect {
                 Some(rect) => rect,
                 None => {
@@ -236,7 +236,7 @@ impl Camera {
 
             // grow new_rect to cover all other players
             for player in player_iter {
-                if let Some(next_area) = player.cam_area(&stage.camera, players, fighters, &stage.surfaces) {
+                if let Some(next_area) = player.cam_area(&stage.camera, entities, fighters, &stage.surfaces) {
                     new_rect.x1 = new_rect.x1.min(next_area.left());
                     new_rect.x2 = new_rect.x2.max(next_area.right());
                     new_rect.y1 = new_rect.y1.min(next_area.bot());

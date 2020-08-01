@@ -1,3 +1,10 @@
+use crate::camera::Camera;
+use crate::game::{GameSetup, GameState, PlayerSetup, Edit};
+use crate::graphics::{GraphicsMessage, Render, RenderType};
+use crate::graphics;
+use crate::replays;
+use crate::results::{GameResults, PlayerResult};
+
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
 use canon_collision_lib::input::Input;
@@ -5,12 +12,6 @@ use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::network::{Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use canon_collision_lib::replays_files;
-use crate::camera::Camera;
-use crate::game::{GameSetup, GameState, PlayerSetup, Edit};
-use crate::graphics::{GraphicsMessage, Render, RenderType};
-use crate::graphics;
-use crate::replays;
-use crate::results::{GameResults, PlayerResult};
 
 use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
@@ -511,7 +512,7 @@ impl Menu {
 
         self.game_setup = Some(GameSetup {
             input_history:          vec!(),
-            entity_history:         vec!(),
+            entity_history:         Default::default(),
             stage_history:          vec!(),
             rules:                  Default::default(), // TODO: this will be configured by the user in the menu
             debug:                  false,

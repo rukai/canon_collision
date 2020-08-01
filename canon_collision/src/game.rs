@@ -7,7 +7,7 @@ use crate::replays::Replay;
 use crate::replays;
 use crate::results::{GameResults, RawPlayerResult, PlayerResult};
 use crate::rules::{Rules, Goal};
-use crate::entity::{Entity, StepContext, RenderEntity, DebugEntity};
+use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -32,7 +32,6 @@ use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 use byteorder::{LittleEndian, WriteBytesExt};
-use generational_arena::{Arena, Index};
 
 #[NodeActions(
     NodeAction(function="save_replay", return_string),
@@ -45,25 +44,25 @@ pub struct Game {
     pub package:                Package,
     pub init_seed:              u64,
     pub state:                  GameState,
-    entity_history:             Vec<Arena<Entity>>,
+        entity_history:         Vec<Entities>,
     pub stage_history:          Vec<Stage>,
     pub current_frame:          usize,
     pub saved_frame:            usize,
     pub deleted_history_frames: usize,
     pub max_history_frames:     Option<usize>,
     pub stage:                  Stage,
-    pub entities:               Arena<Entity>,
+        entities:               Entities,
     pub debug_stage:            DebugStage,
-    pub debug_entities:         [DebugEntity; 9], // one for each number key (except 0)
+        debug_entities:         DebugEntities,
     pub selected_controllers:   Vec<usize>,
     pub selected_ais:           Vec<usize>,
     pub selected_stage:         String,
     pub rules:                  Rules,
-    pub edit:                   Edit,
+        edit:                   Edit,
     pub debug_output_this_step: bool,
     pub debug_lines:            Vec<String>,
     pub selector:               Selector,
-    copied_frame:               Option<ActionFrame>,
+        copied_frame:           Option<ActionFrame>,
     pub camera:                 Camera,
     pub tas:                    Vec<ControllerInput>,
     save_replay:                bool,
@@ -93,23 +92,29 @@ impl Game {
         };
 
         // generate players
-        let mut entities: Vec<Entity> = vec!();
+        let mut entities: Entities = Default::default();
         {
             for (i, player) in setup.players.iter().enumerate() {
                 // Stage can have less spawn points then players
                 let fighter = player.fighter.clone();
                 let team = player.team;
-                entities.push(Entity::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)));
+                entities.insert(Entity {
+                    ty: EntityType::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules))
+                });
             }
         }
 
-        let debug_entities = if let Some(value) = setup.debug_entities {
+        let mut debug_entities = if let Some(value) = setup.debug_entities {
             value
-        } else if setup.debug {
-            [DebugEntity::all(); 9]
         } else {
-            [DebugEntity::default(); 9]
+            Default::default()
         };
+
+        if setup.debug {
+            for key in entities.keys() {
+                debug_entities.insert(key, DebugEntity::all());
+            }
+        }
 
         if let Some(overwrite) = setup.hot_reload_entities {
             entities = overwrite;
@@ -398,55 +403,55 @@ impl Game {
             self.edit = Edit::Stage;
         }
         else if os_input.key_pressed(VirtualKeyCode::Key1) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(0) {
+            if let Some(i) = self.entities.keys().skip(0).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key2) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(1) {
+            if let Some(i) = self.entities.keys().skip(1).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key3) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(2) {
+            if let Some(i) = self.entities.keys().skip(2).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key4) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(3) {
+            if let Some(i) = self.entities.keys().skip(3).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key5) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(4) {
+            if let Some(i) = self.entities.keys().skip(4).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key6) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(5) {
+            if let Some(i) = self.entities.keys().skip(5).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key7) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(6) {
+            if let Some(i) = self.entities.keys().skip(6).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key8) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(7) {
+            if let Some(i) = self.entities.keys().skip(7).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key9) {
-            if let Some((_, i)) = self.entities.get_unknown_gen(8) {
+            if let Some(i) = self.entities.keys().skip(8).next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
@@ -454,18 +459,21 @@ impl Game {
 
         match self.edit {
             Edit::Entity (entity_i) => {
-                if entity_i < self.entities.len() {
+                if self.entities.contains_key(entity_i) {
+                    if !self.debug_entities.contains_key(entity_i) {
+                        self.debug_entities.insert(entity_i, Default::default());
+                    }
+
                     let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
                     let fighter = entity_def_key.as_ref();
                     let action = self.entities[entity_i].action() as usize;
                     let action_enum = Action::from_u64(self.entities[entity_i].action());
                     let frame  = self.entities[entity_i].frame() as usize;
-                    // TODO: lets try this out once we get generational-arena working so we have a point to compare to
-                    //self.debug_entities[entity_i].step(os_input);
+                    self.debug_entities[entity_i].step(os_input);
 
                     // by adding the same amount of frames that are skipped in the entity logic,
                     // the user continues to see the same frames as they step through the action
-                    let repeat_frames = if let Entity::Player (player) = &self.entities[entity_i] {
+                    let repeat_frames = if let EntityType::Player (player) = &self.entities[entity_i].ty {
                         if action_enum.as_ref().map_or(false, |x| x.is_land()) {
                             player.land_frame_skip + 1
                         } else {
@@ -522,7 +530,7 @@ impl Game {
                                     // Correct any entities that are now on a nonexistent frame due to the frame deletion.
                                     // This is purely to stay on the same action for usability.
                                     // The entity itself must handle being on a frame that has been deleted in order for replays to work.
-                                    for any_entity in &mut self.entities {
+                                    for any_entity in &mut self.entities.values_mut() {
                                         if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
                                             && any_entity.frame() as usize == self.package.fighters[fighter].actions[action].frames.len()
                                         {
@@ -1042,80 +1050,93 @@ impl Game {
     }
 
     fn step_game(&mut self, input: &Input, player_inputs: &[PlayerInput]) {
+        let default_input = PlayerInput::empty();
         {
-            let default_input = PlayerInput::empty();
             let mut rng = ChaChaRng::from_seed(self.get_seed());
+            let mut new_entities = vec!();
 
             // To synchronize entity stepping, we step through entity logic in stages (action logic, physics logic, collision logic)
             // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
 
             // step each entity action
             let mut action_entities = self.entities.clone();
-            let mut new_entities = vec!();
-            for (i, mut entity) in &mut action_entities {
-                // TODO: to let non player entities access inputs we should provide all inputs then
-                // let the entity choose which one they want.
-                let input_i = self.selected_controllers.get(i);
-                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
-                let mut context = StepContext {
-                    entities:     &self.entities,
-                    fighters:     &self.package.fighters,
-                    fighter:      &self.package.fighters[entity.entity_def_key()],
-                    stage:        &self.stage,
-                    surfaces:     &self.stage.surfaces,
-                    rng:          &mut rng,
-                    new_entities: &mut new_entities,
-                    delete_self:  false,
-                    input,
+            let keys: Vec<_> = action_entities.keys().collect();
+            for key in keys {
+                let delete_self = {
+                    let entity = &mut action_entities[key];
+                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let mut context = StepContext {
+                        entities:     &self.entities,
+                        fighters:     &self.package.fighters,
+                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        stage:        &self.stage,
+                        surfaces:     &self.stage.surfaces,
+                        rng:          &mut rng,
+                        new_entities: &mut new_entities,
+                        delete_self:  false,
+                        input,
+                    };
+                    entity.action_hitlag_step(&mut context);
+                    context.delete_self
                 };
-                entity.action_hitlag_step(&mut context);
-                if context.delete_self {
-                    action_entities.remove(i);
+                if delete_self {
+                    action_entities.remove(key);
                 }
             }
 
             // step each entity physics
             let mut physics_entities = action_entities.clone();
-            for (i, mut entity) in &mut action_entities {
-                let input_i = self.selected_controllers.get(i);
-                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
-                let mut context = StepContext {
-                    entities:     &action_entities,
-                    fighters:     &self.package.fighters,
-                    fighter:      &self.package.fighters[entity.entity_def_key()],
-                    stage:        &self.stage,
-                    surfaces:     &self.stage.surfaces,
-                    rng:          &mut rng,
-                    new_entities: &mut new_entities,
-                    delete_self:  false,
-                    input,
+            let keys: Vec<_> = physics_entities.keys().collect();
+            for key in keys {
+                let delete_self = {
+                    let entity = &mut physics_entities[key];
+                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let mut context = StepContext {
+                        entities:     &action_entities,
+                        fighters:     &self.package.fighters,
+                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        stage:        &self.stage,
+                        surfaces:     &self.stage.surfaces,
+                        rng:          &mut rng,
+                        new_entities: &mut new_entities,
+                        delete_self:  false,
+                        input,
+                    };
+                    entity.physics_step(&mut context, self.current_frame, self.rules.goal.clone());
+                    context.delete_self
                 };
-                entity.physics_step(&mut context, i, self.current_frame, self.rules.goal.clone());
-                if context.delete_self {
-                    physics_entities.remove(i);
+                if delete_self {
+                    physics_entities.remove(key);
                 }
             }
 
             // check for hits and run hit logic
             let mut collision_entities = physics_entities.clone();
             let collision_results = collision_check(&physics_entities, &self.package.fighters, &self.stage.surfaces);
-            for (i, mut entity) in &mut collision_entities {
-                let input_i = self.selected_controllers.get(i);
-                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
-                let mut context = StepContext {
-                    entities:     &physics_entities,
-                    fighters:     &self.package.fighters,
-                    fighter:      &self.package.fighters[entity.entity_def_key()],
-                    stage:        &self.stage,
-                    surfaces:     &self.stage.surfaces,
-                    rng:          &mut rng,
-                    new_entities: &mut new_entities,
-                    delete_self:  false,
-                    input,
+            let keys: Vec<_> = collision_entities.keys().collect();
+            for key in keys {
+                let delete_self = {
+                    let entity = &mut collision_entities[key];
+                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let mut context = StepContext {
+                        entities:     &physics_entities,
+                        fighters:     &self.package.fighters,
+                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        stage:        &self.stage,
+                        surfaces:     &self.stage.surfaces,
+                        rng:          &mut rng,
+                        new_entities: &mut new_entities,
+                        delete_self:  false,
+                        input,
+                    };
+                    entity.step_collision(&mut context, &collision_results[key]);
+                    context.delete_self
                 };
-                entity.step_collision(&mut context, &collision_results[i]);
-                if context.delete_self {
-                    collision_entities.remove(i);
+                if delete_self {
+                    collision_entities.remove(key);
                 }
             }
 
@@ -1145,8 +1166,8 @@ impl Game {
     }
 
     fn players_iter(&self) -> impl Iterator<Item=&Player> {
-        self.entities.iter().filter_map(|(_, x)| match x {
-            Entity::Player(player) => Some(player),
+        self.entities.values().filter_map(|x| match &x.ty {
+            EntityType::Player(player) => Some(player),
             _ => None,
         })
     }
@@ -1249,12 +1270,13 @@ impl Game {
 
         self.debug_lines = self.camera.debug_print();
         self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
-        //for (i, debug_entity) in self.debug_entities.iter().enumerate() {
-        //    if let Some(entity) = self.entities.get(i) {
-        //        let player_input = self.selected_controllers.get(i).and_then(|x| player_inputs.get(*x));
-        //        self.debug_lines.extend(entity.debug_print(&self.package.fighters, player_input, debug_entity, i));
-        //    }
-        //}
+        for (i, debug_entity) in self.debug_entities.iter() {
+            if let Some(entity) = self.entities.get(i) {
+                let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                let input = input_i.and_then(|x| player_inputs.get(*x));
+                self.debug_lines.extend(entity.debug_print(&self.package.fighters, input, debug_entity, i));
+            }
+        }
 
         if self.debug_output_this_step {
             self.debug_output_this_step = false;
@@ -1291,18 +1313,16 @@ impl Game {
                 }
             }
 
-            // TODO: lets try this out once we get generational-arena working so we have a point to compare to
-            //let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
-            //if debug.cam_area {
-            //    if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
-            //        render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
-            //    }
-            //}
+            let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
+            if debug.cam_area {
+                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
+                    render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
+                }
+            }
 
             let fighters = &self.package.fighters;
             let surfaces = &self.stage.surfaces;
-            //let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
-            let player_render = entity.render(selected_colboxes, entity_selected, Default::default(), i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
             render_entities.push(RenderObject::Entity(player_render));
         }
 
@@ -1385,10 +1405,20 @@ impl Game {
         self.package
     }
 
+    /// TODO:
     /// hacky...
     /// lets add the ability to skip public fields to treefleciton instead
-    pub fn entity_history(&self) -> Vec<Arena<Entity>> {
+    pub fn entity_history(&self) -> Vec<Entities> {
         self.entity_history.clone()
+    }
+    pub fn edit(&self) -> Edit {
+        self.edit.clone()
+    }
+    pub fn debug_entities(&self) -> DebugEntities {
+        self.debug_entities.clone()
+    }
+    pub fn entities(&self) -> Entities {
+        self.entities.clone()
     }
 }
 
@@ -1433,11 +1463,10 @@ impl Default for GameState {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Edit {
-    Entity (Index),
+    Entity (EntityKey),
     Stage
 }
 
-// TODO: delete if I can remove Default from Game
 impl Default for Edit {
     fn default() -> Edit {
         Edit::Stage
@@ -1608,7 +1637,7 @@ pub struct RenderSpawnPoint {
 pub struct GameSetup {
     pub init_seed:              u64,
     pub input_history:          Vec<Vec<ControllerInput>>,
-    pub entity_history:         Vec<Arena<Entity>>,
+    pub entity_history:         Vec<Entities>,
     pub stage_history:          Vec<Stage>,
     pub controllers:            Vec<usize>,
     pub players:                Vec<PlayerSetup>,
@@ -1622,10 +1651,10 @@ pub struct GameSetup {
     pub current_frame:          usize,
     pub camera:                 Camera,
     pub debug_stage:            Option<DebugStage>,
-    pub debug_entities:         Option<[DebugEntity; 9]>,
+    pub debug_entities:         Option<DebugEntities>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
-    pub hot_reload_entities:    Option<Arena<Entity>>,
+    pub hot_reload_entities:    Option<Entities>,
     pub hot_reload_stage:       Option<Stage>,
     pub edit:                   Edit,
 }

@@ -1,6 +1,6 @@
 use crate::camera::Camera;
 use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
-use crate::entity::{EntityType, Entity, DebugEntity};
+use crate::entity::{EntityType, Entities, DebugEntities};
 use crate::rules::Rules;
 
 use canon_collision_lib::files;
@@ -10,7 +10,6 @@ use canon_collision_lib::stage::{Stage, DebugStage};
 use canon_collision_lib::replays_files;
 
 use chrono::{Local, DateTime};
-use generational_arena::Arena;
 
 pub fn load_replay(name: &str) -> Result<Replay, String> {
     let replay_path = replays_files::get_replay_path(name);
@@ -27,7 +26,7 @@ pub struct Replay {
     pub init_seed:                 u64,
     pub timestamp:                 DateTime<Local>,
     pub input_history:             Vec<Vec<ControllerInput>>,
-    pub entity_history:            Vec<Arena<Entity>>,
+    pub entity_history:            Vec<Entities>,
     pub stage_history:             Vec<Stage>,
     pub selected_controllers:      Vec<usize>,
     pub selected_players:          Vec<PlayerSetup>,
@@ -38,9 +37,9 @@ pub struct Replay {
     pub deleted_history_frames:    usize,
     pub hot_reload_current_frame:  usize,
     pub hot_reload_camera:         Camera,
-    pub hot_reload_debug_entities: [DebugEntity; 9],
+    pub hot_reload_debug_entities: DebugEntities,
     pub hot_reload_debug_stage:    DebugStage,
-    pub hot_reload_entities:       Arena<Entity>,
+    pub hot_reload_entities:       Entities,
     pub hot_reload_stage:          Stage,
     pub hot_reload_as_running:     bool,
     pub hot_reload_edit:           Edit,
@@ -49,8 +48,8 @@ pub struct Replay {
 impl Replay {
     pub fn new(game: &Game, input: &Input) -> Replay {
         let mut selected_players = vec!();
-        for (_, entity) in &game.entities {
-            match entity.ty {
+        for (_, entity) in &game.entities() {
+            match &entity.ty {
                 EntityType::Player (player) => {
                     selected_players.push(
                         PlayerSetup {
@@ -72,7 +71,7 @@ impl Replay {
             init_seed:                 game.init_seed.clone(),
             timestamp:                 Local::now(),
             input_history:             input.get_history(),
-            entity_history:            game.entity_history().clone(),
+            entity_history:            game.entity_history(),
             stage_history:             game.stage_history.clone(),
             selected_controllers:      game.selected_controllers.clone(),
             selected_ais:              game.selected_ais.clone(),
@@ -82,11 +81,11 @@ impl Replay {
             deleted_history_frames:    game.deleted_history_frames,
             hot_reload_current_frame:  game.current_frame,
             hot_reload_camera:         game.camera.clone(),
-            hot_reload_debug_entities: game.debug_entities.clone(),
+            hot_reload_debug_entities: game.debug_entities(),
             hot_reload_debug_stage:    game.debug_stage.clone(),
-            hot_reload_entities:       game.entities.clone(),
+            hot_reload_entities:       game.entities(),
             hot_reload_stage:          game.stage.clone(),
-            hot_reload_edit:           game.edit.clone(),
+            hot_reload_edit:           game.edit(),
             hot_reload_as_running,
             selected_players,
         }

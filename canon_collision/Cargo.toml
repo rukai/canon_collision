@@ -26,8 +26,7 @@ rand_chacha = "0.2"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
-#slotmap = { version = "0.4", features = ["serde"] } # lets try this out once we get generational-arena working so we have a point to compare to
-generational-arena = { version = "0.2", features = ["serde"] }
+slotmap = { version = "0.4", features = ["serde"] }
 treeflection = "0.1"
 treeflection_derive = "0.4"
 winit = "0.22" # Needed on all builds, game logic is dependent on VirtualKeyCode struct

@@ -3,7 +3,7 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow};
+use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey};
 use crate::projectile::Projectile;
 
 use canon_collision_lib::fighter::*;
@@ -17,7 +17,6 @@ use treeflection::KeyedContextVec;
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use num_traits::{FromPrimitive, ToPrimitive};
-use generational_arena::{Arena, Index};
 
 use std::f32;
 use std::f32::consts::PI;
@@ -38,12 +37,6 @@ impl LockTimer {
     }
 }
 
-impl Default for LockTimer {
-    fn default() -> Self {
-        LockTimer::Free
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LedgeLogic {
     Hog,
@@ -56,20 +49,8 @@ pub enum LedgeLogic {
 pub enum Location {
     Surface { platform_i: usize, x: f32 },
     GrabbedLedge { platform_i: usize, d_x: f32, d_y: f32, logic: LedgeLogic }, // player.face_right determines which edge on the platform
-    GrabbedByPlayer (Index),
+    GrabbedByPlayer (EntityKey),
     Airbourne { x: f32, y: f32 },
-}
-
-impl Default for Location {
-    fn default() -> Location {
-        Location::Airbourne { x: 0.0, y: 0.0 }
-    }
-}
-
-impl Default for LedgeLogic {
-    fn default() -> Self {
-        LedgeLogic::Hog
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,12 +58,6 @@ pub enum Hitlag {
     Some (u64), // TODO: rename Some
     Launch { counter: u64, kb_vel: f32, angle: f32, wobble_x: f32 },
     None
-}
-
-impl Default for Hitlag {
-    fn default() -> Hitlag {
-        Hitlag::None
-    }
 }
 
 impl Hitlag {
@@ -110,7 +85,7 @@ impl Hitlag {
     }
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Player {
     pub fighter:            String,
     pub id:                 usize, // unique id among players
@@ -151,10 +126,11 @@ pub struct Player {
     pub lcancel_timer:      u64,
     pub land_frame_skip:    u8,
     pub ecb:                ECB,
-    pub hitlist:            Vec<Index>,
+    pub hitlist:            Vec<EntityKey>,
     pub hitlag:             Hitlag,
     pub hitstun:            f32,
-    pub hit_by:             Option<Index>,
+    /// this is only used for end-game statistics so player id is fine
+    pub hit_by:             Option<usize>,
     pub particles:          Vec<Particle>,
     pub aerial_dodge_frame: Option<u64>,
     pub result:             RawPlayerResult,
@@ -173,7 +149,7 @@ impl Player {
         let spawn = if stage.spawn_points.len() == 0 {
             None
         } else {
-            Some(stage.spawn_points[entity_i % stage.spawn_points.len()].clone())
+            Some(stage.spawn_points[id % stage.spawn_points.len()].clone())
         };
 
         let location = if let Some(spawn) = &spawn {
@@ -237,7 +213,7 @@ impl Player {
             stun_timer:         0,
             shield_stun_timer:  0,
             parry_timer:        0,
-            tech_timer:         LockTimer::default(),
+            tech_timer:         LockTimer::Free,
             lcancel_timer:      0,
             land_frame_skip:    0,
             ecb:                ECB::default(),
@@ -266,7 +242,7 @@ impl Player {
         self.public_bps_xy(&context.entities, &context.fighters, &context.surfaces)
     }
 
-    pub fn public_bps_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
         let bps_xy = match self.location {
             Location::Surface { platform_i, x } => {
                 if let Some(platform) = surfaces.get(platform_i) {
@@ -316,8 +292,8 @@ impl Player {
         }
     }
 
-    pub fn grabbing_xy(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
-        let (x, y) = self.public_bps_xy(players, fighters, surfaces);
+    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+        let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
         if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
             (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
         } else {
@@ -427,7 +403,7 @@ impl Player {
         self.frame == fighter.actions[self.action as usize].frames.len() as i64 - 1
     }
 
-    pub fn platform_deleted(&mut self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
         let fall = match &mut self.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
             &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
@@ -445,7 +421,7 @@ impl Player {
             self.public_set_action(Action::Fall); // TODO: use miss step state ^.^
 
             //manually perform self.set_airbourne(context);
-            let (x, y) = self.public_bps_xy(players, fighters, surfaces);
+            let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
             self.location = Location::Airbourne { x, y };
             self.fastfalled = false;
         }
@@ -530,7 +506,7 @@ impl Player {
                     self.frames_since_hit = 0;
 
                     self.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, kb_vel, angle, wobble_x: 0.0 };
-                    self.hit_by = Some(player_atk_i);
+                    self.hit_by = context.entities.get(player_atk_i).and_then(|x| x.player_id());
                     self.face_right = self.bps_xy(context).0 < player_atk.bps_xy(context).0;
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, player_def_i} => {
@@ -1642,8 +1618,8 @@ impl Player {
         shield.scaling * (analog_size + hp_size) + hp_size_unscaled
     }
 
-    fn shield_pos(&self, shield: &Shield, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
-        let xy = self.public_bps_xy(players, fighters, surfaces);
+    fn shield_pos(&self, shield: &Shield, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+        let xy = self.public_bps_xy(entities, fighters, surfaces);
         (
             xy.0 + self.shield_offset_x + self.relative_f(shield.offset_x),
             xy.1 + self.shield_offset_y + shield.offset_y
@@ -2206,7 +2182,7 @@ impl Player {
      *  Begin physics section
      */
 
-    pub fn physics_step(&mut self, context: &mut StepContext, entity_i: usize, game_frame: usize, goal: Goal) {
+    pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
         if let Hitlag::None = self.hitlag {
             let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
 
@@ -2279,7 +2255,7 @@ impl Player {
             let blast = &context.stage.blast;
             let (x, y) = self.bps_xy(context);
             if x < blast.left() || x > blast.right() || y < blast.bot() || y > blast.top() {
-                self.die(context, entity_i, game_frame, goal);
+                self.die(context, game_frame, goal);
             }
 
             // ledge grabs
@@ -2406,7 +2382,7 @@ impl Player {
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
         match Action::from_u64(self.action) {
             Some(Action::Eliminated) => None,
             _ => {
@@ -2522,12 +2498,12 @@ impl Player {
         self.set_action(context, Action::Dash);
     }
 
-    fn die(&mut self, context: &mut StepContext, entity_i: usize, game_frame: usize, goal: Goal) {
+    fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
         if context.stage.respawn_points.len() == 0 {
             self.location = Location::Airbourne { x: 0.0, y: 0.0 };
             self.face_right = true;
         } else {
-            let respawn = &context.stage.respawn_points[entity_i % context.stage.respawn_points.len()];
+            let respawn = &context.stage.respawn_points[self.id % context.stage.respawn_points.len()];
             self.location = Location::Airbourne { x: respawn.x, y: respawn.y };
             self.face_right = respawn.face_right;
         }
@@ -2542,7 +2518,7 @@ impl Player {
         self.hitlag = Hitlag::None;
 
         self.result.deaths.push(DeathRecord {
-            player: self.hit_by.map(|x| entities.get(x).id),
+            player: self.hit_by,
             frame: game_frame,
         });
 
@@ -2611,11 +2587,11 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugEntity, index: usize) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let fighter = &fighters[self.fighter.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
-            lines.push(format!("Entity: {}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
+            lines.push(format!("Entity: {:?}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
                 index, self.location, self.x_vel, self.y_vel, self.kb_x_vel, self.kb_y_vel));
         }
 
@@ -2627,7 +2603,7 @@ impl Player {
             let l_trigger = player_input.l_trigger.value;
             let r_trigger = player_input.r_trigger.value;
 
-            lines.push(format!("Entity: {}  VALUE  stick_x: {:.5}  stick_y: {:.5}  c_stick_x: {:.5}  c_stick_y: {:.5}  l_trigger: {:.5}  r_trigger: {:.5}",
+            lines.push(format!("Entity: {:?}  VALUE  stick_x: {:.5}  stick_y: {:.5}  c_stick_x: {:.5}  c_stick_y: {:.5}  l_trigger: {:.5}  r_trigger: {:.5}",
                 index, stick_x, stick_y, c_stick_x, c_stick_y, l_trigger, r_trigger));
         }
 
@@ -2639,7 +2615,7 @@ impl Player {
             let l_trigger = player_input.l_trigger.diff;
             let r_trigger = player_input.r_trigger.diff;
 
-            lines.push(format!("Entity: {}  DIFF   stick_x: {:.5}  stick_y: {:.5}  c_stick_x: {:.5}  c_stick_y: {:.5}  l_trigger: {:.5}  r_trigger: {:.5}",
+            lines.push(format!("Entity: {:?}  DIFF   stick_x: {:.5}  stick_y: {:.5}  c_stick_x: {:.5}  c_stick_y: {:.5}  l_trigger: {:.5}  r_trigger: {:.5}",
                 index, stick_x, stick_y, c_stick_x, c_stick_y, l_trigger, r_trigger));
         }
 
@@ -2648,12 +2624,12 @@ impl Player {
             let last_action_frame = fighter.actions[self.action as usize].frames.len() as u64 - 1;
             let iasa = fighter.actions[self.action as usize].iasa;
 
-            lines.push(format!("Entity: {}  Fighter  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
+            lines.push(format!("Entity: {:?}  Fighter  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
                 index, action, self.frame, last_action_frame, self.frame_norestart, iasa));
         }
 
         if debug.frame {
-            lines.push(format!("Entity: {}  shield HP: {:.5}  hitstun: {:.5}  hitlag: {:?}  tech timer: {:?}  lcancel timer: {}",
+            lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  hitlag: {:?}  tech timer: {:?}  lcancel timer: {}",
                 index, self.shield_hp, self.hitstun, self.hitlag, self.tech_timer, self.lcancel_timer));
         }
         lines
@@ -2822,7 +2798,7 @@ impl Player {
         }
     }
 
-    pub fn render(&self, entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
+    pub fn render(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
         let shield = if self.is_shielding() {
             let fighter_color = graphics::get_team_color3(self.team);
             let fighter = &fighters[self.fighter.as_ref()];

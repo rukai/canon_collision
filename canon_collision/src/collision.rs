@@ -3,21 +3,23 @@ use treeflection::KeyedContextVec;
 use canon_collision_lib::fighter::{Fighter, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};
 use canon_collision_lib::stage::Surface;
 use crate::player::Player;
-use crate::entity::Entity;
-use generational_arena::{Arena, Index};
+use crate::entity::{Entities, EntityKey, EntityType};
+use slotmap::SecondaryMap;
 
 // def - player who was attacked
 // atk - player who attacked
 
 /// returns a list of hit results for each player
-pub fn collision_check(entities: &Arena<Entity>, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Vec<Vec<CollisionResult>> {
-    // TODO: probably need slotmap's secondary maps here
-    let mut result: Vec<Vec<CollisionResult>> = entities.iter().map(|_| vec!()).collect();
+pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> SecondaryMap<EntityKey, Vec<CollisionResult>> {
+    let mut result = SecondaryMap::<EntityKey, Vec<CollisionResult>>::new();
+    for key in entities.keys() {
+        result.insert(key, vec!());
+    }
 
     'player_atk: for (player_atk_i, player_atk) in entities.iter() {
         let player_atk_xy = player_atk.public_bps_xy(entities, fighters, surfaces);
         let fighter_atk = &fighters[player_atk.entity_def_key()];
-        for (player_def_i, player_def) in entities.iter().enumerate() {
+        for (player_def_i, player_def) in entities.iter() {
             let player_def_xy = player_def.public_bps_xy(entities, fighters, surfaces);
             if player_atk_i != player_def_i && player_atk.can_hit(player_def) && player_atk.hitlist().iter().all(|x| *x != player_def_i) {
                 let fighter_def = &fighters[player_def.entity_def_key()];
@@ -28,7 +30,7 @@ pub fn collision_check(entities: &Arena<Entity>, fighters: &KeyedContextVec<Figh
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
-                        if let Entity::Player(player_def) = player_def {
+                        if let EntityType::Player(player_def) = &player_def.ty {
                             if colbox_shield_collision_check(player_atk_xy, colbox_atk, player_def_xy, player_def, fighter_def) {
                                 result[player_atk_i].push(CollisionResult::HitShieldAtk {
                                     hitbox: hitbox_atk.clone(),
@@ -182,17 +184,17 @@ fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,
 #[allow(dead_code)]
 pub enum CollisionResult {
     PhantomDef   (HitBox, HurtBox),
-    PhantomAtk   (HitBox, usize),
-    HitDef       { hitbox: HitBox, hurtbox: HurtBox, player_atk_i: Index },
-    HitAtk       { hitbox: HitBox, player_def_i: Index, point: (f32, f32) },
-    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, player_def_i: Index },
-    HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, player_atk_i: Index },
+    PhantomAtk   (HitBox, EntityKey),
+    HitDef       { hitbox: HitBox, hurtbox: HurtBox, player_atk_i: EntityKey },
+    HitAtk       { hitbox: HitBox, player_def_i: EntityKey, point: (f32, f32) },
+    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, player_def_i: EntityKey },
+    HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, player_atk_i: EntityKey },
     ReflectDef   (HitBox), // TODO: add further details required for recreating projectile
     ReflectAtk   (HitBox),
     AbsorbDef    (HitBox),
     AbsorbAtk    (HitBox),
-    GrabDef      (Index),
-    GrabAtk      (Index),
+    GrabDef      (EntityKey),
+    GrabAtk      (EntityKey),
     Clang        { rebound: bool },
 }
 

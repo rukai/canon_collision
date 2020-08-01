@@ -152,7 +152,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 let setup = GameSetup {
                     init_seed:              GameSetup::gen_seed(),
                     input_history:          vec!(),
-                    entity_history:         vec!(),
+                    entity_history:         Default::default(),
                     stage_history:          vec!(),
                     stage:                  cli_results.stage_name.unwrap(),
                     state:                  GameState::Local,

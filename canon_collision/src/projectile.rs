@@ -1,5 +1,5 @@
 use crate::collision::CollisionResult;
-use crate::entity::{DebugEntity, StepContext};
+use crate::entity::{DebugEntity, StepContext, EntityKey};
 
 use canon_collision_lib::fighter::{Fighter, ActionFrame};
 
@@ -118,20 +118,20 @@ impl Projectile {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, debug: &DebugEntity, index: usize) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         let mut lines = vec!();
         let fighter = &fighters[self.entity_def_key.as_ref()];
         if debug.physics {
-            lines.push(format!("Entity: {}  location: {:?}  angle: {:.5}",
-                index, (self.x, self.y), self.angle));
+            lines.push(format!("Entity: {:?}  location: {:?}  angle: {:.5}",
+                i, (self.x, self.y), self.angle));
         }
         if debug.action {
             let action = ProjectileAction::from_u64(self.action).unwrap();
             let last_action_frame = fighter.actions[self.action as usize].frames.len() as u64 - 1;
             let iasa = fighter.actions[self.action as usize].iasa;
 
-            lines.push(format!("Entity: {}  Projectile  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-                index, action, self.frame, last_action_frame, self.frame_no_restart, iasa));
+            lines.push(format!("Entity: {:?}  Projectile  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
+                i, action, self.frame, last_action_frame, self.frame_no_restart, iasa));
         }
 
         lines
