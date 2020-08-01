@@ -18,6 +18,7 @@ use winit_input_helper::WinitInputHelper;
 use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 
 use std::collections::HashSet;
+use std::f32::consts::PI;
 
 new_key_type! { pub struct EntityKey; }
 pub type Entities = DenseSlotMap<EntityKey, Entity>;
@@ -48,7 +49,11 @@ impl Entity {
     pub fn face_right(&self) -> bool {
         match &self.ty {
             EntityType::Player (player) => player.face_right,
-            EntityType::Projectile (projectile) => projectile.angle > 0.0 && projectile.angle < 180.0, // TODO: what is the actual range?
+            EntityType::Projectile (projectile) => {
+                let angle = projectile.angle % (PI * 2.0); // TODO: does this handle negative numbers?
+                let face_left = angle > PI / 2.0 && angle < PI * 3.0 / 2.0;
+                !face_left
+            }
         }
     }
 
@@ -163,8 +168,7 @@ impl Entity {
     pub fn player_id(&self) -> Option<usize> {
         match &self.ty {
             EntityType::Player (player) => Some(player.id),
-            // TODO: Look up owner based on generational id
-            EntityType::Projectile (_) => None,
+            EntityType::Projectile (projectile) => projectile.owner_id,
         }
     }
 

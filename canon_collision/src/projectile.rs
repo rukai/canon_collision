@@ -22,6 +22,7 @@ impl Default for ProjectileAction {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Projectile {
+    pub owner_id: Option<usize>,
     pub entity_def_key: String,
     pub action: u64,
     pub frame: i64,

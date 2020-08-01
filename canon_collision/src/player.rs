@@ -430,13 +430,13 @@ impl Player {
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         for col_result in col_results {
             match col_result {
-                &CollisionResult::HitAtk { player_def_i, ref hitbox, ref point } => {
+                &CollisionResult::HitAtk { entity_def_i, ref hitbox, ref point } => {
                     self.hit_particles(point.clone(), hitbox);
-                    self.hitlist.push(player_def_i);
+                    self.hitlist.push(entity_def_i);
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
-                &CollisionResult::HitDef { ref hitbox, ref hurtbox, player_atk_i } => {
-                    let player_atk = &context.entities[player_atk_i];
+                &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
+                    let entity_atk = &context.entities[entity_atk_i];
 
                     let damage_done = hitbox.damage * hurtbox.damage_mult; // TODO: apply staling
                     self.damage += damage_done;
@@ -496,9 +496,9 @@ impl Player {
                     let angle_rad = angle_deg.to_radians() + if angle_deg < 0.0 { PI * 2.0 } else { 0.0 };
 
                     // handle reverse hits
-                    let behind_player_atk = self.bps_xy(context).0 < player_atk.bps_xy(context).0 && player_atk.face_right() ||
-                                            self.bps_xy(context).0 > player_atk.bps_xy(context).0 && !player_atk.face_right();
-                    let angle = if hitbox.enable_reverse_hit && behind_player_atk { PI - angle_rad } else { angle_rad };
+                    let behind_entity_atk = self.bps_xy(context).0 < entity_atk.bps_xy(context).0 && entity_atk.face_right() ||
+                                            self.bps_xy(context).0 > entity_atk.bps_xy(context).0 && !entity_atk.face_right();
+                    let angle = if hitbox.enable_reverse_hit && behind_entity_atk { PI - angle_rad } else { angle_rad };
 
                     // debug data
                     self.hit_angle_pre_di = Some(angle);
@@ -506,12 +506,13 @@ impl Player {
                     self.frames_since_hit = 0;
 
                     self.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, kb_vel, angle, wobble_x: 0.0 };
-                    self.hit_by = context.entities.get(player_atk_i).and_then(|x| x.player_id());
-                    self.face_right = self.bps_xy(context).0 < player_atk.bps_xy(context).0;
+                    self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
+                    // TODO: determine from angle (current logic falls over when reverse hit is disabled)
+                    self.face_right = self.bps_xy(context).0 < entity_atk.bps_xy(context).0;
                 }
-                &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, player_def_i} => {
-                    if let EntityType::Player (player_def) = &context.entities[player_def_i].ty {
-                        self.hitlist.push(player_def_i);
+                &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_def_i} => {
+                    if let EntityType::Player (player_def) = &context.entities[entity_def_i].ty {
+                        self.hitlist.push(entity_def_i);
                         if let &Some(ref power_shield) = power_shield {
                             if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(self.action), &power_shield.enemy_stun) {
                                 if stun.window > player_def.frame as u64 {
@@ -528,7 +529,7 @@ impl Player {
                         self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                     }
                 }
-                &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, player_atk_i } => {
+                &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
                     if let &Some(ref power_shield) = power_shield {
                         if let (Some(Action::PowerShield), &Some(ref parry)) = (Action::from_u64(self.action), &power_shield.parry) {
                             if parry.window > self.frame as u64 {
@@ -546,18 +547,18 @@ impl Player {
 
                     let analog_mult = 1.0 - (self.shield_analog - 0.3) / 0.7;
                     let vel_mult = if self.parry_timer > 0 { 1.0 } else { 0.6 };
-                    let x_diff = self.bps_xy(context).0 - context.entities[player_atk_i].bps_xy(context).0;
+                    let x_diff = self.bps_xy(context).0 - context.entities[entity_atk_i].bps_xy(context).0;
                     let vel = (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
                     self.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
-                &CollisionResult::GrabAtk (_player_def_i) => {
+                &CollisionResult::GrabAtk (_entity_def_i) => {
                     self.set_action(context, Action::GrabbingIdle);
                 }
-                &CollisionResult::GrabDef (player_atk_i) => {
-                    self.face_right = !context.entities[player_atk_i].face_right();
-                    self.location = Location::GrabbedByPlayer(player_atk_i);
+                &CollisionResult::GrabDef (entity_atk_i) => {
+                    self.face_right = !context.entities[entity_atk_i].face_right();
+                    self.location = Location::GrabbedByPlayer(entity_atk_i);
                     self.set_action(context, Action::GrabbedIdle);
                 }
                 _ => { }
@@ -1185,7 +1186,8 @@ impl Player {
                 context.new_entities.push(Entity {
                     ty: EntityType::Projectile(
                         Projectile {
-                            entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
+                            owner_id: Some(self.id),
+                            entity_def_key: "PerfectlyGenericProjectile.cbor".to_string(),
                             action: 0,
                             frame: 0,
                             frame_no_restart: 0,
