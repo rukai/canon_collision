@@ -11,7 +11,7 @@ use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::results::PlayerResult;
 use crate::player::RenderPlayer;
-use canon_collision_lib::fighter::{Action, ECB, CollisionBoxRole, ActionFrame};
+use canon_collision_lib::entity_def::{Action, ECB, CollisionBoxRole, ActionFrame};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
@@ -568,12 +568,12 @@ impl WgpuGraphics {
                 }
                 PackageUpdate::DeleteFighterFrame { fighter, action, frame_index } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.fighters[fighter.as_ref()].actions[action].frames.remove(frame_index);
+                        package.entities[fighter.as_ref()].actions[action].frames.remove(frame_index);
                     }
                 }
                 PackageUpdate::InsertFighterFrame { fighter, action, frame_index, frame } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.fighters[fighter.as_ref()].actions[action].frames.insert(frame_index, frame);
+                        package.entities[fighter.as_ref()].actions[action].frames.insert(frame_index, frame);
                     }
                 }
                 PackageUpdate::DeleteStage { index, .. } => {
@@ -1511,7 +1511,7 @@ impl WgpuGraphics {
 
     fn draw_fighter_selector(&mut self, selections: &[(&PlayerSelect, usize)], i: usize, start_x: f32, start_y: f32, end_x: f32, end_y: f32) -> Vec<Draw> {
         let mut draws = vec!();
-        let fighters = &self.package.as_ref().unwrap().fighters;
+        let entities = &self.package.as_ref().unwrap().entities;
         let (selection, controller_i) = selections[i];
 
         // render player name
@@ -1555,12 +1555,12 @@ impl WgpuGraphics {
         let mut options = vec!();
         match selection.ui {
             PlayerSelectUi::HumanFighter (_) => {
-                options.extend(fighters.iter().map(|x| x.name.clone()));
+                options.extend(entities.iter().map(|x| x.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Add CPU"));
             }
             PlayerSelectUi::CpuFighter (_) => {
-                options.extend(fighters.iter().map(|x| x.name.clone()));
+                options.extend(entities.iter().map(|x| x.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Change AI"));
                 options.push(String::from("Remove CPU"));
@@ -1615,10 +1615,10 @@ impl WgpuGraphics {
         }
 
         // render fighter
-        for (fighter_i, (fighter_key, _)) in fighters.key_value_iter().enumerate() {
+        for (fighter_i, (fighter_key, _)) in entities.key_value_iter().enumerate() {
             if let Some(selection_i) = selection.fighter {
                 if fighter_i == selection_i {
-                    let fighter = fighters.key_to_value(fighter_key).unwrap();
+                    let fighter = entities.key_to_value(fighter_key).unwrap();
 
                     // Determine action, handling the user setting it to an invalid value
                     let css_action = fighter.css_action as usize;
@@ -1758,7 +1758,7 @@ impl WgpuGraphics {
     }
 
     fn draw_player_result(&mut self, result: &PlayerResult, start_x: f32) {
-        let fighter_name = self.package.as_ref().unwrap().fighters[result.fighter.as_ref()].name.as_str();
+        let fighter_name = self.package.as_ref().unwrap().entities[result.fighter.as_ref()].name.as_str();
         let color = graphics::get_team_color4(result.team);
         let x = (start_x + 0.05) * self.width as f32;
         let y = 30.0;

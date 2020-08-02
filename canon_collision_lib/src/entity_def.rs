@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use crate::files::engine_version;
 
-impl Default for Fighter {
-    fn default() -> Fighter {
+impl Default for EntityDef {
+    fn default() -> EntityDef {
         let action_def = ActionDef {
             frames: ContextVec::from_vec(vec!(ActionFrame::default())),
             iasa:   0,
@@ -40,11 +40,11 @@ impl Default for Fighter {
             actions.push(action_def_new);
         }
 
-        Fighter {
+        EntityDef {
             engine_version: engine_version(),
 
             // css render
-            name:       "Base Fighter".to_string(),
+            name:       "Base Entity".to_string(),
             css_action: Action::Idle.to_u64().unwrap(),
             css_scale:  1.0,
 
@@ -97,7 +97,7 @@ impl Default for Fighter {
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
-pub struct Fighter {
+pub struct EntityDef {
     pub engine_version: u64,
 
     // css render

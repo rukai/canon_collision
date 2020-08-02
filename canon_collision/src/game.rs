@@ -11,7 +11,7 @@ use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, 
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::fighter::{ActionFrame, CollisionBox, Action};
+use canon_collision_lib::entity_def::{ActionFrame, CollisionBox, Action};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
@@ -192,7 +192,7 @@ impl Game {
                 self.camera.update_os_input(os_input);
                 self.prev_mouse_point = os_input.mouse();
             }
-            self.camera.update(os_input, &self.entities, &self.package.fighters, &self.stage);
+            self.camera.update(os_input, &self.entities, &self.package.entities, &self.stage);
 
             self.generate_debug(input, netplay);
         }
@@ -253,15 +253,15 @@ impl Game {
                     let entity_frame    = entity.frame() as usize;
                     let entity_colboxes = self.selector.colboxes_vec();
 
-                    let fighters = &mut self.package.fighters;
-                    if let Some(fighter_index) = fighters.key_to_index(entity_def_key) {
-                        fighters.set_context(fighter_index);
+                    let entity_defs = &mut self.package.entities;
+                    if let Some(fighter_index) = entity_defs.key_to_index(entity_def_key) {
+                        entity_defs.set_context(fighter_index);
                     }
                     else {
                         return;
                     }
 
-                    let actions = &mut fighters[entity_def_key].actions;
+                    let actions = &mut entity_defs[entity_def_key].actions;
                     if entity_action >= actions.len() {
                         return;
                     }
@@ -488,7 +488,7 @@ impl Game {
                     if self.selector.moving {
                         // undo the operations used to render the entity
                         let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                        let angle = -self.entities[entity_i].angle(&self.package.fighters[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
+                        let angle = -self.entities[entity_i].angle(&self.package.entities[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
                         let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                         let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
                         let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
@@ -502,7 +502,7 @@ impl Game {
                     else {
                         // copy frame
                         if os_input.key_pressed(VirtualKeyCode::V) {
-                            let frame = self.package.fighters[fighter].actions[action].frames[frame].clone();
+                            let frame = self.package.entities[fighter].actions[action].frames[frame].clone();
                             self.copied_frame = Some(frame);
                         }
                         // paste over current frame
@@ -532,7 +532,7 @@ impl Game {
                                     // The entity itself must handle being on a frame that has been deleted in order for replays to work.
                                     for any_entity in &mut self.entities.values_mut() {
                                         if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
-                                            && any_entity.frame() as usize == self.package.fighters[fighter].actions[action].frames.len()
+                                            && any_entity.frame() as usize == self.package.entities[fighter].actions[action].frames.len()
                                         {
                                             any_entity.set_frame(any_entity.frame() - 1);
                                         }
@@ -562,7 +562,7 @@ impl Game {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let selected = {
                                     let entity = &self.entities[entity_i];
-                                    let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                                    let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
 
                                     let point = (entity.relative_f(m_x - p_x), m_y - p_y);
                                     let new_colbox = CollisionBox::new(point);
@@ -600,7 +600,7 @@ impl Game {
                         if os_input.key_pressed(VirtualKeyCode::Q) {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let entity = &self.entities[entity_i];
-                                let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
+                                let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
 
                                 let x = entity.relative_f(m_x - p_x);
                                 let y = m_y - p_y;
@@ -610,8 +610,8 @@ impl Game {
 
                         // handle single selection
                         if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
-                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[fighter], &self.stage.surfaces);
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
@@ -640,8 +640,8 @@ impl Game {
 
                         // handle multiple selection
                         if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
-                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.fighters, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.fighters[fighter], &self.stage.surfaces);
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[fighter], &self.stage.surfaces);
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
@@ -724,7 +724,7 @@ impl Game {
                         let entities = self.entities.clone();
                         for surface_i in surfaces_to_delete {
                             for (_, entity) in self.entities.iter_mut() {
-                                entity.platform_deleted(&entities, &self.package.fighters, &self.stage.surfaces, surface_i);
+                                entity.platform_deleted(&entities, &self.package.entities, &self.stage.surfaces, surface_i);
                             }
                             self.stage.surfaces.remove(surface_i);
                         }
@@ -1068,8 +1068,8 @@ impl Game {
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
                         entities:     &self.entities,
-                        fighters:     &self.package.fighters,
-                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        entity_defs:  &self.package.entities,
+                        entity_def:   &self.package.entities[entity.entity_def_key()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1095,8 +1095,8 @@ impl Game {
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
                         entities:     &action_entities,
-                        fighters:     &self.package.fighters,
-                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        entity_defs:  &self.package.entities,
+                        entity_def:   &self.package.entities[entity.entity_def_key()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1114,7 +1114,7 @@ impl Game {
 
             // check for hits and run hit logic
             let mut collision_entities = physics_entities.clone();
-            let collision_results = collision_check(&physics_entities, &self.package.fighters, &self.stage.surfaces);
+            let collision_results = collision_check(&physics_entities, &self.package.entities, &self.stage.surfaces);
             let keys: Vec<_> = collision_entities.keys().collect();
             for key in keys {
                 let delete_self = {
@@ -1123,8 +1123,8 @@ impl Game {
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
                         entities:     &physics_entities,
-                        fighters:     &self.package.fighters,
-                        fighter:      &self.package.fighters[entity.entity_def_key()],
+                        entity_defs:  &self.package.entities,
+                        entity_def:   &self.package.entities[entity.entity_def_key()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1274,7 +1274,7 @@ impl Game {
             if let Some(entity) = self.entities.get(i) {
                 let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                 let input = input_i.and_then(|x| player_inputs.get(*x));
-                self.debug_lines.extend(entity.debug_print(&self.package.fighters, input, debug_entity, i));
+                self.debug_lines.extend(entity.debug_print(&self.package.entities, input, debug_entity, i));
             }
         }
 
@@ -1315,14 +1315,14 @@ impl Game {
 
             let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
             if debug.cam_area {
-                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.fighters, &self.stage.surfaces) {
+                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.entities, &self.stage.surfaces) {
                     render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
                 }
             }
 
-            let fighters = &self.package.fighters;
+            let entity_defs = &self.package.entities;
             let surfaces = &self.stage.surfaces;
-            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, fighters, surfaces);
+            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, entity_defs, surfaces);
             render_entities.push(RenderObject::Entity(player_render));
         }
 

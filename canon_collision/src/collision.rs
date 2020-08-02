@@ -1,45 +1,43 @@
-use treeflection::KeyedContextVec;
-
-use canon_collision_lib::fighter::{Fighter, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};
-use canon_collision_lib::stage::Surface;
 use crate::player::Player;
 use crate::entity::{Entities, EntityKey, EntityType};
+
+use canon_collision_lib::entity_def::{EntityDef, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};
+use canon_collision_lib::stage::Surface;
+
+use treeflection::KeyedContextVec;
 use slotmap::SecondaryMap;
 
-// def - player who was attacked
-// atk - player who attacked
-
 /// returns a list of hit results for each player
-pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> SecondaryMap<EntityKey, Vec<CollisionResult>> {
+pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> SecondaryMap<EntityKey, Vec<CollisionResult>> {
     let mut result = SecondaryMap::<EntityKey, Vec<CollisionResult>>::new();
     for key in entities.keys() {
         result.insert(key, vec!());
     }
 
     'entity_atk: for (entity_atk_i, entity_atk) in entities.iter() {
-        let entity_atk_xy = entity_atk.public_bps_xy(entities, fighters, surfaces);
-        let fighter_atk = &fighters[entity_atk.entity_def_key()];
-        for (entity_def_i, entity_def) in entities.iter() {
-            let entity_def_xy = entity_def.public_bps_xy(entities, fighters, surfaces);
-            if entity_atk_i != entity_def_i && entity_atk.can_hit(entity_def) && entity_atk.hitlist().iter().all(|x| *x != entity_def_i) {
-                let fighter_def = &fighters[entity_def.entity_def_key()];
+        let entity_atk_xy = entity_atk.public_bps_xy(entities, entity_definitions, surfaces);
+        let entity_atk_def = &entity_definitions[entity_atk.entity_def_key()];
+        for (entity_defend_i, entity_defend) in entities.iter() {
+            let entity_defend_xy = entity_defend.public_bps_xy(entities, entity_definitions, surfaces);
+            if entity_atk_i != entity_defend_i && entity_atk.can_hit(entity_defend) && entity_atk.hitlist().iter().all(|x| *x != entity_defend_i) {
+                let entity_defend_def = &entity_definitions[entity_defend.entity_def_key()];
 
-                let frame_atk = &entity_atk.relative_frame(fighter_atk, surfaces);
-                let frame_def = &entity_def.relative_frame(fighter_def, surfaces);
+                let frame_atk = &entity_atk.relative_frame(entity_atk_def, surfaces);
+                let frame_defend = &entity_defend.relative_frame(entity_defend_def, surfaces);
                 let colboxes_atk = frame_atk.get_hitboxes();
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
-                        if let EntityType::Player(player_def) = &entity_def.ty {
-                            if colbox_shield_collision_check(entity_atk_xy, colbox_atk, entity_def_xy, player_def, fighter_def) {
+                        if let EntityType::Player(player_defend) = &entity_defend.ty {
+                            if colbox_shield_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, player_defend, entity_defend_def) {
                                 result[entity_atk_i].push(CollisionResult::HitShieldAtk {
                                     hitbox: hitbox_atk.clone(),
-                                    power_shield: fighter_def.power_shield.clone(),
-                                    entity_def_i
+                                    power_shield: entity_defend_def.power_shield.clone(),
+                                    entity_defend_i
                                 });
-                                result[entity_def_i].push(CollisionResult::HitShieldDef {
+                                result[entity_defend_i].push(CollisionResult::HitShieldDef {
                                     hitbox: hitbox_atk.clone(),
-                                    power_shield: fighter_def.power_shield.clone(),
+                                    power_shield: entity_defend_def.power_shield.clone(),
                                     entity_atk_i
                                 });
                                 break 'hitbox_atk;
@@ -47,24 +45,24 @@ pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>,
                         }
 
                         if hitbox_atk.enable_clang {
-                            for colbox_def in frame_def.colboxes.iter() {
+                            for colbox_def in frame_defend.colboxes.iter() {
                                 match &colbox_def.role {
                                 // TODO: How do we only run the clang handler once?
                                     &CollisionBoxRole::Hit (ref hitbox_def) => {
-                                        if let ColBoxCollisionResult::Hit (point) = colbox_collision_check(entity_atk_xy, colbox_atk, entity_def_xy, colbox_def) {
+                                        if let ColBoxCollisionResult::Hit (point) = colbox_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, colbox_def) {
                                             let damage_diff = hitbox_atk.damage as i64 - hitbox_def.damage as i64; // TODO: retrieve proper damage with move staling etc
 
                                             if damage_diff >= 9 {
                                                 result[entity_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
-                                                result[entity_def_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_def_i: entity_def_i, point });
+                                                result[entity_defend_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
                                             }
                                             else if damage_diff <= -9 {
-                                                result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_def_i: entity_def_i, point });
-                                                result[entity_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
+                                                result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
+                                                result[entity_defend_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
                                             }
                                             else {
                                                 result[entity_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
-                                                result[entity_def_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
+                                                result[entity_defend_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
                                             }
                                             break 'entity_atk;
                                         }
@@ -74,17 +72,17 @@ pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>,
                             }
                         }
 
-                        for colbox_def in frame_def.colboxes.iter() {
-                            match colbox_collision_check(entity_atk_xy, colbox_atk, entity_def_xy, colbox_def) {
+                        for colbox_def in frame_defend.colboxes.iter() {
+                            match colbox_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, colbox_def) {
                                 ColBoxCollisionResult::Hit (point) => {
                                     match &colbox_def.role {
                                         &CollisionBoxRole::Hurt (ref hurtbox) => {
-                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_def_i: entity_def_i, point });
-                                            result[entity_def_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), entity_atk_i: entity_atk_i });
+                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
+                                            result[entity_defend_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), entity_atk_i: entity_atk_i });
                                             break 'entity_atk;
                                         }
                                         &CollisionBoxRole::Invincible => {
-                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_def_i: entity_def_i, point });
+                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
                                             break 'entity_atk;
                                         }
                                         _ => { }
@@ -93,8 +91,8 @@ pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>,
                                 ColBoxCollisionResult::Phantom (_) => {
                                     match &colbox_def.role {
                                         &CollisionBoxRole::Hurt (ref hurtbox) => {
-                                            result[entity_atk_i].push(CollisionResult::PhantomAtk (hitbox_atk.clone(), entity_def_i));
-                                            result[entity_def_i].push(CollisionResult::PhantomDef (hitbox_atk.clone(), hurtbox.clone()));
+                                            result[entity_atk_i].push(CollisionResult::PhantomAtk (hitbox_atk.clone(), entity_defend_i));
+                                            result[entity_defend_i].push(CollisionResult::PhantomDef (hitbox_atk.clone(), hurtbox.clone()));
                                             break 'entity_atk;
                                         }
                                         _ => { }
@@ -109,10 +107,10 @@ pub fn collision_check(entities: &Entities, fighters: &KeyedContextVec<Fighter>,
                 for colbox_atk in &colboxes_atk {
                     match &colbox_atk.role {
                         &CollisionBoxRole::Grab => {
-                            for colbox_def in &frame_def.colboxes[..] {
-                                if let ColBoxCollisionResult::Hit (_) = colbox_collision_check(entity_atk_xy, colbox_atk, entity_def_xy, colbox_def) {
-                                    result[entity_atk_i].push(CollisionResult::GrabAtk (entity_def_i));
-                                    result[entity_def_i].push(CollisionResult::GrabDef (entity_atk_i));
+                            for colbox_def in &frame_defend.colboxes[..] {
+                                if let ColBoxCollisionResult::Hit (_) = colbox_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, colbox_def) {
+                                    result[entity_atk_i].push(CollisionResult::GrabAtk (entity_defend_i));
+                                    result[entity_defend_i].push(CollisionResult::GrabDef (entity_atk_i));
                                     break 'entity_atk;
                                 }
                             }
@@ -158,7 +156,7 @@ enum ColBoxCollisionResult {
     None
 }
 
-fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,  player2_xy: (f32, f32), player2: &Player, fighter2: &Fighter) -> bool {
+fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,  player2_xy: (f32, f32), player2: &Player, fighter2: &EntityDef) -> bool {
     if let &Some(ref shield) = &fighter2.shield {
         if player2.is_shielding() {
             let x1 = player1_xy.0 + colbox1.point.0;
@@ -186,8 +184,8 @@ pub enum CollisionResult {
     PhantomDef   (HitBox, HurtBox),
     PhantomAtk   (HitBox, EntityKey),
     HitDef       { hitbox: HitBox, hurtbox: HurtBox, entity_atk_i: EntityKey },
-    HitAtk       { hitbox: HitBox, entity_def_i: EntityKey, point: (f32, f32) },
-    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, entity_def_i: EntityKey },
+    HitAtk       { hitbox: HitBox, entity_defend_i: EntityKey, point: (f32, f32) },
+    HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, entity_defend_i: EntityKey },
     HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, entity_atk_i: EntityKey },
     ReflectDef   (HitBox), // TODO: add further details required for recreating projectile
     ReflectAtk   (HitBox),

@@ -1,4 +1,4 @@
-use canon_collision_lib::fighter::CollisionBoxRole;
+use canon_collision_lib::entity_def::CollisionBoxRole;
 use canon_collision_lib::package::PackageUpdate;
 use crate::game::RenderGame;
 use crate::menu::RenderMenu;

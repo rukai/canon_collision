@@ -6,7 +6,7 @@ use crate::rules::{Goal, Rules};
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey};
 use crate::projectile::Projectile;
 
-use canon_collision_lib::fighter::*;
+use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::geometry;
 use canon_collision_lib::input::state::PlayerInput;
@@ -87,7 +87,7 @@ impl Hitlag {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Player {
-    pub fighter:            String,
+    pub entity_def_key:     String,
     pub id:                 usize, // unique id among players
     pub team:               usize,
     pub action:             u64, // always change through next_action
@@ -144,7 +144,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(fighter: String, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
+    pub fn new(entity_def_key: String, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
@@ -204,9 +204,9 @@ impl Player {
             frames_since_ledge: 0,
             ledge_idle_timer:   0,
             fastfalled:         false,
-            air_jumps_left:     package.fighters[fighter.as_ref()].air_jumps,
+            air_jumps_left:     package.entities[entity_def_key.as_ref()].air_jumps,
             jumpsquat_button:   false,
-            shield_hp:          package.fighters[fighter.as_ref()].shield.as_ref().map_or(60.0, |x| x.hp_max),
+            shield_hp:          package.entities[entity_def_key.as_ref()].shield.as_ref().map_or(60.0, |x| x.hp_max),
             shield_analog:      0.0,
             shield_offset_x:    0.0,
             shield_offset_y:    0.0,
@@ -226,7 +226,7 @@ impl Player {
             result:             RawPlayerResult::default(),
             id,
             team,
-            fighter,
+            entity_def_key,
             location,
 
             // Only use for debug display
@@ -239,10 +239,10 @@ impl Player {
     }
 
     pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
-        self.public_bps_xy(&context.entities, &context.fighters, &context.surfaces)
+        self.public_bps_xy(&context.entities, &context.entity_defs, &context.surfaces)
     }
 
-    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         let bps_xy = match self.location {
             Location::Surface { platform_i, x } => {
                 if let Some(platform) = surfaces.get(platform_i) {
@@ -265,7 +265,7 @@ impl Player {
             }
             Location::GrabbedByPlayer (entity_i) => {
                 if let Some(player) = entities.get(entity_i) {
-                    if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
+                    if let Some(fighter_frame) = self.get_entity_frame(&fighters[self.entity_def_key.as_ref()]) {
                         let (grabbing_x, grabbing_y) = player.grabbing_xy(entities, fighters, surfaces);
                         let grabbed_x = self.relative_f(fighter_frame.grabbed_x);
                         let grabbed_y = fighter_frame.grabbed_y;
@@ -292,9 +292,9 @@ impl Player {
         }
     }
 
-    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
-        if let Some(fighter_frame) = self.get_fighter_frame(&fighters[self.fighter.as_ref()]) {
+        if let Some(fighter_frame) = self.get_entity_frame(&fighters[self.entity_def_key.as_ref()]) {
             (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
         } else {
             (x, y)
@@ -383,7 +383,7 @@ impl Player {
             self.action = action;
 
             self.frame_step(context);
-            let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
+            let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
             // TODO: move this assert somewhere earlier, maybe the fighter loading code?
             assert_ne!(last_action_frame, -1, "A subaction has a length of 0");
             self.frame = last_action_frame.min(self.frame + 1); // +1 instead of =0 so that frame_step can skip frames if it wants to
@@ -391,19 +391,19 @@ impl Player {
         }
     }
 
-    fn interruptible(&self, fighter: &Fighter) -> bool {
+    fn interruptible(&self, fighter: &EntityDef) -> bool {
         self.frame >= fighter.actions[self.action as usize].iasa
     }
 
-    fn first_interruptible(&self, fighter: &Fighter) -> bool {
+    fn first_interruptible(&self, fighter: &EntityDef) -> bool {
         self.frame == fighter.actions[self.action as usize].iasa
     }
 
-    fn last_frame(&self, fighter: &Fighter) -> bool {
+    fn last_frame(&self, fighter: &EntityDef) -> bool {
         self.frame == fighter.actions[self.action as usize].frames.len() as i64 - 1
     }
 
-    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
         let fall = match &mut self.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
             &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
@@ -430,9 +430,9 @@ impl Player {
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         for col_result in col_results {
             match col_result {
-                &CollisionResult::HitAtk { entity_def_i, ref hitbox, ref point } => {
+                &CollisionResult::HitAtk { entity_defend_i, ref hitbox, ref point } => {
                     self.hit_particles(point.clone(), hitbox);
-                    self.hitlist.push(entity_def_i);
+                    self.hitlist.push(entity_defend_i);
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
@@ -442,7 +442,7 @@ impl Player {
                     self.damage += damage_done;
 
                     let damage_launch = 0.05 * (hitbox.damage * (damage_done + self.damage.floor())) + (damage_done + self.damage) * 0.1;
-                    let weight = 2.0 - (2.0 * context.fighter.weight) / (1.0 + context.fighter.weight);
+                    let weight = 2.0 - (2.0 * context.entity_def.weight) / (1.0 + context.entity_def.weight);
                     let kbg = hitbox.kbg + hurtbox.kbg_add;
                     let bkb = hitbox.bkb + hurtbox.bkb_add;
 
@@ -510,9 +510,9 @@ impl Player {
                     // TODO: determine from angle (current logic falls over when reverse hit is disabled)
                     self.face_right = self.bps_xy(context).0 < entity_atk.bps_xy(context).0;
                 }
-                &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_def_i} => {
-                    if let EntityType::Player (player_def) = &context.entities[entity_def_i].ty {
-                        self.hitlist.push(entity_def_i);
+                &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
+                    if let EntityType::Player (player_def) = &context.entities[entity_defend_i].ty {
+                        self.hitlist.push(entity_defend_i);
                         if let &Some(ref power_shield) = power_shield {
                             if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(self.action), &power_shield.enemy_stun) {
                                 if stun.window > player_def.frame as u64 {
@@ -553,7 +553,7 @@ impl Player {
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                     self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
-                &CollisionResult::GrabAtk (_entity_def_i) => {
+                &CollisionResult::GrabAtk (_entity_defend_i) => {
                     self.set_action(context, Action::GrabbingIdle);
                 }
                 &CollisionResult::GrabDef (entity_atk_i) => {
@@ -574,10 +574,10 @@ impl Player {
         // If the action or frame is out of bounds jump to a valid one.
         // This is needed because we can continue from any point in a replay and replays may
         // contain actions or frames that no longer exist.
-        if self.action as usize >= context.fighter.actions.len() {
+        if self.action as usize >= context.entity_def.actions.len() {
             self.public_set_action(Action::Idle);
         } else {
-            let fighter_frames = &context.fighter.actions[self.action as usize].frames;
+            let fighter_frames = &context.entity_def.actions[self.action as usize].frames;
             if self.frame as usize >= fighter_frames.len() {
                 self.frame = 0;
             }
@@ -661,7 +661,7 @@ impl Player {
         self.particles = new_particles;
 
         if !self.is_shielding() {
-            if let Some(ref shield) = context.fighter.shield {
+            if let Some(ref shield) = context.entity_def.shield {
                 self.shield_hp = shield.hp_max.min(self.shield_hp + shield.hp_regen);
             }
         }
@@ -680,7 +680,7 @@ impl Player {
         else if context.input.l.press || context.input.r.press || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 ||
             context.input.z.press && !(self.frame == 0 && Action::from_u64(self.action).as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
         {
-            if let &Some(ref lcancel) = &context.fighter.lcancel {
+            if let &Some(ref lcancel) = &context.entity_def.lcancel {
                 self.lcancel_timer = lcancel.active_window;
             }
         }
@@ -691,7 +691,7 @@ impl Player {
             self.hit_angle_post_di = None;
         }
 
-        self.tech_timer = match (self.tech_timer.clone(), context.fighter.tech.clone()) {
+        self.tech_timer = match (self.tech_timer.clone(), context.entity_def.tech.clone()) {
             (LockTimer::Active (timer), Some(tech)) => {
                 if timer > tech.active_window {
                     LockTimer::Locked(0)
@@ -732,7 +732,7 @@ impl Player {
             self.c_stick = Some((context.input[0].c_stick_x, context.input[0].c_stick_y));
         }
 
-        let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
+        let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
 
         // update ecb
         let prev_bottom = self.ecb.bottom;
@@ -751,7 +751,7 @@ impl Player {
         self.new_action = false;
         self.frame_step(context);
 
-        let action_frames = context.fighter.actions[self.action as usize].frames.len() as i64;
+        let action_frames = context.entity_def.actions[self.action as usize].frames.len() as i64;
         if !self.set_action_called && self.frame + 1 >= action_frames {
             // Because frames can be added/removed in the in game editor, we need to be ready to handle the frame index going out of bounds for any action automatically.
             self.action_expired(context);
@@ -803,7 +803,7 @@ impl Player {
                 Action::DamageFall       => self.damage_fall_action(context),
                 Action::Damage           => self.damage_action(context),
                 Action::MissedTechIdle   => self.missed_tech_action(context),
-                Action::MissedTechStart  => self.missed_tech_start_action(context.fighter),
+                Action::MissedTechStart  => self.missed_tech_start_action(context.entity_def),
                 Action::AerialDodge      => self.aerialdodge_action(context),
                 Action::SpecialFall      => self.specialfall_action(context),
                 Action::Dtilt            => self.dtilt_action(context),
@@ -821,7 +821,7 @@ impl Player {
                 Action::PowerShield      => self.power_shield_action(context),
                 Action::Shield           => self.shield_action(context),
                 Action::ShieldOff        => self.shield_off_action(context),
-                Action::ShieldBreakFall  => self.shield_break_fall_action(context.fighter),
+                Action::ShieldBreakFall  => self.shield_break_fall_action(context.entity_def),
                 Action::ShieldBreakGetup => self.shield_break_getup_action(),
                 Action::Stun             => self.stun_action(context),
                 Action::GrabbingIdle     => self.grabbing_idle_action(context),
@@ -889,7 +889,7 @@ impl Player {
         self.ledge_idle_timer += 1;
     }
 
-    fn missed_tech_start_action(&mut self, fighter: &Fighter) {
+    fn missed_tech_start_action(&mut self, fighter: &EntityDef) {
         if self.frame == -1 {
             self.apply_friction(fighter);
         } else {
@@ -914,14 +914,14 @@ impl Player {
             self.set_action(context, Action::MissedTechAttack);
         }
         else {
-            if let Some(getup_frame) = context.fighter.missed_tech_forced_getup {
+            if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
                 if self.frame_norestart > getup_frame as i64 {
                     self.set_action(context, Action::MissedTechGetupN);
                 }
             }
 
             self.hitstun -= 1.0;
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
         }
     }
 
@@ -937,24 +937,24 @@ impl Player {
         }
         else {
             if self.is_airbourne() {
-                self.fall_action(context.fighter);
+                self.fall_action(context.entity_def);
             }
             else {
-                self.apply_friction(context.fighter);
+                self.apply_friction(context.entity_def);
             }
         }
     }
 
     fn damage_fly_action(&mut self, context: &mut StepContext) {
         self.hitstun -= 1.0;
-        self.fall_action(context.fighter);
+        self.fall_action(context.entity_def);
         if self.hitstun <= 0.0 {
             self.set_action(context, Action::DamageFall);
         }
     }
 
     fn damage_fall_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(context.fighter) {
+        if self.interruptible(context.entity_def) {
             if self.check_attacks_aerial(context) { }
             else if context.input.b.press {
                 // special attack
@@ -997,7 +997,7 @@ impl Player {
     }
 
     fn aerial_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(context.fighter) {
+        if self.interruptible(context.entity_def) {
             if self.check_attacks_aerial(context) { }
             else if context.input.b.press {
                 // special attack
@@ -1033,19 +1033,19 @@ impl Player {
     }
 
     fn air_drift(&mut self, context: &mut StepContext) {
-        let term_vel = context.fighter.air_x_term_vel * context.input[0].stick_x;
+        let term_vel = context.entity_def.air_x_term_vel * context.input[0].stick_x;
         let drift = context.input[0].stick_x.abs() >= 0.3;
         if !drift ||
            (term_vel < 0.0 && self.x_vel < term_vel) ||
            (term_vel > 0.0 && self.x_vel > term_vel) {
             if self.x_vel > 0.0 {
-                self.x_vel -= context.fighter.air_friction;
+                self.x_vel -= context.entity_def.air_friction;
                 if self.x_vel < 0.0 {
                     self.x_vel = 0.0;
                 }
             }
             else if self.x_vel < 0.0 {
-                self.x_vel += context.fighter.air_friction;
+                self.x_vel += context.entity_def.air_friction;
                 if self.x_vel > 0.0 {
                     self.x_vel = 0.0;
                 }
@@ -1055,21 +1055,21 @@ impl Player {
         if drift {
             if (term_vel < 0.0 && self.x_vel > term_vel) ||
                (term_vel > 0.0 && self.x_vel < term_vel) {
-                self.x_vel += context.fighter.air_mobility_a * context.input[0].stick_x + context.fighter.air_mobility_b * context.input[0].stick_x.signum();
+                self.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
             }
         }
     }
 
     fn tilt_turn_action(&mut self, context: &mut StepContext) {
-        let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as u64 - 1;
-        if self.frame == context.fighter.tilt_turn_flip_dir_frame as i64 ||
-            (context.fighter.tilt_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.fighter)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as u64 - 1;
+        if self.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
+            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.face_right = !self.face_right;
         }
 
-        if context.fighter.tilt_turn_into_dash_iasa as i64 >= self.frame && self.relative_f(context.input[0].stick_x) > 0.79 {
-            if context.fighter.tilt_turn_flip_dir_frame > context.fighter.tilt_turn_into_dash_iasa { // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
+        if context.entity_def.tilt_turn_into_dash_iasa as i64 >= self.frame && self.relative_f(context.input[0].stick_x) > 0.79 {
+            if context.entity_def.tilt_turn_flip_dir_frame > context.entity_def.tilt_turn_into_dash_iasa { // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
                 self.face_right = !self.face_right
             }
             self.set_action(context, Action::Dash);
@@ -1082,7 +1082,7 @@ impl Player {
         else if self.check_grab(context) { }
         else if self.check_taunt(context) { }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
@@ -1098,26 +1098,26 @@ impl Player {
         else if self.check_grab(context) { }
         else if self.check_taunt(context) { }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn run_turn_action(&mut self, context: &mut StepContext) {
-        let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as u64 - 1;
-        if self.frame == context.fighter.run_turn_flip_dir_frame as i64 ||
-            (context.fighter.run_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.fighter)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as u64 - 1;
+        if self.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
+            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.face_right = !self.face_right;
         }
 
         if self.check_jump(context) { }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn crouch_start_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_pass_platform(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { } // TODO: no neutral/side special
@@ -1127,16 +1127,16 @@ impl Player {
             else if self.check_taunt(context) { }
             else if self.check_jump(context) { }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn crouch_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if context.input.stick_y.value > -0.61 { self.set_action(context, Action::CrouchEnd); }
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
@@ -1149,16 +1149,16 @@ impl Player {
             else if self.check_smash_turn(context) { }
             else if self.check_tilt_turn(context) { }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn dtilt_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { } // TODO: no neutral/side special
@@ -1171,11 +1171,11 @@ impl Player {
             else if self.check_walk(context) { }
             else if self.check_taunt(context) { }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
@@ -1201,7 +1201,7 @@ impl Player {
             }
         }
 
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
@@ -1215,20 +1215,20 @@ impl Player {
             else if self.check_tilt_turn(context) { }
             else if self.check_walk(context) { }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn attack_land_action(&mut self, context: &mut StepContext) {
-        let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
+        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
         self.frame = last_action_frame.min(self.frame + self.land_frame_skip as i64);
         self.land_particles(context);
 
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
@@ -1240,22 +1240,22 @@ impl Player {
             else if self.check_smash_turn(context) { }
             else if self.check_tilt_turn(context) { }
             else if self.check_walk(context) { }
-            else if self.first_interruptible(&context.fighter) && context.input[0].stick_y < -0.5 {
+            else if self.first_interruptible(&context.entity_def) && context.input[0].stick_y < -0.5 {
                 self.set_action(context, Action::Crouch);
             }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn land_action(&mut self, context: &mut StepContext) {
         self.land_particles(context);
 
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
@@ -1267,20 +1267,20 @@ impl Player {
             else if self.check_smash_turn(context) { }
             else if self.check_tilt_turn(context) { }
             else if self.check_walk(context) { }
-            else if self.first_interruptible(&context.fighter) && context.input[0].stick_y < -0.5 {
+            else if self.first_interruptible(&context.entity_def) && context.input[0].stick_y < -0.5 {
                 self.set_action(context, Action::Crouch);
             }
             else {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
         }
         else {
-            self.apply_friction(&context.fighter);
+            self.apply_friction(&context.entity_def);
         }
     }
 
     fn teeter_action(&mut self, context: &mut StepContext) {
-        if self.interruptible(&context.fighter) {
+        if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
@@ -1312,13 +1312,13 @@ impl Player {
         else if self.check_tilt_turn(context) { }
         else if self.check_taunt(context) { }
         else {
-            let vel_max = context.fighter.walk_max_vel * context.input[0].stick_x;
+            let vel_max = context.entity_def.walk_max_vel * context.input[0].stick_x;
 
             if self.x_vel.abs() > vel_max.abs() {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
             else {
-                let acc = (vel_max - self.x_vel) * (2.0/context.fighter.walk_max_vel) * (context.fighter.walk_init_vel + context.fighter.walk_acc);
+                let acc = (vel_max - self.x_vel) * (2.0/context.entity_def.walk_max_vel) * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
                 self.x_vel += acc;
                 if self.relative_f(self.x_vel) > self.relative_f(vel_max) {
                     self.x_vel = vel_max;
@@ -1330,23 +1330,23 @@ impl Player {
     fn dash_action(&mut self, context: &mut StepContext) {
         self.dash_particles(context);
         if self.frame == 1 {
-            self.x_vel = self.relative_f(context.fighter.dash_init_vel);
-            if self.x_vel.abs() > context.fighter.dash_run_term_vel {
-                self.x_vel = self.relative_f(context.fighter.dash_run_term_vel);
+            self.x_vel = self.relative_f(context.entity_def.dash_init_vel);
+            if self.x_vel.abs() > context.entity_def.dash_run_term_vel {
+                self.x_vel = self.relative_f(context.entity_def.dash_run_term_vel);
             }
         }
 
         if self.frame > 0 {
             if context.input[0].stick_x.abs() < 0.3 {
-                self.apply_friction(&context.fighter);
+                self.apply_friction(&context.entity_def);
             }
             else {
-                let vel_max = context.input[0].stick_x * context.fighter.dash_run_term_vel;
-                let acc     = context.input[0].stick_x * context.fighter.dash_run_acc_a;
+                let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
+                let acc     = context.input[0].stick_x * context.entity_def.dash_run_acc_a;
 
                 self.x_vel += acc;
                 if (vel_max > 0.0 && self.x_vel > vel_max) || (vel_max < 0.0 && self.x_vel < vel_max) {
-                    self.apply_friction(&context.fighter);
+                    self.apply_friction(&context.entity_def);
                     if (vel_max > 0.0 && self.x_vel < vel_max) || (vel_max < 0.0 && self.x_vel > vel_max) {
                         self.x_vel = vel_max;
                     }
@@ -1361,8 +1361,8 @@ impl Player {
         }
 
         let run_frame = 13; // TODO: Variable per character
-        let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
-        if (self.frame >= run_frame || (run_frame > last_action_frame && self.last_frame(&context.fighter)))
+        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
+        if (self.frame >= run_frame || (run_frame > last_action_frame && self.last_frame(&context.entity_def)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
             self.set_action(context, Action::Run);
@@ -1399,10 +1399,10 @@ impl Player {
             self.set_action(context, Action::DashGrab);
         }
         else {
-            let vel_max = context.input[0].stick_x * context.fighter.dash_run_term_vel;
+            let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
             let acc = (vel_max - self.x_vel)
-                    * (context.fighter.dash_run_acc_a + (context.fighter.dash_run_acc_b / context.input[0].stick_x.abs()))
-                    / (context.fighter.dash_run_term_vel * 2.5);
+                    * (context.entity_def.dash_run_acc_a + (context.entity_def.dash_run_acc_b / context.input[0].stick_x.abs()))
+                    / (context.entity_def.dash_run_term_vel * 2.5);
 
             self.x_vel += acc;
             if self.relative_f(self.x_vel) > self.relative_f(vel_max) {
@@ -1418,7 +1418,7 @@ impl Player {
             self.set_action(context, Action::RunTurn);
         }
         else {
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
         }
     }
 
@@ -1426,8 +1426,8 @@ impl Player {
         self.set_action(context, Action::AerialDodge);
         match context.input[0].stick_angle() {
             Some(angle) => {
-                self.x_vel = angle.cos() * context.fighter.aerialdodge_mult;
-                self.y_vel = angle.sin() * context.fighter.aerialdodge_mult;
+                self.x_vel = angle.cos() * context.entity_def.aerialdodge_mult;
+                self.y_vel = angle.sin() * context.entity_def.aerialdodge_mult;
             }
             None => {
                 self.x_vel = 0.0;
@@ -1438,7 +1438,7 @@ impl Player {
     }
 
     fn aerialdodge_action(&mut self, context: &mut StepContext) {
-        if self.frame < context.fighter.aerialdodge_drift_frame as i64 {
+        if self.frame < context.entity_def.aerialdodge_drift_frame as i64 {
             self.x_vel *= 0.9;
             self.y_vel *= 0.9;
         }
@@ -1449,30 +1449,30 @@ impl Player {
     }
 
     fn shield_on_action(&mut self, context: &mut StepContext) {
-        let stick_lock = context.fighter.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
+        let stick_lock = context.entity_def.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
-        let power_shield_len = context.fighter.actions[Action::PowerShield as usize].frames.len();
+        let power_shield_len = context.entity_def.actions[Action::PowerShield as usize].frames.len();
 
         if !lock && self.check_grab_shield(context) { }
         else if !lock && self.check_jump(context) { }
         else if !lock && self.check_pass_platform(context) { }
-        else if context.fighter.power_shield.is_some() && self.frame == 0 && (context.input.l.press || context.input.r.press) {
+        else if context.entity_def.power_shield.is_some() && self.frame == 0 && (context.input.l.press || context.input.r.press) {
             // allow the first frame to transition to power shield so that powershield input is more consistent
             self.action = Action::PowerShield as u64;
             self.frame = if power_shield_len >= 2 { 1 } else { 0 }; // change self.frame so that a powershield isnt laggier than a normal shield
 
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
             self.shield_shared_action(context);
         }
         else {
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
             self.shield_shared_action(context);
         }
     }
 
     fn shield_action(&mut self, context: &mut StepContext) {
-        let stick_lock = context.fighter.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
+        let stick_lock = context.entity_def.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
 
@@ -1486,17 +1486,17 @@ impl Player {
                 self.set_action(context, Action::ShieldOff);
             }
 
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
             self.shield_shared_action(context);
         }
         else {
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
             self.shield_shared_action(context);
         }
     }
 
     fn shield_off_action(&mut self, context: &mut StepContext) {
-        let stick_lock = context.fighter.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
+        let stick_lock = context.entity_def.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
 
@@ -1504,17 +1504,17 @@ impl Player {
         else if !lock && self.check_jump(context) { }
         else if !lock && self.check_pass_platform(context) { }
         else {
-            self.apply_friction(context.fighter);
+            self.apply_friction(context.entity_def);
             self.shield_shared_action(context);
         }
     }
 
     fn power_shield_action(&mut self, context: &mut StepContext) {
-        let stick_lock = context.fighter.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
+        let stick_lock = context.entity_def.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
         let stun_lock = self.shield_stun_timer > 0;
         let lock = stun_lock && stick_lock;
 
-        match (&context.fighter.shield, &context.fighter.power_shield) {
+        match (&context.entity_def.shield, &context.entity_def.power_shield) {
             (&Some(_), &Some(_)) => {
                 if !lock && self.check_grab_shield(context) { }
                 else if !lock && self.check_jump(context) { }
@@ -1522,14 +1522,14 @@ impl Player {
                 self.shield_shared_action(context);
             }
             _ => {
-                self.apply_friction(context.fighter);
+                self.apply_friction(context.entity_def);
             }
         }
     }
 
     fn shield_shared_action(&mut self, context: &mut StepContext) {
-        self.apply_friction(context.fighter);
-        if let Some(ref shield) = context.fighter.shield {
+        self.apply_friction(context.entity_def);
+        if let Some(ref shield) = context.entity_def.shield {
             // shield analog
             self.shield_analog = if context.input[0].l || context.input[0].r {
                 1.0
@@ -1540,7 +1540,7 @@ impl Player {
             // shield offset
             let stick_x = context.input[0].stick_x;
             let stick_y = context.input[0].stick_y;
-            let target_offset = (stick_x * stick_x + stick_y * stick_y).sqrt() * context.fighter.shield.as_ref().map_or(1.0, |x| x.stick_mult);
+            let target_offset = (stick_x * stick_x + stick_y * stick_y).sqrt() * context.entity_def.shield.as_ref().map_or(1.0, |x| x.stick_mult);
             let target_angle = stick_y.atan2(stick_x);
             let target_x = target_angle.cos() * target_offset;
             let target_y = target_angle.sin() * target_offset;
@@ -1560,8 +1560,8 @@ impl Player {
         }
     }
 
-    fn shield_break_fall_action(&mut self, fighter: &Fighter) {
-        self.fall_action(fighter);
+    fn shield_break_fall_action(&mut self, entity_def: &EntityDef) {
+        self.fall_action(entity_def);
     }
 
     fn shield_break_getup_action(&mut self) {
@@ -1569,7 +1569,7 @@ impl Player {
     }
 
     fn stun_action(&mut self, context: &mut StepContext) {
-        self.apply_friction(context.fighter);
+        self.apply_friction(context.entity_def);
         if self.shield_hp > 30.0 {
             self.shield_hp = 30.0;
         }
@@ -1584,7 +1584,7 @@ impl Player {
     }
 
     fn grabbing_idle_action(&mut self, context: &mut StepContext) {
-        self.apply_friction(context.fighter);
+        self.apply_friction(context.entity_def);
 
         if self.frame_norestart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
             self.set_action(context, Action::GrabbingEnd);
@@ -1596,7 +1596,7 @@ impl Player {
     fn grabbed_idle_action(&mut self, context: &mut StepContext) {
         if self.frame_norestart > 60 { // TODO: instead check if grabbing player is still in a grabbing state
             let bps_xy = self.bps_xy(context);
-            if let Some(frame) = self.get_fighter_frame(context.fighter) {
+            if let Some(frame) = self.get_entity_frame(context.entity_def) {
                 // ignore the x offset, we only want to check straight down.
                 let bps_xy_grab_point = (bps_xy.0, bps_xy.1 + frame.grabbed_y);
                 if let Some(platform_i) = self.land_stage_collision(context, bps_xy_grab_point, bps_xy) {
@@ -1620,8 +1620,8 @@ impl Player {
         shield.scaling * (analog_size + hp_size) + hp_size_unscaled
     }
 
-    fn shield_pos(&self, shield: &Shield, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
-        let xy = self.public_bps_xy(entities, fighters, surfaces);
+    fn shield_pos(&self, shield: &Shield, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
+        let xy = self.public_bps_xy(entities, entity_defs, surfaces);
         (
             xy.0 + self.shield_offset_x + self.relative_f(shield.offset_x),
             xy.1 + self.shield_offset_y + shield.offset_y
@@ -1649,7 +1649,7 @@ impl Player {
     fn check_pass_platform(&mut self, context: &mut StepContext) -> bool {
         if let Location::Surface { platform_i, .. } = self.location {
             if let Some(platform) = context.surfaces.get(platform_i) {
-                let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
+                let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
                 let pass_frame = last_action_frame.min(4);
                 if platform.is_pass_through() && self.frame == pass_frame && (context.input[0].stick_y < -0.77 || context.input[2].stick_y < -0.77) && context.input[6].stick_y > -0.36 {
                     self.set_action(context, Action::PassPlatform);
@@ -1730,8 +1730,8 @@ impl Player {
         if self.jump_input(&context.input).jump() && self.air_jumps_left > 0 {
             self.air_jump_particles(context);
             self.air_jumps_left -= 1;
-            self.y_vel = context.fighter.air_jump_y_vel;
-            self.x_vel = context.fighter.air_jump_x_vel * context.input[0].stick_x;
+            self.y_vel = context.entity_def.air_jump_y_vel;
+            self.x_vel = context.entity_def.air_jump_x_vel * context.input[0].stick_x;
             self.fastfalled = false;
 
             if self.relative_f(context.input.stick_x.value) < -0.3 {
@@ -1895,7 +1895,7 @@ impl Player {
     }
 
     fn check_shield(&mut self, context: &mut StepContext) -> bool {
-        match (&context.fighter.shield, &context.fighter.power_shield) {
+        match (&context.entity_def.shield, &context.entity_def.power_shield) {
             (&Some(_), &Some(_)) => {
                 if context.input.l.press || context.input.r.press {
                     self.set_action(context, Action::PowerShield);
@@ -2007,15 +2007,15 @@ impl Player {
                 };
 
                 if shorthop {
-                    self.y_vel = context.fighter.jump_y_init_vel_short;
+                    self.y_vel = context.entity_def.jump_y_init_vel_short;
                 }
                 else {
-                    self.y_vel = context.fighter.jump_y_init_vel;
+                    self.y_vel = context.entity_def.jump_y_init_vel;
                 }
 
-                self.x_vel = self.x_vel * context.fighter.jump_x_vel_ground_mult + context.input[0].stick_x * context.fighter.jump_x_init_vel;
-                if self.x_vel.abs() > context.fighter.jump_x_term_vel {
-                    self.x_vel = context.fighter.jump_x_term_vel * self.x_vel.signum();
+                self.x_vel = self.x_vel * context.entity_def.jump_x_vel_ground_mult + context.input[0].stick_x * context.entity_def.jump_x_init_vel;
+                if self.x_vel.abs() > context.entity_def.jump_x_term_vel {
+                    self.x_vel = context.entity_def.jump_x_term_vel * self.x_vel.signum();
                 }
 
                 if self.relative_f(context.input[2].stick_x) >= -0.3 {
@@ -2027,7 +2027,7 @@ impl Player {
             }
 
             // Defense
-            Some(Action::PowerShield)      => if context.fighter.shield.is_some() { self.set_action(context,Action::Shield) } else { self.set_action(context,Action::Idle) },
+            Some(Action::PowerShield)      => if context.entity_def.shield.is_some() { self.set_action(context,Action::Shield) } else { self.set_action(context,Action::Idle) },
             Some(Action::ShieldOn)         => self.set_action(context, Action::Shield),
             Some(Action::Shield)           => self.set_action(context, Action::Shield),
             Some(Action::ShieldOff)        => self.set_action(context, Action::Idle),
@@ -2134,7 +2134,7 @@ impl Player {
         input * if self.face_right { 1.0 } else { -1.0 }
     }
 
-    /// Helper function to safely get the current fighter frame
+    /// Helper function to safely get the current entity frame
     /// Figuring out whether we need to use this helper is kind of messy:
     ///
     /// Anything hit by the rendering logic can have the indexes out of whack.
@@ -2143,25 +2143,25 @@ impl Player {
     /// However the action_hitlag_step logic will correct any invalid indexes
     /// So anything hit by the action_hitlag_step logic doesnt need to use this helper
     /// however its not harmful either.
-    pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
-        if fighter.actions.len() > self.action as usize {
-            let fighter_frames = &fighter.actions[self.action as usize].frames;
-            if fighter_frames.len() > self.frame as usize {
-                return Some(&fighter_frames[self.frame as usize]);
+    pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
+        if entity_def.actions.len() > self.action as usize {
+            let entity_frames = &entity_def.actions[self.action as usize].frames;
+            if entity_frames.len() > self.frame as usize {
+                return Some(&entity_frames[self.frame as usize]);
             }
         }
         None
     }
 
     fn specialfall_action(&mut self, context: &mut StepContext) {
-        self.fall_action(context.fighter);
+        self.fall_action(context.entity_def);
         self.air_drift(context);
     }
 
-    fn fall_action(&mut self, fighter: &Fighter) {
-        self.y_vel += fighter.gravity;
-        if self.y_vel < fighter.terminal_vel {
-            self.y_vel = fighter.terminal_vel;
+    fn fall_action(&mut self, entity_def: &EntityDef) {
+        self.y_vel += entity_def.gravity;
+        if self.y_vel < entity_def.terminal_vel {
+            self.y_vel = entity_def.terminal_vel;
         }
     }
 
@@ -2169,12 +2169,12 @@ impl Player {
         if !self.fastfalled {
             if context.input[0].stick_y < -0.65 && context.input[3].stick_y > -0.1 && self.y_vel < 0.0 {
                 self.fastfalled = true;
-                self.y_vel = context.fighter.fastfall_terminal_vel;
+                self.y_vel = context.entity_def.fastfall_terminal_vel;
             }
             else {
-                self.y_vel += context.fighter.gravity;
-                if self.y_vel < context.fighter.terminal_vel {
-                    self.y_vel = context.fighter.terminal_vel;
+                self.y_vel += context.entity_def.gravity;
+                if self.y_vel < context.entity_def.terminal_vel {
+                    self.y_vel = context.entity_def.terminal_vel;
                 }
             }
         }
@@ -2186,14 +2186,14 @@ impl Player {
 
     pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
         if let Hitlag::None = self.hitlag {
-            let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
+            let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
 
             if self.kb_x_vel.abs() > 0.0 {
                 let vel_dir = self.kb_x_vel.signum();
                 if self.is_airbourne() {
                     self.kb_x_vel -= self.kb_x_dec;
                 } else {
-                    self.kb_x_vel -= vel_dir * context.fighter.friction;
+                    self.kb_x_vel -= vel_dir * context.entity_def.friction;
                 }
                 if vel_dir != self.kb_x_vel.signum() {
                     self.kb_x_vel = 0.0;
@@ -2261,7 +2261,7 @@ impl Player {
             }
 
             // ledge grabs
-            let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
+            let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
             self.frames_since_ledge += 1;
             if self.frames_since_ledge >= 30 && self.y_vel < 0.0 && context.input.stick_y.value > -0.5 {
                 if let Some(ref ledge_grab_box) = fighter_frame.ledge_grab_box {
@@ -2290,7 +2290,7 @@ impl Player {
             let x = new_platform.world_x_to_plat_x(world_x);
             self.floor_move(context, new_platform, new_platform_i, x);
         }
-        else if !context.fighter.actions[self.action as usize].frames[self.frame as usize].ledge_cancel {
+        else if !context.entity_def.actions[self.action as usize].frames[self.frame as usize].ledge_cancel {
             self.location = Location::Surface { platform_i, x: platform.plat_x_clamp(x) };
         }
         else if self.face_right && x < 0.0 || !self.face_right && x >= 0.0 || // facing away from the ledge
@@ -2301,8 +2301,8 @@ impl Player {
             self.set_airbourne(context);
 
             // set max velocity
-            if self.x_vel.abs() > context.fighter.air_x_term_vel {
-                self.x_vel = self.x_vel.signum() * context.fighter.air_x_term_vel;
+            if self.x_vel.abs() > context.entity_def.air_x_term_vel {
+                self.x_vel = self.x_vel.signum() * context.entity_def.air_x_term_vel;
             }
 
             // force set past platform
@@ -2317,7 +2317,7 @@ impl Player {
         }
     }
 
-    fn apply_friction(&mut self, fighter: &Fighter) {
+    fn apply_friction(&mut self, fighter: &EntityDef) {
         match Action::from_u64(self.action) {
             Some(Action::Idle) |
             Some(Action::Dash) |
@@ -2331,7 +2331,7 @@ impl Player {
     }
 
     // TODO: These functions are split up as weak/strong so that one day they may be called individually by player scripts
-    fn apply_friction_weak(&mut self, fighter: &Fighter) {
+    fn apply_friction_weak(&mut self, fighter: &EntityDef) {
         if self.x_vel > 0.0 {
             self.x_vel -= fighter.friction;
             if self.x_vel < 0.0 {
@@ -2346,7 +2346,7 @@ impl Player {
         }
     }
 
-    fn apply_friction_strong(&mut self, fighter: &Fighter) {
+    fn apply_friction_strong(&mut self, fighter: &EntityDef) {
         if self.x_vel > 0.0 {
             self.x_vel -= fighter.friction * if self.x_vel > fighter.walk_max_vel { 2.0 } else { 1.0 };
             if self.x_vel < 0.0 {
@@ -2379,12 +2379,12 @@ impl Player {
     }
 
     pub fn pass_through_platform(&self, context: &mut StepContext, platform: &Surface) -> bool {
-        let fighter_frame = &context.fighter.actions[self.action as usize].frames[self.frame as usize];
+        let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
         platform.is_pass_through() && fighter_frame.pass_through && context.input[0].stick_y <= -0.56
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         match Action::from_u64(self.action) {
             Some(Action::Eliminated) => None,
             _ => {
@@ -2481,13 +2481,13 @@ impl Player {
         self.kb_y_vel = 0.0;
         self.hitstun = 0.0;
         self.fastfalled = false;
-        self.air_jumps_left = context.fighter.air_jumps;
+        self.air_jumps_left = context.entity_def.air_jumps;
         self.hit_by = None;
         self.location = Location::Surface { platform_i, x };
     }
 
     fn walk(&mut self, context: &mut StepContext) {
-        let walk_init_vel = self.relative_f(context.fighter.walk_init_vel);
+        let walk_init_vel = self.relative_f(context.entity_def.walk_init_vel);
         if (walk_init_vel > 0.0 && self.x_vel < walk_init_vel) ||
            (walk_init_vel < 0.0 && self.x_vel > walk_init_vel) {
             self.x_vel += walk_init_vel;
@@ -2496,7 +2496,7 @@ impl Player {
     }
 
     fn dash(&mut self, context: &mut StepContext) {
-        self.x_vel = self.relative_f(context.fighter.dash_init_vel);
+        self.x_vel = self.relative_f(context.entity_def.dash_init_vel);
         self.set_action(context, Action::Dash);
     }
 
@@ -2514,7 +2514,7 @@ impl Player {
         self.y_vel = 0.0;
         self.kb_x_vel = 0.0;
         self.kb_y_vel = 0.0;
-        self.air_jumps_left = context.fighter.air_jumps;
+        self.air_jumps_left = context.entity_def.air_jumps;
         self.fastfalled = false;
         self.hitstun = 0.0;
         self.hitlag = Hitlag::None;
@@ -2562,10 +2562,10 @@ impl Player {
                 self.x_vel = 0.0;
                 self.y_vel = 0.0;
                 self.fastfalled = false;
-                self.air_jumps_left = context.fighter.air_jumps;
+                self.air_jumps_left = context.entity_def.air_jumps;
                 self.hit_by = None;
-                let d_x = context.fighter.ledge_grab_x;
-                let d_y = context.fighter.ledge_grab_y;
+                let d_x = context.entity_def.ledge_grab_x;
+                let d_y = context.entity_def.ledge_grab_y;
                 self.location = Location::GrabbedLedge { platform_i, d_x, d_y, logic: LedgeLogic::Hog };
                 self.set_action(context, Action::LedgeGrab);
             }
@@ -2589,8 +2589,8 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
-        let fighter = &fighters[self.fighter.as_ref()];
+    pub fn debug_print(&self, fighters: &KeyedContextVec<EntityDef>, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
+        let fighter = &fighters[self.entity_def_key.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
             lines.push(format!("Entity: {:?}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
@@ -2637,10 +2637,10 @@ impl Player {
         lines
     }
 
-    pub fn angle(&self, fighter: &Fighter, surfaces: &[Surface]) -> f32 {
-        if let Some(fighter_frame) = self.get_fighter_frame(fighter) {
+    pub fn angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
+        if let Some(entity_frame) = self.get_entity_frame(entity_def) {
              match self.location {
-                Location::Surface { platform_i, .. } if fighter_frame.use_platform_angle => {
+                Location::Surface { platform_i, .. } if entity_frame.use_platform_angle => {
                     surfaces.get(platform_i).map_or(0.0, |x| x.floor_angle().unwrap_or_default())
                 }
                 _ => 0.0,
@@ -2653,7 +2653,7 @@ impl Player {
     pub fn result(&self) -> RawPlayerResult {
         let mut result = self.result.clone();
         result.final_damage = Some(self.damage);
-        result.ended_as_fighter = Some(self.fighter.clone());
+        result.ended_as_fighter = Some(self.entity_def_key.clone());
         result.team = self.team;
         result
     }
@@ -2800,10 +2800,10 @@ impl Player {
         }
     }
 
-    pub fn render(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderPlayer {
+    pub fn render(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderPlayer {
         let shield = if self.is_shielding() {
             let fighter_color = graphics::get_team_color3(self.team);
-            let fighter = &fighters[self.fighter.as_ref()];
+            let fighter = &fighters[self.entity_def_key.as_ref()];
 
             if let &Some(ref shield) = &fighter.shield {
                 let c = &fighter_color;

@@ -6,7 +6,7 @@ use crate::particle::Particle;
 use crate::graphics;
 
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::fighter::{Fighter, ActionFrame, CollisionBoxRole, ECB, Action};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB, Action};
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
@@ -65,7 +65,7 @@ impl Entity {
     }
 
     // TODO: uhhh.... surely I merge these
-    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         match &self.ty {
             EntityType::Player (player) => player.public_bps_xy(entities, fighters, surfaces),
             EntityType::Projectile (projectile) => (projectile.x, projectile.y)
@@ -93,14 +93,14 @@ impl Entity {
         }
     }
 
-    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> (f32, f32) {
+    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         match &self.ty {
             EntityType::Player (player) => player.grabbing_xy(entities, fighters, surfaces),
             _ => (0.0, 0.0),
         }
     }
 
-    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface], deleted_platform_i: usize) {
+    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
         match &mut self.ty {
             EntityType::Player (player) => player.platform_deleted(entities, fighters, surfaces, deleted_platform_i),
             EntityType::Projectile (_) => { }
@@ -109,12 +109,12 @@ impl Entity {
 
     pub fn entity_def_key(&self) -> &str {
         match &self.ty {
-            EntityType::Player (player) => player.fighter.as_ref(),
+            EntityType::Player (player) => player.entity_def_key.as_ref(),
             EntityType::Projectile (projectile) => projectile.entity_def_key.as_ref(),
         }
     }
 
-    pub fn angle(&self, fighter: &Fighter, surfaces: &[Surface]) -> f32 {
+    pub fn angle(&self, fighter: &EntityDef, surfaces: &[Surface]) -> f32 {
         match &self.ty {
             EntityType::Player (player) => player.angle(fighter, surfaces),
             EntityType::Projectile (projectile) => projectile.angle,
@@ -125,16 +125,16 @@ impl Entity {
         input * if self.face_right() { 1.0 } else { -1.0 }
     }
 
-    pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
+    pub fn get_entity_frame<'a>(&self, fighter: &'a EntityDef) -> Option<&'a ActionFrame> {
         match &self.ty {
-            EntityType::Player (player) => player.get_fighter_frame(fighter),
-            EntityType::Projectile (projectile) => projectile.get_fighter_frame(fighter),
+            EntityType::Player (player) => player.get_entity_frame(fighter),
+            EntityType::Projectile (projectile) => projectile.get_entity_frame(fighter),
         }
     }
 
-    pub fn relative_frame(&self, fighter: &Fighter, surfaces: &[Surface]) -> ActionFrame {
+    pub fn relative_frame(&self, fighter: &EntityDef, surfaces: &[Surface]) -> ActionFrame {
         let angle = self.angle(fighter, surfaces);
-        if let Some(fighter_frame) = self.get_fighter_frame(fighter) {
+        if let Some(fighter_frame) = self.get_entity_frame(fighter) {
             let mut fighter_frame = fighter_frame.clone();
 
             // fix hitboxes
@@ -193,7 +193,7 @@ impl Entity {
         }
     }
 
-    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         match &self.ty {
             EntityType::Player (player) => player.cam_area(cam_max, entities, fighters, surfaces),
             EntityType::Projectile (_) => None
@@ -207,7 +207,7 @@ impl Entity {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, player_input: Option<&PlayerInput>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, fighters: &KeyedContextVec<EntityDef>, player_input: Option<&PlayerInput>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         match &self.ty {
             EntityType::Player (player)         => player.debug_print(fighters, player_input.unwrap(), debug, i),
             EntityType::Projectile (projectile) => projectile.debug_print(fighters, debug, i),
@@ -235,7 +235,7 @@ impl Entity {
         }
     }
 
-    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: EntityKey, entity_history: &[Entities], entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntity {
+    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: EntityKey, entity_history: &[Entities], entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntity {
         let fighter_color = graphics::get_team_color3(self.team());
         let fighter = &fighters[self.entity_def_key()];
 
@@ -274,7 +274,7 @@ impl Entity {
         }
     }
 
-    fn render_frame(&self, entities: &Entities, fighters: &KeyedContextVec<Fighter>, surfaces: &[Surface]) -> RenderEntityFrame {
+    fn render_frame(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
         let fighter = &fighters[self.entity_def_key()];
         RenderEntityFrame {
             fighter:     self.entity_def_key().to_string(),
@@ -487,8 +487,8 @@ pub struct VectorArrow {
 pub struct StepContext<'a> {
     pub input:        &'a PlayerInput,
     pub entities:     &'a Entities,
-    pub fighters:     &'a KeyedContextVec<Fighter>,
-    pub fighter:      &'a Fighter,
+    pub entity_defs:  &'a KeyedContextVec<EntityDef>,
+    pub entity_def:   &'a EntityDef,
     pub stage:        &'a Stage,
     pub surfaces:     &'a [Surface],
     pub rng:          &'a mut ChaChaRng,

@@ -7,7 +7,7 @@
 pub mod assets;
 pub mod command_line;
 pub mod config;
-pub mod fighter;
+pub mod entity_def;
 pub mod files;
 pub mod geometry;
 pub mod input;

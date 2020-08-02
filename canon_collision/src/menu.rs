@@ -38,7 +38,7 @@ pub struct Menu {
     game_setup:         Option<GameSetup>,
     game_results:       Option<GameResults>,
     netplay_history:    Vec<NetplayHistory>,
-    prev_fighters_len:  usize,
+    prev_entities_len:  usize,
     prev_stages_len:    usize,
 }
 
@@ -62,7 +62,7 @@ impl Menu {
             game_setup:         None,
             game_results:       None,
             netplay_history:    vec!(),
-            prev_fighters_len:  0,
+            prev_entities_len:  0,
             prev_stages_len:    0,
         }
     }
@@ -151,15 +151,15 @@ impl Menu {
 
     /// If controllers are added or removed then the indexes
     /// are going be out of whack so just reset the fighter selection state
-    /// If fighters were added to the package then it will also be out of whack, so reset.
+    /// If entities were added to the package then it will also be out of whack, so reset.
     /// If a controller is added on the same frame another is removed, then no reset occurs.
-    /// Same for add+remove fighters.
+    /// Same for add+remove entities.
     /// However this is rare and the problem is minor, so ¯\_(ツ)_/¯
     fn add_remove_fighter_selections(&mut self, package: &Package, player_inputs: &[PlayerInput]) {
         if self.fighter_selections.iter().filter(|x| !x.ui.is_cpu()).count() != player_inputs.len() // number of controllers is out of sync
-            || package.fighters.len() != self.prev_fighters_len // number of fighters is out of sync
+            || package.entities.len() != self.prev_entities_len // number of entities is out of sync
         {
-            self.prev_fighters_len = package.fighters.len();
+            self.prev_entities_len = package.entities.len();
             self.fighter_selections.clear();
             for (i, input) in player_inputs.iter().enumerate() {
                 let ui = if input.plugged_in {
@@ -184,12 +184,12 @@ impl Menu {
         self.add_remove_fighter_selections(&package, &player_inputs);
         let mut new_state: Option<MenuState> = None;
         if let &mut MenuState::CharacterSelect { ref mut back_counter } = &mut self.state {
-            let fighters = &package.fighters;
+            let entities = &package.entities;
 
-            // animate fighters
+            // animate entities
             for selection in self.fighter_selections.iter_mut() {
                 if let Some(fighter_key) = selection.fighter {
-                    let fighter = &package.fighters[fighter_key];
+                    let fighter = &package.entities[fighter_key];
                     if let Some(action) = fighter.actions.get(fighter.css_action as usize) {
                         selection.animation_frame = (selection.animation_frame + 1) % action.frames.len();
                     }
@@ -317,12 +317,12 @@ impl Menu {
                     else if input.a.press {
                         match selection.ui.clone() {
                             PlayerSelectUi::HumanFighter (ticker) => {
-                                if ticker.cursor < fighters.len() {
+                                if ticker.cursor < entities.len() {
                                     selection.fighter = Some(ticker.cursor);
                                     selection.animation_frame = 0;
                                 }
                                 else {
-                                    match ticker.cursor - fighters.len() {
+                                    match ticker.cursor - entities.len() {
                                         0 => { selection.ui = PlayerSelectUi::human_team() }
                                         1 => { add_cpu = true; }
                                         _ => { unreachable!() }
@@ -330,12 +330,12 @@ impl Menu {
                                 }
                             }
                             PlayerSelectUi::CpuFighter (ticker) => {
-                                if ticker.cursor < fighters.len() {
+                                if ticker.cursor < entities.len() {
                                     selection.fighter = Some(ticker.cursor);
                                     selection.animation_frame = 0;
                                 }
                                 else {
-                                    match ticker.cursor - fighters.len() {
+                                    match ticker.cursor - entities.len() {
                                         0 => { selection.ui = PlayerSelectUi::cpu_team() }
                                         1 => { /* TODO: selection.ui = PlayerSelectUi::cpu_ai()*/ }
                                         2 => { remove_cpu = Some(selection_i); }
@@ -412,7 +412,7 @@ impl Menu {
                 }
             }
 
-            if player_inputs.iter().any(|x| x.start.press) && fighters.len() > 0 {
+            if player_inputs.iter().any(|x| x.start.press) && entities.len() > 0 {
                 new_state = Some(MenuState::StageSelect);
                 if let None = self.stage_ticker {
                     self.stage_ticker = Some(MenuTicker::new(package.stages.len()));
@@ -481,7 +481,7 @@ impl Menu {
             if selection.ui.is_human_plugged_in() {
                 if let Some(fighter) = selection.fighter {
                     players.push(PlayerSetup {
-                        fighter: package.fighters.index_to_key(fighter).unwrap(),
+                        fighter: package.entities.index_to_key(fighter).unwrap(),
                         team:    selection.team,
                     });
                     controllers.push(i);
@@ -493,7 +493,7 @@ impl Menu {
                 if selection.fighter.is_some() /* && selection.cpu.is_some() TODO */ {
                     let fighter = selection.fighter.unwrap();
                     players.push(PlayerSetup {
-                        fighter: package.fighters.index_to_key(fighter).unwrap(),
+                        fighter: package.entities.index_to_key(fighter).unwrap(),
                         team:    selection.team,
                     });
                     controllers.push(i - ais_skipped);
@@ -754,11 +754,11 @@ impl PlayerSelectUi {
     }
 
     pub fn cpu_fighter(package: &Package) -> Self {
-        PlayerSelectUi::CpuFighter (MenuTicker::new(package.fighters.len() + 3))
+        PlayerSelectUi::CpuFighter (MenuTicker::new(package.entities.len() + 3))
     }
 
     pub fn human_fighter(package: &Package) -> Self {
-        PlayerSelectUi::HumanFighter (MenuTicker::new(package.fighters.len() + 2))
+        PlayerSelectUi::HumanFighter (MenuTicker::new(package.entities.len() + 2))
     }
 
     pub fn cpu_team() -> Self {

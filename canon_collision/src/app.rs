@@ -77,8 +77,8 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             }
             ContinueFrom::Game => {
                 // handle issues with package that prevent starting from game
-                if package.as_ref().unwrap().fighters.len() == 0 {
-                    println!("package has no fighters");
+                if package.as_ref().unwrap().entities.len() == 0 {
+                    println!("package has no entities");
                     return;
                 }
                 else if package.as_ref().unwrap().stages.len() == 0 {
@@ -88,7 +88,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
                 // handle missing and invalid cli input
                 for name in &cli_results.fighter_names {
-                    if !package.as_ref().unwrap().fighters.contains_key(name) {
+                    if !package.as_ref().unwrap().entities.contains_key(name) {
                         println!("Package does not contain selected fighter '{}'", name);
                         return;
                     }
@@ -102,7 +102,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
                 // handle missing and invalid cli input
                 if cli_results.fighter_names.len() == 0 {
-                    cli_results.fighter_names.push(package.as_ref().unwrap().fighters.index_to_key(0).unwrap());
+                    cli_results.fighter_names.push(package.as_ref().unwrap().entities.index_to_key(0).unwrap());
                 }
 
                 // fill players/controllers

@@ -1,4 +1,4 @@
-use canon_collision_lib::fighter::CollisionBox;
+use canon_collision_lib::entity_def::CollisionBox;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Surface;
@@ -87,7 +87,7 @@ impl Buffers {
         let mut indices: Vec<u16> = vec!();
         let mut index_count = 0;
 
-        let colboxes = &package.fighters[fighter].actions[action].frames[frame].colboxes;
+        let colboxes = &package.entities[fighter].actions[action].frames[frame].colboxes;
         for (i, colbox) in colboxes.iter().enumerate() {
             if selected.contains(&i) {
                 Buffers::gen_colbox(&mut vertices, &mut indices, colbox, &mut index_count, 0);
@@ -98,7 +98,7 @@ impl Buffers {
     }
 
     pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Rc<Buffers>> {
-        let frames = &package.fighters[fighter].actions[action].frames;
+        let frames = &package.entities[fighter].actions[action].frames;
         if let Some(frame) = frames.get(frame) {
             let mut vertices: Vec<Vertex> = vec!();
             let mut indices: Vec<u16> = vec!();

@@ -8,7 +8,7 @@ use sha2::{Sha256, Digest};
 use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
-use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole};
+use crate::entity_def::{EntityDef, ActionFrame, CollisionBox, CollisionBoxRole};
 use crate::files;
 use crate::stage::Stage;
 
@@ -16,7 +16,7 @@ use crate::stage::Stage;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
     pub stages:          KeyedContextVec<Stage>, // TODO: Can just use a std map here
-    pub fighters:        KeyedContextVec<Fighter>,
+    pub entities:        KeyedContextVec<EntityDef>,
         path:            PathBuf,
         package_updates: Vec<PackageUpdate>,
 }
@@ -38,7 +38,7 @@ impl Package {
         let mut package = Package {
             path,
             stages:          KeyedContextVec::new(),
-            fighters:        KeyedContextVec::new(),
+            entities:        KeyedContextVec::new(),
             package_updates: vec!(),
         };
 
@@ -70,7 +70,7 @@ impl Package {
         let mut package = Package {
             path,
             stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
-            fighters:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), Fighter::default()))),
+            entities:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), EntityDef::default()))),
             package_updates: vec!(),
         };
         package.save();
@@ -93,8 +93,8 @@ impl Package {
         }
 
         // save all cbor files
-        for (key, fighter) in self.fighters.key_value_iter() {
-            files::save_struct_cbor(&new_path.join("Fighters").join(key), fighter);
+        for (key, fighter) in self.entities.key_value_iter() {
+            files::save_struct_cbor(&new_path.join("Entities").join(key), fighter);
         }
         
         for (key, stage) in self.stages.key_value_iter() {
@@ -111,15 +111,15 @@ impl Package {
     }
 
     pub fn load(&mut self) -> Result<(), String> {
-        // Get paths to the fighters
-        if let Ok (dir) = fs::read_dir(self.path.join("Fighters")) {
+        // Get paths to the entities
+        if let Ok (dir) = fs::read_dir(self.path.join("Entities")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
 
                 let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
                 let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-                self.fighters.push(key, fighter);
+                self.entities.push(key, fighter);
             }
         }
 
@@ -146,7 +146,7 @@ impl Package {
             hasher.update(&serde_json::to_vec(stage).unwrap());
         }
 
-        for fighter in self.fighters.iter() {
+        for fighter in self.entities.iter() {
             hasher.update(&serde_json::to_vec(fighter).unwrap());
         }
 
@@ -155,14 +155,14 @@ impl Package {
 
     pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
         let new_frame = {
-            let action_frames = &self.fighters[fighter].actions[action].frames;
+            let action_frames = &self.entities[fighter].actions[action].frames;
             action_frames[frame].clone()
         };
         self.insert_fighter_frame(fighter, action, frame, new_frame);
     }
 
     pub fn insert_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize, action_frame: ActionFrame) {
-        let action_frames = &mut self.fighters[fighter].actions[action].frames;
+        let action_frames = &mut self.entities[fighter].actions[action].frames;
 
         action_frames.insert(frame, action_frame.clone());
 
@@ -175,7 +175,7 @@ impl Package {
     }
 
     pub fn delete_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) -> bool {
-        let action_frames = &mut self.fighters[fighter].actions[action].frames;
+        let action_frames = &mut self.entities[fighter].actions[action].frames;
 
         // there must always be at least one frame and only delete frames that exist
         if action_frames.len() > 1 && frame < action_frames.len() {
@@ -198,7 +198,7 @@ impl Package {
     pub fn append_fighter_colbox(
         &mut self, fighter: &str, action: usize, frame: usize, new_colbox: CollisionBox
     ) -> usize {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         let new_colbox_index = fighter_frame.colboxes.len();
         fighter_frame.colboxes.push(new_colbox);
 
@@ -218,7 +218,7 @@ impl Package {
     }
 
     pub fn delete_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, colboxes_to_delete: &HashSet<usize>) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
 
@@ -248,7 +248,7 @@ impl Package {
     }
 
     pub fn move_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, moved_colboxes: &HashSet<usize>, distance: (f32, f32)) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
             let (d_x, d_y) = distance;
@@ -273,7 +273,7 @@ impl Package {
     }
 
     pub fn point_hitbox_angles_to(&mut self, fighter: &str, action: usize, frame: usize, set_hitboxes: &HashSet<usize>, x: f32, y: f32) {
-        let colboxes = &mut self.fighters[fighter].actions[action].frames[frame].colboxes;
+        let colboxes = &mut self.entities[fighter].actions[action].frames[frame].colboxes;
         for i in set_hitboxes {
             let colbox = &mut colboxes[*i];
             if let &mut CollisionBoxRole::Hit(ref mut hitbox) = &mut colbox.role {
@@ -284,7 +284,7 @@ impl Package {
     }
 
     pub fn resize_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, resized_colboxes: &HashSet<usize>, size_diff: f32) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
 
@@ -309,7 +309,7 @@ impl Package {
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
     pub fn fighter_colboxes_order_increase(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
             reordered_colboxes.sort();
@@ -335,7 +335,7 @@ impl Package {
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the back
     pub fn fighter_colboxes_order_set_last(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
             reordered_colboxes.sort();
@@ -360,7 +360,7 @@ impl Package {
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
     pub fn fighter_colboxes_order_decrease(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
             reordered_colboxes.sort();
@@ -385,7 +385,7 @@ impl Package {
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
     pub fn fighter_colboxes_order_set_first(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
-        let fighter_frame = &mut self.fighters[fighter].actions[action].frames[frame];
+        let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
             reordered_colboxes.sort();
@@ -425,7 +425,7 @@ impl Node for Package {
         let result = match runner.step() {
             NodeToken::ChainProperty (property) => {
                 match property.as_str() {
-                    "fighters" => { self.fighters.node_step(runner) }
+                    "entities" => { self.entities.node_step(runner) }
                     "stages"   => { self.stages.node_step(runner) }
                     prop       => format!("Package does not have a property '{}'", prop)
                 }
@@ -440,7 +440,7 @@ Commands:
 *   reload  - reload from disc, all changes are lost
 
 Accessors:
-*   .fighters - KeyedContextVec
+*   .entities - KeyedContextVec
 *   .stages   - KeyedContextVec"#)
             }
             NodeToken::Custom (action, _) => {

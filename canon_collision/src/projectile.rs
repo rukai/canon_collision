@@ -1,7 +1,7 @@
 use crate::collision::CollisionResult;
 use crate::entity::{DebugEntity, StepContext, EntityKey};
 
-use canon_collision_lib::fighter::{Fighter, ActionFrame};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
 use treeflection::KeyedContextVec;
 use num_traits::FromPrimitive;
@@ -34,11 +34,11 @@ pub struct Projectile {
 }
 
 impl Projectile {
-    pub fn get_fighter_frame<'a>(&self, fighter: &'a Fighter) -> Option<&'a ActionFrame> {
-        if fighter.actions.len() > self.action as usize {
-            let fighter_frames = &fighter.actions[self.action as usize].frames;
-            if fighter_frames.len() > self.frame as usize {
-                return Some(&fighter_frames[self.frame as usize]);
+    pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
+        if entity_def.actions.len() > self.action as usize {
+            let frames = &entity_def.actions[self.action as usize].frames;
+            if frames.len() > self.frame as usize {
+                return Some(&frames[self.frame as usize]);
             }
         }
         None
@@ -50,7 +50,7 @@ impl Projectile {
     }
 
     fn frame_step(&mut self, context: &mut StepContext) {
-        let last_action_frame = context.fighter.actions[self.action as usize].frames.len() as i64 - 1;
+        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
 
         match ProjectileAction::from_u64(self.action) {
             Some(ProjectileAction::Travel) => {
@@ -119,17 +119,17 @@ impl Projectile {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<Fighter>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         let mut lines = vec!();
-        let fighter = &fighters[self.entity_def_key.as_ref()];
+        let entity = &entities[self.entity_def_key.as_ref()];
         if debug.physics {
             lines.push(format!("Entity: {:?}  location: {:?}  angle: {:.5}",
                 i, (self.x, self.y), self.angle));
         }
         if debug.action {
             let action = ProjectileAction::from_u64(self.action).unwrap();
-            let last_action_frame = fighter.actions[self.action as usize].frames.len() as u64 - 1;
-            let iasa = fighter.actions[self.action as usize].iasa;
+            let last_action_frame = entity.actions[self.action as usize].frames.len() as u64 - 1;
+            let iasa = entity.actions[self.action as usize].iasa;
 
             lines.push(format!("Entity: {:?}  Projectile  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
                 i, action, self.frame, last_action_frame, self.frame_no_restart, iasa));
