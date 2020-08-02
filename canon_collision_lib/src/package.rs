@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use std::fs;
 use std::mem;
 use std::fs::File;
@@ -9,13 +9,12 @@ use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
 use crate::fighter::{Fighter, ActionFrame, CollisionBox, CollisionBoxRole};
-use crate::files::{self, engine_version};
+use crate::files;
 use crate::stage::Stage;
 
 /// Stores persistent that data that can be modified at runtime.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
-    pub meta:            PackageMeta,
     pub stages:          KeyedContextVec<Stage>, // TODO: Can just use a std map here
     pub fighters:        KeyedContextVec<Fighter>,
         path:            PathBuf,
@@ -38,7 +37,6 @@ impl Package {
     pub fn open(path: PathBuf) -> Option<Package> {
         let mut package = Package {
             path,
-            meta:            PackageMeta::new(),
             stages:          KeyedContextVec::new(),
             fighters:        KeyedContextVec::new(),
             package_updates: vec!(),
@@ -69,18 +67,8 @@ impl Package {
     }
 
     pub fn generate_base(path: PathBuf) -> Package {
-        let meta = PackageMeta {
-            engine_version:    engine_version(),
-            published_version: 0,
-            published:         false,
-            hash:              "".to_string(),
-            fighter_keys:      vec!(),
-            stage_keys:        vec!(),
-        };
-
         let mut package = Package {
             path,
-            meta:            meta,
             stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
             fighters:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), Fighter::default()))),
             package_updates: vec!(),
@@ -93,14 +81,6 @@ impl Package {
     // Write to a new folder first, in case there is a panic in between deleting and writing data.
     // Then we delete the existing folder and rename the new one
     pub fn save(&mut self) -> String {
-        if self.meta.published {
-            return String::from("Save FAILED! The published property in package_meta is set.");
-        }
-
-        self.meta.fighter_keys = self.fighters.keys();
-        self.meta.stage_keys = self.stages.keys();
-        self.meta.hash = self.compute_hash();
-
         // setup new directory to save to
         let new_path = self.path.with_file_name("package_temp_path");
         if let Err(_) = fs::create_dir(&new_path) {
@@ -113,8 +93,6 @@ impl Package {
         }
 
         // save all cbor files
-        files::save_struct_cbor(&new_path.join("package_meta.cbor"), &self.meta);
-
         for (key, fighter) in self.fighters.key_value_iter() {
             files::save_struct_cbor(&new_path.join("Fighters").join(key), fighter);
         }
@@ -133,67 +111,28 @@ impl Package {
     }
 
     pub fn load(&mut self) -> Result<(), String> {
-        // load the meta file if exists otherwise generate one.
-        // if the meta file exists but is invalid fail the package load
-        self.meta = match File::open(self.path.join("package_meta.json")) {
-            Ok (reader) => {
-                serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?
-            }
-            Err (_) => PackageMeta::default()
-        };
-
         // Get paths to the fighters
-        let mut fighter_paths: HashMap<String, PathBuf> = HashMap::new();
         if let Ok (dir) = fs::read_dir(self.path.join("Fighters")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
-                fighter_paths.insert(key, full_path);
-            }
-        }
 
-        // Use meta.fighter_keys for fighter ordering
-        self.fighters = KeyedContextVec::new();
-        for file_name in &self.meta.fighter_keys {
-            if let Some(file_path) = fighter_paths.remove(file_name) {
-                let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+                let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
                 let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-                self.fighters.push(file_name.clone(), fighter);
+                self.fighters.push(key, fighter);
             }
-        }
-
-        // add remaining fighters in any order
-        for (file_name, file_path) in fighter_paths {
-            let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
-            let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-            self.fighters.push(file_name.clone(), fighter);
         }
 
         // Get paths to the stages
-        let mut stage_paths: HashMap<String, PathBuf> = HashMap::new();
         if let Ok (dir) = fs::read_dir(self.path.join("Stages")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
-                stage_paths.insert(key, full_path);
-            }
-        }
 
-        // Use meta.stage_keys for stage ordering
-        self.stages = KeyedContextVec::new();
-        for file_name in &self.meta.stage_keys {
-            if let Some(file_path) = stage_paths.remove(file_name) {
-                let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
+                let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
                 let stage = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-                self.stages.push(file_name.clone(), stage);
+                self.stages.push(key, stage);
             }
-        }
-
-        // add remaining stages in any order
-        for (file_name, file_path) in stage_paths {
-            let reader = File::open(file_path).map_err(|x| format!("{:?}", x))?;
-            let stage = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-            self.stages.push(file_name.clone(), stage);
         }
 
         self.force_update_entire_package();
@@ -488,7 +427,6 @@ impl Node for Package {
                 match property.as_str() {
                     "fighters" => { self.fighters.node_step(runner) }
                     "stages"   => { self.stages.node_step(runner) }
-                    "meta"     => { self.meta.node_step(runner) }
                     prop       => format!("Package does not have a property '{}'", prop)
                 }
             }
@@ -503,8 +441,7 @@ Commands:
 
 Accessors:
 *   .fighters - KeyedContextVec
-*   .stages   - KeyedContextVec
-*   .meta     - PackageMeta"#)
+*   .stages   - KeyedContextVec"#)
             }
             NodeToken::Custom (action, _) => {
                 match action.as_ref() {
@@ -531,15 +468,6 @@ Accessors:
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub enum Verify {
-    Ok,
-    None,
-    IncorrectHash,
-    UpdateAvailable,
-    CannotConnect,
-}
-
 // Finer grained changes are used when speed is needed
 #[derive(Clone, Serialize, Deserialize)]
 pub enum PackageUpdate {
@@ -548,31 +476,4 @@ pub enum PackageUpdate {
     InsertFighterFrame { fighter: String, action: usize, frame_index: usize, frame: ActionFrame },
     DeleteStage { index: usize, key: String },
     InsertStage { index: usize, key: String, stage: Stage },
-}
-
-/// Stores metadata for the package
-/// Also handles updating the Package
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
-pub struct PackageMeta {
-    /// compared with a value incremented by canon collision when there are breaking changes to data structures
-    pub engine_version:    u64,
-    /// incremented every time the package is published
-    pub published_version: u64,
-    pub published:         bool,
-    pub hash:              String,
-    pub fighter_keys:      Vec<String>,
-    pub stage_keys:        Vec<String>,
-}
-
-impl PackageMeta {
-    pub fn new() -> PackageMeta {
-        PackageMeta {
-            engine_version:    engine_version(),
-            published_version: 0,
-            published:         false,
-            hash:              "".to_string(),
-            fighter_keys:      vec!(),
-            stage_keys:        vec!(),
-        }
-    }
 }
