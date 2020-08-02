@@ -204,7 +204,7 @@ impl Player {
             frames_since_ledge: 0,
             ledge_idle_timer:   0,
             fastfalled:         false,
-            air_jumps_left:     package.entities[entity_def_key.as_ref()].air_jumps,
+            air_jumps_left:     package.entities[entity_def_key.as_ref()].fighter().map(|x| x.air_jumps).unwrap_or(1),
             jumpsquat_button:   false,
             shield_hp:          package.entities[entity_def_key.as_ref()].shield.as_ref().map_or(60.0, |x| x.hp_max),
             shield_analog:      0.0,
@@ -2481,7 +2481,7 @@ impl Player {
         self.kb_y_vel = 0.0;
         self.hitstun = 0.0;
         self.fastfalled = false;
-        self.air_jumps_left = context.entity_def.air_jumps;
+        self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
         self.hit_by = None;
         self.location = Location::Surface { platform_i, x };
     }
@@ -2514,7 +2514,7 @@ impl Player {
         self.y_vel = 0.0;
         self.kb_x_vel = 0.0;
         self.kb_y_vel = 0.0;
-        self.air_jumps_left = context.entity_def.air_jumps;
+        self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
         self.fastfalled = false;
         self.hitstun = 0.0;
         self.hitlag = Hitlag::None;
@@ -2562,7 +2562,7 @@ impl Player {
                 self.x_vel = 0.0;
                 self.y_vel = 0.0;
                 self.fastfalled = false;
-                self.air_jumps_left = context.entity_def.air_jumps;
+                self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
                 self.hit_by = None;
                 let d_x = context.entity_def.ledge_grab_x;
                 let d_y = context.entity_def.ledge_grab_y;

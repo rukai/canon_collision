@@ -5,7 +5,7 @@ mod animation;
 // TODO: Move duplicate code in hurtbox and animation modules into canon_collision_lib
 
 use canon_collision_lib::assets::Assets;
-use canon_collision_lib::fighter::{Action, ActionDef, ActionFrame, CollisionBoxRole, CollisionBox};
+use canon_collision_lib::entity_def::{Action, ActionDef, ActionFrame, CollisionBoxRole, CollisionBox};
 use canon_collision_lib::package::Package;
 use cli::CLIResults;
 use model::{Model3D, Joint, Animation};
@@ -34,7 +34,7 @@ fn main() {
 
         let hurtboxes = hurtbox::get_hurtboxes();
 
-        if let Some(ref mut fighter) = package.fighters.key_to_value_mut(&fighter_key) {
+        if let Some(ref mut fighter) = package.entities.key_to_value_mut(&fighter_key) {
             let model_name = fighter.name.replace(" ", "");
             let model = if let Some(data) = assets.get_model(&model_name) {
                 Model3D::from_gltf(&data, &model_name)

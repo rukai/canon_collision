@@ -1,7 +1,6 @@
 use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
 use strum::IntoEnumIterator;
 use num_traits::{FromPrimitive, ToPrimitive};
-use std::collections::HashMap;
 
 use crate::files::engine_version;
 
@@ -48,8 +47,10 @@ impl Default for EntityDef {
             css_action: Action::Idle.to_u64().unwrap(),
             css_scale:  1.0,
 
+            ty: EntityDefType::Generic,
+
             // in game attributes
-            air_jumps:                1,
+            // TODO: move into EntityDefType::Fighter
             weight:                   1.0, // weight = old value / 100
             gravity:                  -0.1,
             terminal_vel:             -2.0,
@@ -90,8 +91,6 @@ impl Default for EntityDef {
             tilt_turn_flip_dir_frame: 5,
             tilt_turn_into_dash_iasa: 5,
             actions:                  actions,
-            u32s:                     HashMap::new(),
-            f32s:                     HashMap::new(),
         }
     }
 }
@@ -105,8 +104,10 @@ pub struct EntityDef {
     pub css_action: u64,
     pub css_scale:  f32,
 
+    pub ty: EntityDefType,
+
     // in game attributes
-    pub air_jumps:                u64,
+    // TODO: move into EntityDefType::Fighter
     pub weight:                   f32,
     pub gravity:                  f32,
     pub terminal_vel:             f32,
@@ -146,9 +147,42 @@ pub struct EntityDef {
     pub run_turn_flip_dir_frame:  u64,
     pub tilt_turn_flip_dir_frame: u64,
     pub tilt_turn_into_dash_iasa: u64,
-    pub u32s:                     HashMap<String, u32>,
-    pub f32s:                     HashMap<String, f32>,
     pub actions:                  ContextVec<ActionDef>,
+}
+
+impl EntityDef {
+    pub fn fighter(&self) -> Option<&Fighter> {
+        if let EntityDefType::Fighter (fighter) = &self.ty {
+            Some(fighter)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Node)]
+pub enum EntityDefType {
+    Fighter (Fighter),
+    Generic
+}
+
+impl Default for EntityDefType {
+    fn default() -> Self {
+        EntityDefType::Generic
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Node)]
+pub struct Fighter {
+    pub air_jumps:                u64,
+}
+
+impl Default for Fighter {
+    fn default() -> Self {
+        Fighter {
+            air_jumps:                1,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
