@@ -114,9 +114,9 @@ impl Entity {
         }
     }
 
-    pub fn angle(&self, fighter: &EntityDef, surfaces: &[Surface]) -> f32 {
+    pub fn angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
         match &self.ty {
-            EntityType::Player (player) => player.angle(fighter, surfaces),
+            EntityType::Player (player) => player.angle(entity_def, surfaces),
             EntityType::Projectile (projectile) => projectile.angle,
         }
     }
@@ -125,16 +125,16 @@ impl Entity {
         input * if self.face_right() { 1.0 } else { -1.0 }
     }
 
-    pub fn get_entity_frame<'a>(&self, fighter: &'a EntityDef) -> Option<&'a ActionFrame> {
+    pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
         match &self.ty {
-            EntityType::Player (player) => player.get_entity_frame(fighter),
-            EntityType::Projectile (projectile) => projectile.get_entity_frame(fighter),
+            EntityType::Player (player) => player.get_entity_frame(entity_def),
+            EntityType::Projectile (projectile) => projectile.get_entity_frame(entity_def),
         }
     }
 
-    pub fn relative_frame(&self, fighter: &EntityDef, surfaces: &[Surface]) -> ActionFrame {
-        let angle = self.angle(fighter, surfaces);
-        if let Some(fighter_frame) = self.get_entity_frame(fighter) {
+    pub fn relative_frame(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> ActionFrame {
+        let angle = self.angle(entity_def, surfaces);
+        if let Some(fighter_frame) = self.get_entity_frame(entity_def) {
             let mut fighter_frame = fighter_frame.clone();
 
             // fix hitboxes
@@ -235,9 +235,9 @@ impl Entity {
         }
     }
 
-    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: EntityKey, entity_history: &[Entities], entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntity {
+    pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: EntityKey, entity_history: &[Entities], entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntity {
         let fighter_color = graphics::get_team_color3(self.team());
-        let fighter = &fighters[self.entity_def_key()];
+        let entity_def = &entity_defs[self.entity_def_key()];
 
         let vector_arrows = if let EntityType::Player (player) = &self.ty {
             player.vector_arrows(&debug)
@@ -245,25 +245,25 @@ impl Entity {
             vec!()
         };
 
-        let mut frames = vec!(self.render_frame(entities, fighters, surfaces));
+        let mut frames = vec!(self.render_frame(entities, entity_defs, surfaces));
         let range = entity_history.len().saturating_sub(10) .. entity_history.len();
         for entities in entity_history[range].iter().rev() {
             if let Some(entity) = entities.get(entity_i) {
                 // handle deleted frames by just skipping it, only encountered when the editor is used.
-                if fighter.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
-                    frames.push(entity.render_frame(entities, fighters, surfaces));
+                if entity_def.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
+                    frames.push(entity.render_frame(entities, entity_defs, surfaces));
                 }
             }
         }
 
         let render_type = match &self.ty {
-            EntityType::Player (player) => RenderEntityType::Player (player.render(entities, fighters, surfaces)),
+            EntityType::Player (player) => RenderEntityType::Player (player.render(entities, entity_defs, surfaces)),
             EntityType::Projectile (_) => RenderEntityType::Projectile,
         };
 
         RenderEntity {
             render_type,
-            frame_data:  self.relative_frame(fighter, surfaces),
+            frame_data:  self.relative_frame(entity_def, surfaces),
             particles:   self.particles().clone(),
             frames,
             fighter_color,
@@ -274,17 +274,17 @@ impl Entity {
         }
     }
 
-    fn render_frame(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
-        let fighter = &fighters[self.entity_def_key()];
+    fn render_frame(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
+        let entity_def = &entity_defs[self.entity_def_key()];
         RenderEntityFrame {
-            fighter:     self.entity_def_key().to_string(),
-            model_name:  fighter.name.clone(),
-            bps:         self.public_bps_xy(entities, fighters, surfaces),
-            ecb:         self.ecb(),
-            frame:       self.frame() as usize,
-            action:      self.action() as usize,
-            face_right:  self.face_right(),
-            angle:       self.angle(fighter, surfaces),
+            entity_def_key: self.entity_def_key().to_string(),
+            model_name:     entity_def.name.clone(),
+            bps:            self.public_bps_xy(entities, entity_defs, surfaces),
+            ecb:            self.ecb(),
+            frame:          self.frame() as usize,
+            action:         self.action() as usize,
+            face_right:     self.face_right(),
+            angle:          self.angle(entity_def, surfaces),
         }
     }
 }
@@ -468,14 +468,14 @@ impl DebugEntity {
 }
 
 pub struct RenderEntityFrame {
-    pub fighter:    String,
-    pub model_name: String,
-    pub bps:        (f32, f32),
-    pub ecb:        ECB,
-    pub frame:      usize,
-    pub action:     usize,
-    pub face_right: bool,
-    pub angle:      f32,
+    pub entity_def_key: String,
+    pub model_name:     String,
+    pub bps:            (f32, f32),
+    pub ecb:            ECB,
+    pub frame:          usize,
+    pub action:         usize,
+    pub face_right:     bool,
+    pub angle:          f32,
 }
 
 pub struct VectorArrow {

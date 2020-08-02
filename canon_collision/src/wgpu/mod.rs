@@ -4,18 +4,17 @@ mod animation;
 
 use buffers::{ColorVertex, Vertex, Buffers};
 use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic};
-use crate::entity::{RenderEntity, RenderEntityType, RenderEntityFrame};
+use crate::entity::{RenderEntityType, RenderEntityFrame};
 use crate::game::{GameState, RenderObject, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
 use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::results::PlayerResult;
-use crate::player::RenderPlayer;
-use canon_collision_lib::entity_def::{Action, ECB, CollisionBoxRole, ActionFrame};
+use crate::camera::Camera;
+use canon_collision_lib::entity_def::{Action, CollisionBoxRole};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
@@ -26,7 +25,7 @@ use std::borrow::Cow::Borrowed;
 use cgmath::Rad;
 use cgmath::prelude::*;
 use cgmath::{Matrix4, Vector3};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderModuleSource};
@@ -640,8 +639,14 @@ impl WgpuGraphics {
             label: None
         });
 
-        if let RenderType::Game(render) = &render.render_type {
-            self.models.load(&self.device, &self.queue, render);
+        match &render.render_type {
+            RenderType::Game (render) => {
+                self.models.load_game(&self.device, &self.queue, render);
+            }
+            RenderType::Menu (render) => {
+                let fighters = &self.package.as_ref().unwrap().fighters(); // TODO: avoid recreating multiple times every frame
+                self.models.load_menu(&self.device, &self.queue, render, fighters);
+            }
         }
 
         let mut wsd = self.wsd.take().unwrap();
@@ -966,13 +971,13 @@ impl WgpuGraphics {
 
     fn render_model3d(
         &self,
-        render:          &RenderGame,
+        camera:          &Camera,
         model:           &Model3D,
         entity:          &Matrix4<f32>,
         animation_name:  &str,
         animation_frame: f32,
     ) -> Vec<Draw> {
-        let camera = render.camera.transform();
+        let camera = camera.transform();
         let mut draws = vec!();
 
         for mesh in &model.meshes {
@@ -1068,7 +1073,7 @@ impl WgpuGraphics {
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
             if let Some(stage) = self.models.get(&render.stage_model_name) {
-                draws.extend(self.render_model3d(&render, &stage, &stage_transformation, "NONE", render.current_frame as f32));
+                draws.extend(self.render_model3d(&render.camera, &stage, &stage_transformation, "NONE", render.current_frame as f32));
             }
         }
 
@@ -1103,15 +1108,15 @@ impl WgpuGraphics {
                     match Action::from_u64(action_index as u64) {
                         Some(Action::Eliminated) => { }
                         _ => {
-                            let fighter_model_name = entity.frames[0].model_name.replace(" ", "");
+                            let fighter_model_name = &entity.frames[0].model_name;
                             if entity.debug.render.normal() {
                                 let dir      = Matrix4::from_angle_y(if entity.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
                                 let rotate   = Matrix4::from_angle_z(Rad(entity.frames[0].angle));
                                 let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
                                 let transformation = position * rotate * dir;
-                                if let Some(fighter) = self.models.get(&fighter_model_name) {
+                                if let Some(fighter) = self.models.get(fighter_model_name) {
                                     let action = entity.render_type.action_index_to_string(action_index);
-                                    draws.extend(self.render_model3d(&render, &fighter, &transformation, &action, entity.frames[0].frame as f32));
+                                    draws.extend(self.render_model3d(&render.camera, &fighter, &transformation, &action, entity.frames[0].frame as f32));
                                 }
                             }
                         }
@@ -1128,11 +1133,11 @@ impl WgpuGraphics {
                         draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
                     }
 
-                    // draw fighter debug overlay
+                    // draw entity debug overlay
                     if entity.debug.render.debug() {
                         if entity.debug.render.onion_skin() {
                             if let Some(frame) = entity.frames.get(2) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, frame.action, frame.frame) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.4, 0.4, 0.4, 0.4];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
@@ -1140,7 +1145,7 @@ impl WgpuGraphics {
                             }
 
                             if let Some(frame) = entity.frames.get(1) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.fighter, frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, frame.action, frame.frame) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.80, 0.80, 0.80, 0.9];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
@@ -1148,8 +1153,8 @@ impl WgpuGraphics {
                             }
                         }
 
-                        // draw fighter
-                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].fighter, entity.frames[0].action, entity.frames[0].frame) {
+                        // draw entity
+                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, entity.frames[0].action, entity.frames[0].frame) {
                             let color = [0.9, 0.9, 0.9, 1.0];
                             let edge_color = if entity.entity_selected {
                                 [0.0, 1.0, 0.0, 1.0]
@@ -1167,7 +1172,7 @@ impl WgpuGraphics {
                     // draw selected colboxes
                     if entity.selected_colboxes.len() > 0 {
                         let color = [0.0, 1.0, 0.0, 1.0];
-                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].fighter, entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
+                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
                         draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, color, color));
                     }
 
@@ -1511,7 +1516,7 @@ impl WgpuGraphics {
 
     fn draw_fighter_selector(&mut self, selections: &[(&PlayerSelect, usize)], i: usize, start_x: f32, start_y: f32, end_x: f32, end_y: f32) -> Vec<Draw> {
         let mut draws = vec!();
-        let entities = &self.package.as_ref().unwrap().entities;
+        let fighters = &self.package.as_ref().unwrap().fighters();
         let (selection, controller_i) = selections[i];
 
         // render player name
@@ -1555,12 +1560,12 @@ impl WgpuGraphics {
         let mut options = vec!();
         match selection.ui {
             PlayerSelectUi::HumanFighter (_) => {
-                options.extend(entities.iter().map(|x| x.name.clone()));
+                options.extend(fighters.iter().map(|x| x.1.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Add CPU"));
             }
             PlayerSelectUi::CpuFighter (_) => {
-                options.extend(entities.iter().map(|x| x.name.clone()));
+                options.extend(fighters.iter().map(|x| x.1.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Change AI"));
                 options.push(String::from("Remove CPU"));
@@ -1615,75 +1620,36 @@ impl WgpuGraphics {
         }
 
         // render fighter
-        for (fighter_i, (fighter_key, _)) in entities.key_value_iter().enumerate() {
-            if let Some(selection_i) = selection.fighter {
-                if fighter_i == selection_i {
-                    let fighter = entities.key_to_value(fighter_key).unwrap();
+        if let Some(selection_i) = selection.fighter {
+            let fighter = fighters[selection_i].1;
 
-                    // Determine action, handling the user setting it to an invalid value
-                    let css_action = fighter.css_action as usize;
-                    let action = if css_action < fighter.actions.len() {
-                        css_action
-                    } else {
-                        Action::Idle.to_u64().unwrap() as usize
-                    };
+            let camera_dimension = 40.0;
+            let fighter_x_base  = start_x + (end_x - start_x) / 2.0;
+            let fighter_y_base = end_y * -1.0 + 0.05;
 
-                    let frames = vec!(RenderEntityFrame {
-                        fighter:    fighter_key.clone(),
-                        model_name: "TODO".into(),
-                        bps:        (0.0, 0.0),
-                        ecb:        ECB::default(),
-                        face_right: start_x < 0.0,
-                        frame:      selection.animation_frame,
-                        angle:      0.0,
-                        action,
-                    });
+            let fighter_x_ar = if self.aspect_ratio() > 1.0 {
+                1.0
+            } else {
+                self.aspect_ratio()
+            };
+            let fighter_y_ar = if self.aspect_ratio() > 1.0 {
+                1.0 / self.aspect_ratio()
+            } else {
+                1.0
+            };
 
-                    // draw fighter
-                    let player = RenderEntity {
-                        render_type: RenderEntityType::Player(RenderPlayer {
-                            team: 0,
-                            damage: 0.0,
-                            stocks: None,
-                            shield: None,
-                        }),
-                        debug:             Default::default(),
-                        frame_data:        ActionFrame::default(),
-                        fighter_color:     graphics::get_team_color3(selection.team),
-                        entity_selected:   false,
-                        selected_colboxes: HashSet::new(),
-                        vector_arrows:     vec!(),
-                        particles:         vec!(),
-                        frames,
-                    };
+            let fighter_x = fighter_x_base * camera_dimension * fighter_x_ar;
+            let fighter_y = fighter_y_base * camera_dimension * fighter_y_ar;
+            let face_right = start_x < 0.0;
 
-                    // fudge player data TODO: One day I would like to have the menu selection fighters (mostly) playable
-                    let zoom = fighter.css_scale / 40.0;
-                    let fighter_x = start_x + (end_x - start_x) / 2.0;
-                    let fighter_y = end_y * -1.0 + 0.05;
+            //let zoom = fighter.css_scale; // TODO
+            let dir      = Matrix4::from_angle_y(if face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+            let position = Matrix4::from_translation(Vector3::new(fighter_x, fighter_y, 0.0));
+            let transformation = position * dir;
+            let camera = Camera::new_for_menu(self.aspect_ratio(), self.width as f32, self.height as f32, camera_dimension);
 
-                    let camera   = Matrix4::from_nonuniform_scale(zoom, zoom * self.aspect_ratio(), 1.0);
-                    let position = Matrix4::from_translation(Vector3::new(fighter_x, fighter_y, 0.0));
-                    let dir      = Matrix4::from_nonuniform_scale(if player.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                    let transformation = position * (camera * dir);
-                    let uniform = HitboxUniform {
-                        edge_color: graphics::get_team_color4(selection.team),
-                        color:      [0.9, 0.9, 0.9, 1.0],
-                        transform:  transformation.into(),
-                    };
-
-                    let fighter = player.frames[0].fighter.as_str();
-                    let action  = player.frames[0].action;
-                    let frame   = player.frames[0].frame;
-                    if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), fighter, action, frame) {
-                        draws.push(Draw {
-                            ty: DrawType::Hitbox {
-                                uniform,
-                            },
-                            buffers
-                        });
-                    }
-                }
+            if let Some(model) = self.models.get(&fighter.name) {
+                draws.extend(self.render_model3d(&camera, &model, &transformation, "Idle", 0.0));
             }
         }
 

@@ -68,6 +68,20 @@ impl Camera {
         }
     }
 
+    pub fn new_for_menu(aspect_ratio: f32, window_width: f32, window_height: f32, rect_dimension: f32) -> Camera {
+        Camera {
+            aspect_ratio,
+            window_width,
+            window_height,
+            rect:              Rect { x1: -rect_dimension, y1: -rect_dimension, x2: rect_dimension, y2: rect_dimension },
+            control_state:     CameraControlState::Auto,
+            transform_mode:    TransformMode::Play,
+            freelook_location: (0.0, 0.0, 0.0),
+            freelook_phi:      0.0,
+            freelook_theta:    0.0,
+        }
+    }
+
     pub fn update_os_input(&mut self, os_input: &WinitInputHelper) {
         // set manual/automatic camera control
         if os_input.mouse_pressed(2) || os_input.scroll_diff() != 0.0 ||

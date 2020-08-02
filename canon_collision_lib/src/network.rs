@@ -216,7 +216,6 @@ impl Netplay {
                     self.set_state(NetplayState::InitConnection (InitConnection {
                         random:        rand::thread_rng().gen::<u64>(),
                         build_version: request.build_version.clone(),
-                        hash:          request.package_hash.clone()
                     }));
                 }
             }
@@ -228,10 +227,7 @@ impl Netplay {
 
                 // receive init
                 if let Some(init) = self.init_msgs.pop() {
-                    if init.hash != local.hash {
-                        self.disconnect_with_reason("Package hashes did not match, ensure everyone is using the same package.");
-                    }
-                    else if init.build_version != local.build_version {
+                    if init.build_version != local.build_version {
                         self.disconnect_with_reason("Build versions did not match, ensure everyone is using the same Canon Collision build.");
                     }
                     else {
@@ -405,24 +401,22 @@ impl Netplay {
         self.state_frame = 0;
     }
 
-    pub fn direct_connect(&mut self, address: IpAddr, hash: String) {
+    pub fn direct_connect(&mut self, address: IpAddr) {
         self.clear();
         self.peers.push(SocketAddr::new(address, 8413));
         self.confirmed_inputs.push(vec!());
         self.set_state(NetplayState::InitConnection (InitConnection {
             random:        rand::thread_rng().gen::<u64>(),
             build_version: build_version(),
-            hash
         }));
     }
 
-    pub fn connect_match_making(&mut self, region: String, num_players: u8, package_hash: String) {
+    pub fn connect_match_making(&mut self, region: String, num_players: u8) {
         self.clear();
         let request = MatchMakingRequest {
             build_version: build_version(),
             region,
             num_players,
-            package_hash,
         };
         self.set_state(NetplayState::MatchMaking { request });
     }
@@ -502,7 +496,6 @@ impl NetplayState {
 #[derive(Clone, Serialize)]
 pub struct MatchMakingRequest {
     pub region:    String,
-    package_hash:  String,
     build_version: String,
     num_players:   u8
 }
@@ -515,7 +508,6 @@ struct MatchMakingResponse {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InitConnection {
     build_version:  String,
-    hash:           String,
     random:         u64
 }
 

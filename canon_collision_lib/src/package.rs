@@ -4,11 +4,9 @@ use std::mem;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use sha2::{Sha256, Digest};
-use serde_json;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
 
-use crate::entity_def::{EntityDef, ActionFrame, CollisionBox, CollisionBoxRole};
+use crate::entity_def::{EntityDef, EntityDefType, ActionFrame, CollisionBox, CollisionBoxRole};
 use crate::files;
 use crate::stage::Stage;
 
@@ -137,20 +135,6 @@ impl Package {
 
         self.force_update_entire_package();
         Ok(())
-    }
-
-    pub fn compute_hash(&self) -> String {
-        let mut hasher = Sha256::default();
-
-        for stage in self.stages.iter() {
-            hasher.update(&serde_json::to_vec(stage).unwrap());
-        }
-
-        for fighter in self.entities.iter() {
-            hasher.update(&serde_json::to_vec(fighter).unwrap());
-        }
-
-        hasher.finalize().iter().map(|x| format!("{:x}", x)).collect()
     }
 
     pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
@@ -417,6 +401,17 @@ impl Package {
 
     pub fn updates(&mut self) -> Vec<PackageUpdate> {
         mem::replace(&mut self.package_updates, vec!())
+    }
+
+    pub fn fighters(&self) -> Vec<(String, &EntityDef)> {
+        let mut result = vec!();
+        for (key, entity) in self.entities.key_value_iter() {
+            if let EntityDefType::Fighter (_) = entity.ty {
+                result.push((key.clone(), entity));
+            }
+        }
+        result.sort_by_key(|x| x.0.clone());
+        result
     }
 }
 

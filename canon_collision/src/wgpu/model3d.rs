@@ -1,6 +1,9 @@
-use canon_collision_lib::assets::Assets;
 use crate::game::{RenderObject, RenderGame};
+use crate::menu::{RenderMenu, RenderMenuState};
 use crate::wgpu::buffers::Buffers;
+
+use canon_collision_lib::assets::Assets;
+use canon_collision_lib::entity_def::EntityDef;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -38,10 +41,7 @@ impl Models {
         self.models.get(&key.replace(" ", ""))
     }
 
-    // TODO: Refactor this so the game logic sends a message to the graphics logic requesting it to
-    // preload models before it needs them.
-    // Maybe load fighters immediately when selected on the CSS.
-    pub fn load(&mut self, device: &Device, queue: &Queue, render: &RenderGame) {
+    pub fn load_game(&mut self, device: &Device, queue: &Queue, render: &RenderGame) {
         // hotreload current models
         for reload in self.assets.models_reloads() {
             // only reload if its still in memory
@@ -67,12 +67,43 @@ impl Models {
         for entity in render.entities.iter() {
             if let RenderObject::Entity(entity) = entity {
                 let fighter_model_name = entity.frames[0].model_name.replace(" ", "");
-                if !self.models.contains_key(&fighter_model_name) {
-                    // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
-                    if let Some(data) = self.assets.get_model(&fighter_model_name) {
-                        self.models.insert(fighter_model_name.to_string(), Model3D::from_gltf(device, queue, &data));
+                // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
+                self.load_fighter(device, queue, fighter_model_name);
+            }
+        }
+    }
+
+    // TODO: run in a background thread
+    // TODO: load assosciated models for a fighter when the stage select screen is reached (projectiles/items they produce)
+    pub fn load_menu(&mut self, device: &Device, queue: &Queue, render: &RenderMenu, fighters: &[(String, &EntityDef)]) {
+        // hotreload current models
+        for reload in self.assets.models_reloads() {
+            // only reload if its still in memory
+            if self.models.contains_key(&reload.name) {
+                self.models.insert(reload.name.clone(), Model3D::from_gltf(device, queue, &reload.data));
+            }
+        }
+
+        // load selected fighters
+        match &render.state {
+            RenderMenuState::CharacterSelect (selections, _, _) => {
+                for selection in selections {
+                    if let Some(index) = selection.fighter {
+                        let fighter = fighters[index].1;
+                        let fighter_model_name = fighter.name.replace(" ", "");
+                        // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
+                        self.load_fighter(device, queue, fighter_model_name);
                     }
                 }
+            }
+            _ => { }
+        }
+    }
+
+    fn load_fighter(&mut self, device: &Device, queue: &Queue, model_name: String) {
+        if !self.models.contains_key(&model_name) {
+            if let Some(data) = self.assets.get_model(&model_name) {
+                self.models.insert(model_name.to_string(), Model3D::from_gltf(device, queue, &data));
             }
         }
     }

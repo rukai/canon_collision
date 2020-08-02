@@ -194,7 +194,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
             }
             ContinueFrom::Netplay => {
-                netplay.direct_connect(cli_results.address.unwrap(), package.as_ref().unwrap().compute_hash());
+                netplay.direct_connect(cli_results.address.unwrap());
                 let state = MenuState::NetplayWait { message: String::from("") };
 
                 (
@@ -206,7 +206,6 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 netplay.connect_match_making(
                     cli_results.netplay_region.unwrap_or(config.netplay_region.clone().unwrap_or(String::from("AU"))),
                     cli_results.netplay_players.unwrap_or(2),
-                    package.as_ref().unwrap().compute_hash()
                 );
                 let state = MenuState::NetplayWait { message: String::from("") };
 
