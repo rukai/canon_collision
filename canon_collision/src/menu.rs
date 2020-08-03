@@ -173,12 +173,14 @@ impl Menu {
 
     fn step_fighter_select(&mut self, package: &Package, player_inputs: &[PlayerInput], netplay: &mut Netplay) {
         self.add_remove_fighter_selections(&package, &player_inputs);
+        let fighters = package.fighters();
+
         let mut new_state: Option<MenuState> = None;
         if let &mut MenuState::CharacterSelect { ref mut back_counter } = &mut self.state {
-            // animate entities
+            // animate fighters
             for selection in self.fighter_selections.iter_mut() {
                 if let Some(fighter_key) = selection.fighter {
-                    let fighter = &package.entities[fighter_key];
+                    let fighter = &fighters[fighter_key].1;
                     if let Some(action) = fighter.actions.get(fighter.css_action as usize) {
                         selection.animation_frame = (selection.animation_frame + 1) % action.frames.len();
                     }
@@ -282,7 +284,6 @@ impl Menu {
             // update selections
             let mut add_cpu = false;
             let mut remove_cpu: Option<usize> = None;
-            let fighters = package.fighters();
 
             for (selection_i, selection) in self.fighter_selections.iter_mut().enumerate() {
                 if let Some((controller, _)) = selection.controller {

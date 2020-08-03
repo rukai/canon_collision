@@ -1649,7 +1649,10 @@ impl WgpuGraphics {
             let camera = Camera::new_for_menu(self.aspect_ratio(), self.width as f32, self.height as f32, camera_dimension);
 
             if let Some(model) = self.models.get(&fighter.name) {
-                draws.extend(self.render_model3d(&camera, &model, &transformation, "Idle", 0.0));
+                let action: &str = Action::from_u64(fighter.css_action)
+                    .map(|x| x.into())
+                    .unwrap_or("Idle");
+                draws.extend(self.render_model3d(&camera, &model, &transformation, action, selection.animation_frame as f32));
             }
         }
 
