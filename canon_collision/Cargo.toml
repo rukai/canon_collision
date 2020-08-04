@@ -14,13 +14,13 @@ edition = "2018"
 canon_collision_lib = { path = "../canon_collision_lib" }
 byteorder = "1"
 chrono = { version = "0.4", features = ["serde"] }
-strum = "0.18"
-strum_macros = "0.18"
+strum = "0.19"
+strum_macros = "0.19"
 num-traits = "0.2"
 num-derive = "0.3"
 getopts = "0.2"
 log = "0.4"
-lyon = "0.15"
+lyon = "0.16"
 rand = "0.7"
 rand_chacha = "0.2"
 serde = "1"
@@ -47,9 +47,9 @@ bytemuck = "1"
 
 vk-shader-macros = { version = "0.2", optional = true }
 #wgpu_glyph = { version = "0.9", optional = true }
-wgpu_glyph = { git = "https://github.com/rukai/wgpu_glyph", rev = "6d22487ae905abcdade6d2bb06f275ead048af2e", optional = true }
+wgpu_glyph = { git = "https://github.com/rukai/wgpu_glyph", rev = "742e1e1f33f811a726d31090206255e3b78d1c4b", optional = true }
 #wgpu = { version = "0.5", optional = true }
-wgpu = { version = "0.5.0", git = "https://github.com/gfx-rs/wgpu-rs", rev = "a85db74cb899c2615bd6d7ef2dd6dffc4431d444", optional = true }
+wgpu = { version = "0.5.0", git = "https://github.com/gfx-rs/wgpu-rs", rev = "ffa9199402e1436ba525007754e161b08ab12bcc", optional = true }
 raw-window-handle = "0.3"
 
 [features]

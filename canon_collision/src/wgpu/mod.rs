@@ -29,6 +29,7 @@ use num_traits::{FromPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderModuleSource};
+use wgpu::util::DeviceExt;
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
 use wgpu_glyph::ab_glyph::FontArc;
 use zerocopy::AsBytes;
@@ -89,7 +90,7 @@ impl WgpuGraphics {
             }
         ).await.unwrap();
 
-        let (mut device, queue) = adapter.request_device(
+        let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits {
@@ -130,17 +131,13 @@ impl WgpuGraphics {
         let rasterization_state_back_face_culling = Some(wgpu::RasterizationStateDescriptor {
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::Back,
-            depth_bias: 0,
-            depth_bias_slope_scale: 0.0,
-            depth_bias_clamp: 0.0,
+            .. Default::default()
         });
 
         let rasterization_state = Some(wgpu::RasterizationStateDescriptor {
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: wgpu::CullMode::None,
-            depth_bias: 0,
-            depth_bias_slope_scale: 0.0,
-            depth_bias_clamp: 0.0,
+            .. Default::default()
         });
 
         let color_states = [wgpu::ColorStateDescriptor {
@@ -250,9 +247,7 @@ impl WgpuGraphics {
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Ccw,
                 cull_mode: wgpu::CullMode::None,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
+                .. Default::default()
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
             color_states: Borrowed(&color_states),
@@ -466,14 +461,18 @@ impl WgpuGraphics {
         let hack_font_id = glyph_brush_builder.add_font(hack);
         let glyph_brush = glyph_brush_builder
             .initial_cache_size((512, 512))
-            .build(&mut device, wgpu::TextureFormat::Bgra8Unorm);
+            .build(&device, wgpu::TextureFormat::Bgra8Unorm);
 
         let width = size.width;
         let height = size.height;
         let wsd = Some(WindowSizeDependent::new(&device, &surface, width, height));
 
         let models = Models::new();
-        let uniforms_buffer = device.create_buffer_with_data(&[], wgpu::BufferUsage::UNIFORM);
+        let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: &[],
+            usage: wgpu::BufferUsage::UNIFORM,
+        });
         let uniforms_buffer_len = 0;
 
         WgpuGraphics {
@@ -673,7 +672,11 @@ impl WgpuGraphics {
             };
 
             if uniforms_bytes.len() > self.uniforms_buffer_len {
-                self.uniforms_buffer = self.device.create_buffer_with_data(&uniforms_bytes, wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST);
+                self.uniforms_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: None,
+                    contents: &uniforms_bytes,
+                    usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST
+                });
                 self.uniforms_buffer_len = uniforms_bytes.len();
             }
             else {
@@ -812,7 +815,7 @@ impl WgpuGraphics {
                 }
             }
 
-            self.glyph_brush.draw_queued(&mut self.device, &mut encoder, &frame.view, self.width, self.height).unwrap();
+            self.glyph_brush.draw_queued(&self.device, &mut encoder, &frame.view, self.width, self.height).unwrap();
 
             self.queue.submit(Some(encoder.finish()));
         }

@@ -8,6 +8,7 @@ use crate::entity::RenderEntity;
 use crate::game::{SurfaceSelection, RenderRect};
 
 use wgpu::{Device, Buffer};
+use wgpu::util::DeviceExt;
 use lyon::path::Path;
 use lyon::math::{Point, point};
 use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
@@ -57,8 +58,16 @@ pub struct Buffers {
 
 impl Buffers {
     pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Rc<Buffers> where T: AsBytes {
-        let vertex = device.create_buffer_with_data(&vertices.as_bytes(), wgpu::BufferUsage::VERTEX);
-        let index = device.create_buffer_with_data(&indices.as_bytes(), wgpu::BufferUsage::INDEX);
+        let vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: &vertices.as_bytes(),
+            usage: wgpu::BufferUsage::VERTEX
+        });
+        let index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: &indices.as_bytes(),
+            usage: wgpu::BufferUsage::INDEX
+        });
         let index_count = indices.len() as u32;
 
         Rc::new(Buffers { vertex, index, index_count })
