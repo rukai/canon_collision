@@ -21,6 +21,8 @@ pub(crate) mod replays;
 pub(crate) mod results;
 pub(crate) mod rules;
 pub(crate) mod projectile;
+pub(crate) mod item;
+pub(crate) mod location;
 
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;

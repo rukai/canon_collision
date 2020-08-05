@@ -292,10 +292,10 @@ impl Player {
         }
     }
 
-    pub fn grabbing_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
-        let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
-        if let Some(fighter_frame) = self.get_entity_frame(&fighters[self.entity_def_key.as_ref()]) {
-            (x + self.relative_f(fighter_frame.grabbing_x), y + fighter_frame.grabbing_y)
+    pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
+        let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces);
+        if let Some(entity_frame) = self.get_entity_frame(&entity_defs[self.entity_def_key.as_ref()]) {
+            (x + self.relative_f(entity_frame.grabbing_x), y + entity_frame.grabbing_y)
         } else {
             (x, y)
         }
