@@ -5,17 +5,16 @@ use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey};
 use crate::projectile::Projectile;
+use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
 
 use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::geometry;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::{Stage, Surface};
 
 use treeflection::KeyedContextVec;
 use rand::Rng;
-use rand_chacha::ChaChaRng;
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use std::f32;
@@ -37,54 +36,6 @@ impl LockTimer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LedgeLogic {
-    Hog,
-    Share,
-    Trump
-}
-
-// Describes the player location by offsets from other locations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Location {
-    Surface { platform_i: usize, x: f32 },
-    GrabbedLedge { platform_i: usize, d_x: f32, d_y: f32, logic: LedgeLogic }, // player.face_right determines which edge on the platform
-    GrabbedByPlayer (EntityKey),
-    Airbourne { x: f32, y: f32 },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Hitlag {
-    Some (u64), // TODO: rename Some
-    Launch { counter: u64, kb_vel: f32, angle: f32, wobble_x: f32 },
-    None
-}
-
-impl Hitlag {
-    pub fn decrement(&mut self) -> bool {
-        let end = match self {
-            &mut Hitlag::Some (ref mut counter) |
-            &mut Hitlag::Launch { ref mut counter, .. } => {
-                *counter -= 1;
-                *counter <= 1
-            }
-            &mut Hitlag::None => {
-                false
-            }
-        };
-        if end {
-            *self = Hitlag::None
-        }
-        end
-    }
-
-    fn wobble(&mut self, rng: &mut ChaChaRng) {
-        if let &mut Hitlag::Launch { ref mut wobble_x, .. } = self {
-            *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Player {
     pub entity_def_key:     String,
@@ -100,17 +51,8 @@ pub struct Player {
     pub frame:              i64,
     pub frame_norestart:    i64, // Used to keep track of total frames passed on states that loop
 
+    pub body:               Body,
     pub stocks:             Option<u64>,
-    pub damage:             f32,
-    pub location:           Location,
-    pub x_vel:              f32,
-    pub y_vel:              f32,
-    pub kb_x_vel:           f32,
-    pub kb_y_vel:           f32,
-    pub kb_x_dec:           f32,
-    pub kb_y_dec:           f32,
-    pub face_right:         bool,
-    pub frames_since_ledge: u64,
     pub ledge_idle_timer:   u64,
     pub fastfalled:         bool,
     pub air_jumps_left:     u64,
@@ -127,7 +69,6 @@ pub struct Player {
     pub land_frame_skip:    u8,
     pub ecb:                ECB,
     pub hitlist:            Vec<EntityKey>,
-    pub hitlag:             Hitlag,
     pub hitstun:            f32,
     /// this is only used for end-game statistics so player id is fine
     pub hit_by:             Option<usize>,
@@ -193,15 +134,6 @@ impl Player {
             frame:              0,
             frame_norestart:    0,
             stocks:             rules.stock_count,
-            damage:             0.0,
-            x_vel:              0.0,
-            y_vel:              0.0,
-            kb_x_vel:           0.0,
-            kb_y_vel:           0.0,
-            kb_x_dec:           0.0,
-            kb_y_dec:           0.0,
-            face_right:         spawn.map(|x| x.face_right).unwrap_or(false),
-            frames_since_ledge: 0,
             ledge_idle_timer:   0,
             fastfalled:         false,
             air_jumps_left:     package.entities[entity_def_key.as_ref()].fighter().map(|x| x.air_jumps).unwrap_or(1),
@@ -218,16 +150,18 @@ impl Player {
             land_frame_skip:    0,
             ecb:                ECB::default(),
             hitlist:            vec!(),
-            hitlag:             Hitlag::None,
             hitstun:            0.0,
             hit_by:             None,
             particles:          vec!(),
             aerial_dodge_frame: None,
             result:             RawPlayerResult::default(),
+            body: Body::new(
+                location,
+                spawn.map(|x| x.face_right).unwrap_or(false)
+            ),
             id,
             team,
             entity_def_key,
-            location,
 
             // Only use for debug display
             frames_since_hit:  0,
@@ -239,57 +173,13 @@ impl Player {
     }
 
     pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
-        self.public_bps_xy(&context.entities, &context.entity_defs, &context.surfaces)
+        let action_frame = self.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
+        self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces)
     }
 
-    pub fn public_bps_xy(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
-        let bps_xy = match self.location {
-            Location::Surface { platform_i, x } => {
-                if let Some(platform) = surfaces.get(platform_i) {
-                    platform.plat_x_to_world_p(x)
-                } else {
-                    (0.0, 0.0)
-                }
-            }
-            Location::GrabbedLedge { platform_i, d_x, d_y, .. } => {
-                if let Some(platform) = surfaces.get(platform_i) {
-                    let (ledge_x, ledge_y) = if self.face_right {
-                        platform.left_ledge()
-                    } else {
-                        platform.right_ledge()
-                    };
-                    (ledge_x + self.relative_f(d_x), ledge_y + d_y)
-                } else {
-                    (0.0, 0.0)
-                }
-            }
-            Location::GrabbedByPlayer (entity_i) => {
-                if let Some(player) = entities.get(entity_i) {
-                    if let Some(fighter_frame) = self.get_entity_frame(&fighters[self.entity_def_key.as_ref()]) {
-                        let (grabbing_x, grabbing_y) = player.grabbing_xy(entities, fighters, surfaces);
-                        let grabbed_x = self.relative_f(fighter_frame.grabbed_x);
-                        let grabbed_y = fighter_frame.grabbed_y;
-                        (grabbing_x - grabbed_x, grabbing_y - grabbed_y)
-                    } else {
-                        (0.0, 0.0)
-                    }
-                } else {
-                    (0.0, 0.0)
-                }
-            }
-            Location::Airbourne { x, y } => {
-                (x, y)
-            }
-        };
-
-        match &self.hitlag {
-            &Hitlag::Launch { wobble_x, .. } => {
-                (bps_xy.0 + wobble_x, bps_xy.1)
-            }
-            _ => {
-                bps_xy
-            }
-        }
+    pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
+        let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key.as_ref()]);
+        self.body.public_bps_xy(entities, entity_defs, action_frame, surfaces)
     }
 
     pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
@@ -299,48 +189,6 @@ impl Player {
         } else {
             (x, y)
         }
-    }
-
-    pub fn is_platform(&self) -> bool {
-        if let &Location::Surface { .. } = &self.location {
-            true
-        } else {
-            false
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_ledge(&self) -> bool {
-        if let &Location::GrabbedLedge { .. } = &self.location {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_grabbed(&self) -> bool {
-        if let &Location::GrabbedByPlayer (_) = &self.location {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_airbourne(&self) -> bool {
-        if let &Location::Airbourne { .. } = &self.location {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
-        if let &Location::GrabbedLedge { platform_i, ref logic, .. } = &self.location {
-            if let &LedgeLogic::Hog = logic {
-                return self.face_right == face_right && check_platform_i == platform_i;
-            }
-        }
-        false
     }
 
     pub fn is_shielding(&self) -> bool {
@@ -357,7 +205,7 @@ impl Player {
     pub fn set_airbourne(&mut self, context: &StepContext) {
         let (x, y) = self.bps_xy(context);
         self.fastfalled = false;
-        self.location = Location::Airbourne { x, y };
+        self.body.location = Location::Airbourne { x, y };
     }
 
     pub fn public_set_action(&mut self, action: Action) {
@@ -404,7 +252,7 @@ impl Player {
     }
 
     pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
-        let fall = match &mut self.location {
+        let fall = match &mut self.body.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
             &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
                 if *platform_i == deleted_platform_i {
@@ -422,7 +270,7 @@ impl Player {
 
             //manually perform self.set_airbourne(context);
             let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
-            self.location = Location::Airbourne { x, y };
+            self.body.location = Location::Airbourne { x, y };
             self.fastfalled = false;
         }
     }
@@ -433,15 +281,15 @@ impl Player {
                 &CollisionResult::HitAtk { entity_defend_i, ref hitbox, ref point } => {
                     self.hit_particles(point.clone(), hitbox);
                     self.hitlist.push(entity_defend_i);
-                    self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                    self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     let entity_atk = &context.entities[entity_atk_i];
 
                     let damage_done = hitbox.damage * hurtbox.damage_mult; // TODO: apply staling
-                    self.damage += damage_done;
+                    self.body.damage += damage_done;
 
-                    let damage_launch = 0.05 * (hitbox.damage * (damage_done + self.damage.floor())) + (damage_done + self.damage) * 0.1;
+                    let damage_launch = 0.05 * (hitbox.damage * (damage_done + self.body.damage.floor())) + (damage_done + self.body.damage) * 0.1;
                     let weight = 2.0 - (2.0 * context.entity_def.weight) / (1.0 + context.entity_def.weight);
                     let kbg = hitbox.kbg + hurtbox.kbg_add;
                     let bkb = hitbox.bkb + hurtbox.bkb_add;
@@ -457,7 +305,7 @@ impl Player {
                         }
                     }
 
-                    if !self.is_grabbed() || kb_vel > 50.0 {
+                    if !self.body.is_grabbed() || kb_vel > 50.0 {
                         self.hitstun = match hitbox.hitstun {
                             HitStun::FramesTimesKnockback (frames) => { frames * kb_vel }
                             HitStun::Frames               (frames) => { frames as f32 }
@@ -505,10 +353,10 @@ impl Player {
                     self.hit_angle_post_di = None;
                     self.frames_since_hit = 0;
 
-                    self.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, kb_vel, angle, wobble_x: 0.0 };
+                    self.body.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, kb_vel, angle, wobble_x: 0.0 };
                     self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
                     // TODO: determine from angle (current logic falls over when reverse hit is disabled)
-                    self.face_right = self.bps_xy(context).0 < entity_atk.bps_xy(context).0;
+                    self.body.face_right = self.bps_xy(context).0 < entity_atk.bps_xy(context).0;
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
                     if let EntityType::Player (player_def) = &context.entities[entity_defend_i].ty {
@@ -523,10 +371,10 @@ impl Player {
 
                         let x_diff = self.bps_xy(context).0 - player_def.bps_xy(context).0;
                         let vel = hitbox.damage.floor() * (player_def.shield_analog - 0.3) * 0.1 + 0.02;
-                        if self.is_platform() {
-                            self.x_vel += vel * x_diff.signum();
+                        if self.body.is_platform() {
+                            self.body.x_vel += vel * x_diff.signum();
                         }
-                        self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                        self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                     }
                 }
                 &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
@@ -549,16 +397,16 @@ impl Player {
                     let vel_mult = if self.parry_timer > 0 { 1.0 } else { 0.6 };
                     let x_diff = self.bps_xy(context).0 - context.entities[entity_atk_i].bps_xy(context).0;
                     let vel = (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
-                    self.x_vel = vel.min(2.0) * x_diff.signum();
+                    self.body.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
-                    self.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                    self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
                 }
                 &CollisionResult::GrabAtk (_entity_defend_i) => {
                     self.set_action(context, Action::GrabbingIdle);
                 }
                 &CollisionResult::GrabDef (entity_atk_i) => {
-                    self.face_right = !context.entities[entity_atk_i].face_right();
-                    self.location = Location::GrabbedByPlayer(entity_atk_i);
+                    self.body.face_right = !context.entities[entity_atk_i].face_right();
+                    self.body.location = Location::GrabbedByPlayer(entity_atk_i);
                     self.set_action(context, Action::GrabbedIdle);
                 }
                 _ => { }
@@ -584,67 +432,17 @@ impl Player {
         }
         // The code from this point onwards can assume we are on a valid action and frame
 
-        match self.hitlag.clone() {
-            Hitlag::Some (_) => {
-                self.hitlag.decrement();
+        let action_frame = self.get_entity_frame(&context.entity_def);
+        match self.body.hitlag_step(context, action_frame) {
+            HitlagResult::NoHitlag => self.action_step(context),
+            HitlagResult::Hitlag => { }
+            HitlagResult::LaunchAir { angle } => {
+                self.fastfalled = false;
+                self.hit_angle_post_di = Some(angle);
             }
-            Hitlag::Launch { kb_vel, angle, .. } => {
-                self.hitlag.wobble(&mut context.rng);
-
-                if self.hitlag.decrement() {
-                    self.hitlag_def_end(context, kb_vel, angle);
-                }
+            HitlagResult::LaunchGround { angle } => {
+                self.hit_angle_post_di = Some(angle);
             }
-            Hitlag::None => {
-                self.action_step(context);
-            }
-        }
-    }
-
-    /// 0 < angle < 2pi
-    fn di(input: &PlayerInput, angle: f32) -> f32 {
-        let range = 18f32.to_radians();
-        let x = input[0].stick_x;
-        let y = input[0].stick_y;
-
-        let di_angle = y.atan2(x);                                                 // -pi  <= di_angle     <= pi
-        let pos_di_angle = di_angle + if di_angle < 0.0 { PI * 2.0 } else { 0.0 }; // 0    <= pos_di_angle <= 2pi
-        let angle_diff = angle - pos_di_angle;                                     // -2pi <= angle_diff   <= 2pi
-
-        let offset_distance = (angle_diff).sin() * (x * x + y * y).sqrt();                 // -1     <= offset_distance <= 1
-        let offset = offset_distance.signum() * offset_distance * offset_distance * range; // -range <= offset          <= range
-        angle - offset
-    }
-
-    fn hitlag_def_end(&mut self, context: &mut StepContext, kb_vel: f32, angle: f32) {
-        let angle = if (kb_vel >= 80.0 || self.is_airbourne() || (angle != 0.0 && angle != PI)) // can di
-            && !(context.input[0].stick_x == 0.0 && context.input[0].stick_y == 0.0) // not deadzone
-        {
-            Player::di(&context.input, angle)
-        } else {
-            angle
-        };
-        self.hit_angle_post_di = Some(angle);
-
-        // launch velocity
-        let (sin, cos) = angle.sin_cos();
-        self.x_vel = 0.0;
-        self.y_vel = 0.0;
-        self.kb_x_vel = cos * kb_vel * 0.03;
-        self.kb_y_vel = sin * kb_vel * 0.03;
-        self.kb_x_dec = cos * 0.051;
-        self.kb_y_dec = sin * 0.051;
-
-        if self.kb_y_vel == 0.0 {
-            if kb_vel >= 80.0 {
-                self.set_airbourne(context);
-                if let &mut Location::Airbourne { ref mut y, .. } = &mut self.location {
-                    *y += 0.0001;
-                }
-            }
-        }
-        else if self.kb_y_vel > 0.0 {
-            self.set_airbourne(context);
         }
     }
 
@@ -840,10 +638,9 @@ impl Player {
         {
             self.set_airbourne(context);
             self.set_action(context, Action::Fall);
-            self.frames_since_ledge = 0;
         }
         else if context.input.x.press || context.input.y.press || (context.input[0].stick_y > 0.65 && context.input[1].stick_y <= 0.65) {
-            if self.damage < 100.0 {
+            if self.body.damage < 100.0 {
                 self.set_action(context, Action::LedgeJump);
             }
             else {
@@ -854,7 +651,7 @@ impl Player {
             (self.relative_f(context.input[0].stick_x) > 0.2 && self.relative_f(context.input[1].stick_x) <= 0.2) ||
             (context.input[0].stick_y > 0.2 && context.input[1].stick_y <= 0.2)
         {
-            if self.damage < 100.0 {
+            if self.body.damage < 100.0 {
                 self.set_action(context, Action::LedgeGetup);
             }
             else {
@@ -862,7 +659,7 @@ impl Player {
             }
         }
         else if context.input.a.press || context.input.b.press || (context.input[0].c_stick_y > 0.65 && context.input[1].c_stick_x <= 0.65) {
-            if self.damage < 100.0 {
+            if self.body.damage < 100.0 {
                 self.set_action(context, Action::LedgeAttack);
             }
             else {
@@ -874,7 +671,7 @@ impl Player {
             (context.input[0].l_trigger > 0.3 && context.input[1].l_trigger <= 0.3) || (context.input[0].r_trigger > 0.3 && context.input[1].r_trigger <= 0.3) ||
             (self.relative_f(context.input[0].c_stick_x) > 0.8 && self.relative_f(context.input[1].c_stick_x) <= 0.8)
         {
-            if self.damage < 100.0 {
+            if self.body.damage < 100.0 {
                 self.set_action(context, Action::LedgeRoll);
             }
             else {
@@ -884,7 +681,6 @@ impl Player {
         else if self.ledge_idle_timer > 600 {
             self.set_airbourne(context);
             self.set_action(context, Action::DamageFall);
-            self.frames_since_ledge = 0;
         }
         self.ledge_idle_timer += 1;
     }
@@ -893,7 +689,7 @@ impl Player {
         if self.frame == -1 {
             self.apply_friction(fighter);
         } else {
-            self.x_vel = 0.0;
+            self.body.x_vel = 0.0;
         }
     }
 
@@ -928,7 +724,7 @@ impl Player {
     fn damage_action(&mut self, context: &mut StepContext) {
         self.hitstun -= 1.0;
         if self.hitstun <= 0.0 {
-            if self.is_airbourne() {
+            if self.body.is_airbourne() {
                 self.set_action(context, Action::Fall);
             }
             else {
@@ -936,7 +732,7 @@ impl Player {
             }
         }
         else {
-            if self.is_airbourne() {
+            if self.body.is_airbourne() {
                 self.fall_action(context.entity_def);
             }
             else {
@@ -1036,26 +832,26 @@ impl Player {
         let term_vel = context.entity_def.air_x_term_vel * context.input[0].stick_x;
         let drift = context.input[0].stick_x.abs() >= 0.3;
         if !drift ||
-           (term_vel < 0.0 && self.x_vel < term_vel) ||
-           (term_vel > 0.0 && self.x_vel > term_vel) {
-            if self.x_vel > 0.0 {
-                self.x_vel -= context.entity_def.air_friction;
-                if self.x_vel < 0.0 {
-                    self.x_vel = 0.0;
+           (term_vel < 0.0 && self.body.x_vel < term_vel) ||
+           (term_vel > 0.0 && self.body.x_vel > term_vel) {
+            if self.body.x_vel > 0.0 {
+                self.body.x_vel -= context.entity_def.air_friction;
+                if self.body.x_vel < 0.0 {
+                    self.body.x_vel = 0.0;
                 }
             }
-            else if self.x_vel < 0.0 {
-                self.x_vel += context.entity_def.air_friction;
-                if self.x_vel > 0.0 {
-                    self.x_vel = 0.0;
+            else if self.body.x_vel < 0.0 {
+                self.body.x_vel += context.entity_def.air_friction;
+                if self.body.x_vel > 0.0 {
+                    self.body.x_vel = 0.0;
                 }
             }
         }
 
         if drift {
-            if (term_vel < 0.0 && self.x_vel > term_vel) ||
-               (term_vel > 0.0 && self.x_vel < term_vel) {
-                self.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
+            if (term_vel < 0.0 && self.body.x_vel > term_vel) ||
+               (term_vel > 0.0 && self.body.x_vel < term_vel) {
+                self.body.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
             }
         }
     }
@@ -1065,12 +861,12 @@ impl Player {
         if self.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
             (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
-            self.face_right = !self.face_right;
+            self.body.face_right = !self.body.face_right;
         }
 
         if context.entity_def.tilt_turn_into_dash_iasa as i64 >= self.frame && self.relative_f(context.input[0].stick_x) > 0.79 {
             if context.entity_def.tilt_turn_flip_dir_frame > context.entity_def.tilt_turn_into_dash_iasa { // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
-                self.face_right = !self.face_right
+                self.body.face_right = !self.body.face_right
             }
             self.set_action(context, Action::Dash);
         }
@@ -1107,7 +903,7 @@ impl Player {
         if self.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
             (context.entity_def.run_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
-            self.face_right = !self.face_right;
+            self.body.face_right = !self.body.face_right;
         }
 
         if self.check_jump(context) { }
@@ -1192,7 +988,7 @@ impl Player {
                             frame: 0,
                             frame_no_restart: 0,
                             speed: 0.6,
-                            angle: if self.face_right { 0.0 } else { PI },
+                            angle: if self.body.face_right { 0.0 } else { PI },
                             x: x + self.relative_f(10.0),
                             y: y + 10.0,
                         }
@@ -1314,14 +1110,14 @@ impl Player {
         else {
             let vel_max = context.entity_def.walk_max_vel * context.input[0].stick_x;
 
-            if self.x_vel.abs() > vel_max.abs() {
+            if self.body.x_vel.abs() > vel_max.abs() {
                 self.apply_friction(&context.entity_def);
             }
             else {
-                let acc = (vel_max - self.x_vel) * (2.0/context.entity_def.walk_max_vel) * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
-                self.x_vel += acc;
-                if self.relative_f(self.x_vel) > self.relative_f(vel_max) {
-                    self.x_vel = vel_max;
+                let acc = (vel_max - self.body.x_vel) * (2.0/context.entity_def.walk_max_vel) * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
+                self.body.x_vel += acc;
+                if self.relative_f(self.body.x_vel) > self.relative_f(vel_max) {
+                    self.body.x_vel = vel_max;
                 }
             }
         }
@@ -1330,9 +1126,9 @@ impl Player {
     fn dash_action(&mut self, context: &mut StepContext) {
         self.dash_particles(context);
         if self.frame == 1 {
-            self.x_vel = self.relative_f(context.entity_def.dash_init_vel);
-            if self.x_vel.abs() > context.entity_def.dash_run_term_vel {
-                self.x_vel = self.relative_f(context.entity_def.dash_run_term_vel);
+            self.body.x_vel = self.relative_f(context.entity_def.dash_init_vel);
+            if self.body.x_vel.abs() > context.entity_def.dash_run_term_vel {
+                self.body.x_vel = self.relative_f(context.entity_def.dash_run_term_vel);
             }
         }
 
@@ -1344,17 +1140,17 @@ impl Player {
                 let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
                 let acc     = context.input[0].stick_x * context.entity_def.dash_run_acc_a;
 
-                self.x_vel += acc;
-                if (vel_max > 0.0 && self.x_vel > vel_max) || (vel_max < 0.0 && self.x_vel < vel_max) {
+                self.body.x_vel += acc;
+                if (vel_max > 0.0 && self.body.x_vel > vel_max) || (vel_max < 0.0 && self.body.x_vel < vel_max) {
                     self.apply_friction(&context.entity_def);
-                    if (vel_max > 0.0 && self.x_vel < vel_max) || (vel_max < 0.0 && self.x_vel > vel_max) {
-                        self.x_vel = vel_max;
+                    if (vel_max > 0.0 && self.body.x_vel < vel_max) || (vel_max < 0.0 && self.body.x_vel > vel_max) {
+                        self.body.x_vel = vel_max;
                     }
                 }
                 else {
-                    self.x_vel += acc;
-                    if (vel_max > 0.0 && self.x_vel > vel_max) || (vel_max < 0.0 && self.x_vel < vel_max) {
-                        self.x_vel = vel_max;
+                    self.body.x_vel += acc;
+                    if (vel_max > 0.0 && self.body.x_vel > vel_max) || (vel_max < 0.0 && self.body.x_vel < vel_max) {
+                        self.body.x_vel = vel_max;
                     }
                 }
             }
@@ -1369,7 +1165,7 @@ impl Player {
         }
 
         if self.check_shield(context) {
-            self.x_vel *= 0.25;
+            self.body.x_vel *= 0.25;
         }
         else if context.input.z.press {
             self.set_action(context, Action::DashGrab);
@@ -1379,7 +1175,7 @@ impl Player {
         }
         else if self.check_jump(context) { }
         else if self.check_smash_turn(context) {
-            self.x_vel *= 0.25
+            self.body.x_vel *= 0.25
         }
     }
 
@@ -1400,13 +1196,13 @@ impl Player {
         }
         else {
             let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
-            let acc = (vel_max - self.x_vel)
+            let acc = (vel_max - self.body.x_vel)
                     * (context.entity_def.dash_run_acc_a + (context.entity_def.dash_run_acc_b / context.input[0].stick_x.abs()))
                     / (context.entity_def.dash_run_term_vel * 2.5);
 
-            self.x_vel += acc;
-            if self.relative_f(self.x_vel) > self.relative_f(vel_max) {
-                self.x_vel = vel_max;
+            self.body.x_vel += acc;
+            if self.relative_f(self.body.x_vel) > self.relative_f(vel_max) {
+                self.body.x_vel = vel_max;
             }
         }
     }
@@ -1426,12 +1222,12 @@ impl Player {
         self.set_action(context, Action::AerialDodge);
         match context.input[0].stick_angle() {
             Some(angle) => {
-                self.x_vel = angle.cos() * context.entity_def.aerialdodge_mult;
-                self.y_vel = angle.sin() * context.entity_def.aerialdodge_mult;
+                self.body.x_vel = angle.cos() * context.entity_def.aerialdodge_mult;
+                self.body.y_vel = angle.sin() * context.entity_def.aerialdodge_mult;
             }
             None => {
-                self.x_vel = 0.0;
-                self.y_vel = 0.0;
+                self.body.x_vel = 0.0;
+                self.body.y_vel = 0.0;
             }
         }
         self.fastfalled = false;
@@ -1439,8 +1235,8 @@ impl Player {
 
     fn aerialdodge_action(&mut self, context: &mut StepContext) {
         if self.frame < context.entity_def.aerialdodge_drift_frame as i64 {
-            self.x_vel *= 0.9;
-            self.y_vel *= 0.9;
+            self.body.x_vel *= 0.9;
+            self.body.y_vel *= 0.9;
         }
         else {
             self.air_drift(context);
@@ -1552,9 +1348,9 @@ impl Player {
             if self.shield_hp <= 0.0 {
                 self.set_action(context, Action::ShieldBreakFall);
                 self.shield_hp = 0.0;
-                self.kb_y_vel = shield.break_vel;
-                self.kb_y_dec = 0.051;
-                self.kb_x_dec = 0.0;
+                self.body.kb_y_vel = shield.break_vel;
+                self.body.kb_y_dec = 0.051;
+                self.body.kb_x_dec = 0.0;
                 self.set_airbourne(context);
             }
         }
@@ -1565,7 +1361,7 @@ impl Player {
     }
 
     fn shield_break_getup_action(&mut self) {
-        self.x_vel = 0.0;
+        self.body.x_vel = 0.0;
     }
 
     fn stun_action(&mut self, context: &mut StepContext) {
@@ -1599,9 +1395,10 @@ impl Player {
             if let Some(frame) = self.get_entity_frame(context.entity_def) {
                 // ignore the x offset, we only want to check straight down.
                 let bps_xy_grab_point = (bps_xy.0, bps_xy.1 + frame.grabbed_y);
-                if let Some(platform_i) = self.land_stage_collision(context, bps_xy_grab_point, bps_xy) {
+                if let Some(platform_i) = self.body.land_stage_collision(context, frame, bps_xy_grab_point, bps_xy) {
                     let x = context.stage.surfaces[platform_i].world_x_to_plat_x(bps_xy.0);
-                    self.land(context, platform_i, x);
+                    self.body.location = Location::Surface { platform_i, x };
+                    self.land(context);
                     self.set_action(context, Action::GrabbedEnd);
                 }
                 else {
@@ -1647,7 +1444,7 @@ impl Player {
     }
 
     fn check_pass_platform(&mut self, context: &mut StepContext) -> bool {
-        if let Location::Surface { platform_i, .. } = self.location {
+        if let Location::Surface { platform_i, .. } = self.body.location {
             if let Some(platform) = context.surfaces.get(platform_i) {
                 let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
                 let pass_frame = last_action_frame.min(4);
@@ -1703,7 +1500,7 @@ impl Player {
         let turn = self.relative_f(context.input[0].stick_x) < -0.79 && self.relative_f(context.input[2].stick_x) > -0.3;
         if turn {
             self.set_action(context, Action::SmashTurn);
-            self.face_right = !self.face_right;
+            self.body.face_right = !self.body.face_right;
         }
         turn
     }
@@ -1730,8 +1527,8 @@ impl Player {
         if self.jump_input(&context.input).jump() && self.air_jumps_left > 0 {
             self.air_jump_particles(context);
             self.air_jumps_left -= 1;
-            self.y_vel = context.entity_def.air_jump_y_vel;
-            self.x_vel = context.entity_def.air_jump_x_vel * context.input[0].stick_x;
+            self.body.y_vel = context.entity_def.air_jump_y_vel;
+            self.body.x_vel = context.entity_def.air_jump_x_vel * context.input[0].stick_x;
             self.fastfalled = false;
 
             if self.relative_f(context.input.stick_x.value) < -0.3 {
@@ -1843,7 +1640,7 @@ impl Player {
         if context.input.a.press {
             if (context.input[0].stick_x >=  0.79 && context.input[2].stick_x < 0.3) ||
                (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > 0.3) {
-                self.face_right = context.input.c_stick_x.value > 0.0;
+                self.body.face_right = context.input.c_stick_x.value > 0.0;
                 self.set_action(context, Action::Fsmash);
                 return true;
             }
@@ -1857,7 +1654,7 @@ impl Player {
             }
         }
         else if context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
-            self.face_right = context.input.c_stick_x.value > 0.0;
+            self.body.face_right = context.input.c_stick_x.value > 0.0;
             self.set_action(context, Action::Fsmash);
             return true;
         }
@@ -1995,7 +1792,7 @@ impl Player {
             }
             Some(Action::JumpSquat) => {
                 self.set_airbourne(context);
-                if let &mut Location::Airbourne { ref mut y, .. } = &mut self.location {
+                if let &mut Location::Airbourne { ref mut y, .. } = &mut self.body.location {
                     *y += 0.0001;
                 }
 
@@ -2007,15 +1804,15 @@ impl Player {
                 };
 
                 if shorthop {
-                    self.y_vel = context.entity_def.jump_y_init_vel_short;
+                    self.body.y_vel = context.entity_def.jump_y_init_vel_short;
                 }
                 else {
-                    self.y_vel = context.entity_def.jump_y_init_vel;
+                    self.body.y_vel = context.entity_def.jump_y_init_vel;
                 }
 
-                self.x_vel = self.x_vel * context.entity_def.jump_x_vel_ground_mult + context.input[0].stick_x * context.entity_def.jump_x_init_vel;
-                if self.x_vel.abs() > context.entity_def.jump_x_term_vel {
-                    self.x_vel = context.entity_def.jump_x_term_vel * self.x_vel.signum();
+                self.body.x_vel = self.body.x_vel * context.entity_def.jump_x_vel_ground_mult + context.input[0].stick_x * context.entity_def.jump_x_init_vel;
+                if self.body.x_vel.abs() > context.entity_def.jump_x_term_vel {
+                    self.body.x_vel = context.entity_def.jump_x_term_vel * self.body.x_vel.signum();
                 }
 
                 if self.relative_f(context.input[2].stick_x) >= -0.3 {
@@ -2110,14 +1907,13 @@ impl Player {
     }
 
     pub fn set_action_idle_from_ledge(&mut self, context: &mut StepContext) {
-        if let Location::GrabbedLedge { platform_i, .. } = self.location {
+        if let Location::GrabbedLedge { platform_i, .. } = self.body.location {
             let platform = &context.surfaces[platform_i];
             let (world_x, _) = self.bps_xy(context);
             let x = platform.world_x_to_plat_x_clamp(world_x);
 
-            self.location = Location::Surface { platform_i, x };
+            self.body.location = Location::Surface { platform_i, x };
             self.set_action(context, Action::Idle);
-            self.frames_since_ledge = 0;
         }
         else {
             panic!("Location must be on ledge to call this function.")
@@ -2127,11 +1923,10 @@ impl Player {
     pub fn set_action_fall_from_ledge_jump(&mut self, context: &mut StepContext) {
         self.set_airbourne(context);
         self.set_action(context, Action::Fall);
-        self.frames_since_ledge = 0;
     }
 
     pub fn relative_f(&self, input: f32) -> f32 {
-        input * if self.face_right { 1.0 } else { -1.0 }
+        self.body.relative_f(input)
     }
 
     /// Helper function to safely get the current entity frame
@@ -2159,22 +1954,22 @@ impl Player {
     }
 
     fn fall_action(&mut self, entity_def: &EntityDef) {
-        self.y_vel += entity_def.gravity;
-        if self.y_vel < entity_def.terminal_vel {
-            self.y_vel = entity_def.terminal_vel;
+        self.body.y_vel += entity_def.gravity;
+        if self.body.y_vel < entity_def.terminal_vel {
+            self.body.y_vel = entity_def.terminal_vel;
         }
     }
 
     fn fastfall_action(&mut self, context: &mut StepContext) {
         if !self.fastfalled {
-            if context.input[0].stick_y < -0.65 && context.input[3].stick_y > -0.1 && self.y_vel < 0.0 {
+            if context.input[0].stick_y < -0.65 && context.input[3].stick_y > -0.1 && self.body.y_vel < 0.0 {
                 self.fastfalled = true;
-                self.y_vel = context.entity_def.fastfall_terminal_vel;
+                self.body.y_vel = context.entity_def.fastfall_terminal_vel;
             }
             else {
-                self.y_vel += context.entity_def.gravity;
-                if self.y_vel < context.entity_def.terminal_vel {
-                    self.y_vel = context.entity_def.terminal_vel;
+                self.body.y_vel += context.entity_def.gravity;
+                if self.body.y_vel < context.entity_def.terminal_vel {
+                    self.body.y_vel = context.entity_def.terminal_vel;
                 }
             }
         }
@@ -2185,135 +1980,29 @@ impl Player {
      */
 
     pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
-        if let Hitlag::None = self.hitlag {
-            let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
-
-            if self.kb_x_vel.abs() > 0.0 {
-                let vel_dir = self.kb_x_vel.signum();
-                if self.is_airbourne() {
-                    self.kb_x_vel -= self.kb_x_dec;
-                } else {
-                    self.kb_x_vel -= vel_dir * context.entity_def.friction;
-                }
-                if vel_dir != self.kb_x_vel.signum() {
-                    self.kb_x_vel = 0.0;
-                }
+        let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
+        match self.body.physics_step(context, fighter_frame) {
+            Some(PhysicsResult::Fall) => {
+                self.fastfalled = false;
+                self.set_action(context, Action::Fall);
             }
-
-            if self.kb_y_vel.abs() > 0.0 {
-                if self.is_airbourne() {
-                    let vel_dir = self.kb_y_vel.signum();
-                    self.kb_y_vel -= self.kb_y_dec;
-                    if vel_dir != self.kb_y_vel.signum() {
-                        self.kb_y_vel = 0.0;
-                    }
-                }
-                else {
-                    self.kb_y_vel = 0.0;
-                }
+            Some(PhysicsResult::Land) => {
+                self.hitstun = 0.0;
+                self.land(context);
             }
-
-            // calculate velocity
-            match fighter_frame.x_vel_modify {
-                VelModify::Set (x_vel) => self.x_vel = self.relative_f(x_vel),
-                VelModify::Add (x_vel) => self.x_vel += self.relative_f(x_vel),
-                VelModify::None => { }
+            Some(PhysicsResult::Teeter) => {
+                self.set_action(context, Action::Teeter);
             }
-            match fighter_frame.y_vel_modify {
-                VelModify::Set (y_vel) => self.y_vel = y_vel,
-                VelModify::Add (y_vel) => self.y_vel += y_vel,
-                VelModify::None => { }
+            Some(PhysicsResult::LedgeGrab) => {
+                self.fastfalled = false;
+                self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
+                self.hit_by = None;
+                self.set_action(context, Action::LedgeGrab);
             }
-
-            let x_vel = self.x_vel + self.kb_x_vel + self.relative_f(fighter_frame.x_vel_temp);
-            let y_vel = self.y_vel + self.kb_y_vel + fighter_frame.y_vel_temp;
-
-            // update position
-            match self.location.clone() {
-                Location::Airbourne { x, y } => {
-                    let new_x = x + x_vel;
-                    let new_y = y + y_vel;
-                    if let Some(platform_i) = self.land_stage_collision(context, (x, y), (new_x, new_y)) {
-                        let x = context.stage.surfaces[platform_i].world_x_to_plat_x(new_x);
-                        self.land(context, platform_i, x);
-                    } else {
-                        self.location = Location::Airbourne { x: new_x, y: new_y };
-                    }
-                }
-                Location::Surface { platform_i, mut x } => {
-                    if let Some(platform) = context.stage.surfaces.get(platform_i) {
-                        x += x_vel * platform.floor_angle().unwrap_or_default().cos();
-                        self.floor_move(context, platform, platform_i, x);
-                    }
-                    else {
-                        self.location = Location::Airbourne { x: 0.0, y: 0.0 };
-                        self.set_action(context, Action::Fall);
-                    }
-                }
-                _ => { }
-            }
-
-            // death
-            let blast = &context.stage.blast;
-            let (x, y) = self.bps_xy(context);
-            if x < blast.left() || x > blast.right() || y < blast.bot() || y > blast.top() {
+            Some(PhysicsResult::OutOfBounds) => {
                 self.die(context, game_frame, goal);
             }
-
-            // ledge grabs
-            let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
-            self.frames_since_ledge += 1;
-            if self.frames_since_ledge >= 30 && self.y_vel < 0.0 && context.input.stick_y.value > -0.5 {
-                if let Some(ref ledge_grab_box) = fighter_frame.ledge_grab_box {
-                    self.check_ledge_grab(context, &ledge_grab_box);
-                }
-            }
-        }
-    }
-
-    fn floor_move(&mut self, context: &mut StepContext, platform: &Surface, platform_i: usize, x: f32) {
-        let connected_floors = context.stage.connected_floors(platform_i);
-        if platform.plat_x_in_bounds(x) {
-            self.location = Location::Surface { platform_i, x };
-        }
-        else if x < 0.0 && connected_floors.left_i.is_some() {
-            let new_platform_i = connected_floors.left_i.unwrap();
-            let new_platform = &context.stage.surfaces[new_platform_i];
-            let world_x = platform.plat_x_to_world_x(x);
-            let x = new_platform.world_x_to_plat_x(world_x);
-            self.floor_move(context, new_platform, new_platform_i, x);
-        }
-        else if x > 0.0 && connected_floors.right_i.is_some() {
-            let new_platform_i = connected_floors.right_i.unwrap();
-            let new_platform = &context.stage.surfaces[new_platform_i];
-            let world_x = platform.plat_x_to_world_x(x);
-            let x = new_platform.world_x_to_plat_x(world_x);
-            self.floor_move(context, new_platform, new_platform_i, x);
-        }
-        else if !context.entity_def.actions[self.action as usize].frames[self.frame as usize].ledge_cancel {
-            self.location = Location::Surface { platform_i, x: platform.plat_x_clamp(x) };
-        }
-        else if self.face_right && x < 0.0 || !self.face_right && x >= 0.0 || // facing away from the ledge
-          self.relative_f(context.input.stick_x.value) > 0.6
-        {
-            // fall
-            self.set_action(context, Action::Fall);
-            self.set_airbourne(context);
-
-            // set max velocity
-            if self.x_vel.abs() > context.entity_def.air_x_term_vel {
-                self.x_vel = self.x_vel.signum() * context.entity_def.air_x_term_vel;
-            }
-
-            // force set past platform
-            let x_offset = if x > 0.0 { 0.000001 } else { -0.000001 }; // just being cautious, probably dont need this
-            let (air_x, air_y) = platform.plat_x_to_world_p(x + x_offset);
-            self.location = Location::Airbourne { x: air_x, y: air_y };
-        }
-        else {
-            self.x_vel = 0.0;
-            self.location = Location::Surface { platform_i, x: platform.plat_x_clamp(x) };
-            self.set_action(context, Action::Teeter);
+            None => { }
         }
     }
 
@@ -2325,62 +2014,9 @@ impl Player {
             Some(Action::ShieldOn) |
             Some(Action::ShieldOff) |
             Some(Action::Damage)
-              => { self.apply_friction_weak(fighter) }
-            _ => { self.apply_friction_strong(fighter) }
+              => { self.body.apply_friction_weak(fighter) }
+            _ => { self.body.apply_friction_strong(fighter) }
         }
-    }
-
-    // TODO: These functions are split up as weak/strong so that one day they may be called individually by player scripts
-    fn apply_friction_weak(&mut self, fighter: &EntityDef) {
-        if self.x_vel > 0.0 {
-            self.x_vel -= fighter.friction;
-            if self.x_vel < 0.0 {
-                self.x_vel = 0.0;
-            }
-        }
-        else {
-            self.x_vel += fighter.friction;
-            if self.x_vel > 0.0 {
-                self.x_vel = 0.0;
-            }
-        }
-    }
-
-    fn apply_friction_strong(&mut self, fighter: &EntityDef) {
-        if self.x_vel > 0.0 {
-            self.x_vel -= fighter.friction * if self.x_vel > fighter.walk_max_vel { 2.0 } else { 1.0 };
-            if self.x_vel < 0.0 {
-                self.x_vel = 0.0;
-            }
-        }
-        else {
-            self.x_vel += fighter.friction * if self.x_vel < -fighter.walk_max_vel { 2.0 } else { 1.0 };
-            if self.x_vel > 0.0 {
-                self.x_vel = 0.0;
-            }
-        }
-    }
-
-    /// returns the index platform that the player will land on
-    fn land_stage_collision(&mut self, context: &mut StepContext, old_p: (f32, f32), new_p: (f32, f32)) -> Option<usize> {
-        if new_p.1 > old_p.1 {
-            return None
-        }
-
-        for (surface_i, surface) in context.stage.surfaces.iter().enumerate() {
-            if !self.pass_through_platform(context, surface) &&
-                surface.floor.is_some() &&
-                geometry::segments_intersect(old_p, new_p, surface.p1(), surface.p2())
-            {
-                return Some(surface_i)
-            }
-        }
-        None
-    }
-
-    pub fn pass_through_platform(&self, context: &mut StepContext, platform: &Surface) -> bool {
-        let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
-        platform.is_pass_through() && fighter_frame.pass_through && context.input[0].stick_y <= -0.56
     }
 
     /// Returns the Rect surrounding the player that the camera must include
@@ -2394,7 +2030,7 @@ impl Player {
                 let mut bot   = y - 5.0;
                 let mut top   = y + 25.0;
 
-                if self.face_right {
+                if self.body.face_right {
                     left  -= 7.0;
                     right += 40.0;
                 }
@@ -2435,7 +2071,7 @@ impl Player {
         }
     }
 
-    fn land(&mut self, context: &mut StepContext, platform_i: usize, x: f32) {
+    fn land(&mut self, context: &mut StepContext) {
         let action = Action::from_u64(self.action);
 
         self.land_frame_skip = match action {
@@ -2473,51 +2109,46 @@ impl Player {
             Some(Action::SpecialFall) |
             Some(Action::AerialDodge) |
             None => self.set_action(context, Action::SpecialLand),
-            _ if self.y_vel >= -1.0 => { self.set_action(context, Action::Idle) }, // no impact land
+            Some(_) if self.body.y_vel >= -1.0 => { self.set_action(context, Action::Idle) }, // no impact land
             Some(_) => self.set_action(context, Action::Land)
         }
 
-        self.y_vel = 0.0;
-        self.kb_y_vel = 0.0;
-        self.hitstun = 0.0;
         self.fastfalled = false;
         self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
         self.hit_by = None;
-        self.location = Location::Surface { platform_i, x };
     }
 
     fn walk(&mut self, context: &mut StepContext) {
         let walk_init_vel = self.relative_f(context.entity_def.walk_init_vel);
-        if (walk_init_vel > 0.0 && self.x_vel < walk_init_vel) ||
-           (walk_init_vel < 0.0 && self.x_vel > walk_init_vel) {
-            self.x_vel += walk_init_vel;
+        if (walk_init_vel > 0.0 && self.body.x_vel < walk_init_vel) ||
+           (walk_init_vel < 0.0 && self.body.x_vel > walk_init_vel) {
+            self.body.x_vel += walk_init_vel;
         }
         self.set_action(context, Action::Walk);
     }
 
     fn dash(&mut self, context: &mut StepContext) {
-        self.x_vel = self.relative_f(context.entity_def.dash_init_vel);
+        self.body.x_vel = self.relative_f(context.entity_def.dash_init_vel);
         self.set_action(context, Action::Dash);
     }
 
     fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
-        if context.stage.respawn_points.len() == 0 {
-            self.location = Location::Airbourne { x: 0.0, y: 0.0 };
-            self.face_right = true;
+        self.body = if context.stage.respawn_points.len() == 0 {
+            Body::new(
+                Location::Airbourne { x: 0.0, y: 0.0 },
+                true
+            )
         } else {
             let respawn = &context.stage.respawn_points[self.id % context.stage.respawn_points.len()];
-            self.location = Location::Airbourne { x: respawn.x, y: respawn.y };
-            self.face_right = respawn.face_right;
-        }
-        self.damage = 0.0;
-        self.x_vel = 0.0;
-        self.y_vel = 0.0;
-        self.kb_x_vel = 0.0;
-        self.kb_y_vel = 0.0;
+            Body::new(
+                Location::Airbourne { x: respawn.x, y: respawn.y },
+                respawn.face_right
+            )
+        };
         self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
         self.fastfalled = false;
         self.hitstun = 0.0;
-        self.hitlag = Hitlag::None;
+
 
         self.result.deaths.push(DeathRecord {
             player: self.hit_by,
@@ -2544,57 +2175,11 @@ impl Player {
         }
     }
 
-    fn check_ledge_grab(&mut self, context: &mut StepContext, ledge_grab_box: &LedgeGrabBox) {
-        for (platform_i, platform) in context.surfaces.iter().enumerate() {
-            let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, true));
-            let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, false));
-
-            // If both left and right ledges are in range then keep the same direction.
-            // This prevents always facing left or right on small surfaces.
-            if left_grab && !right_grab {
-                self.face_right = true;
-            }
-            else if !left_grab && right_grab {
-                self.face_right = false;
-            }
-
-            if left_grab || right_grab {
-                self.x_vel = 0.0;
-                self.y_vel = 0.0;
-                self.fastfalled = false;
-                self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
-                self.hit_by = None;
-                let d_x = context.entity_def.ledge_grab_x;
-                let d_y = context.entity_def.ledge_grab_y;
-                self.location = Location::GrabbedLedge { platform_i, d_x, d_y, logic: LedgeLogic::Hog };
-                self.set_action(context, Action::LedgeGrab);
-            }
-        }
-    }
-
-    fn check_ledge_collision(&self, ledge_grab_box: &LedgeGrabBox, ledge: (f32, f32)) -> bool {
-        if let Location::Airbourne { x: p_x, y: p_y } = self.location {
-            let b_x1 = self.relative_f(ledge_grab_box.x1).min(self.relative_f(ledge_grab_box.x2));
-            let b_y1 =                 ledge_grab_box.y1.min(ledge_grab_box.y2);
-
-            let b_x2 = self.relative_f(ledge_grab_box.x1).max(self.relative_f(ledge_grab_box.x2));
-            let b_y2 =                 ledge_grab_box.y1.max(ledge_grab_box.y2);
-
-            let (l_x, l_y) = ledge;
-
-            l_x > p_x + b_x1 && l_x < p_x + b_x2 &&
-            l_y > p_y + b_y1 && l_y < p_y + b_y2
-        } else {
-            false
-        }
-    }
-
     pub fn debug_print(&self, fighters: &KeyedContextVec<EntityDef>, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let fighter = &fighters[self.entity_def_key.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
-            lines.push(format!("Entity: {:?}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
-                index, self.location, self.x_vel, self.y_vel, self.kb_x_vel, self.kb_y_vel));
+            lines.push(self.body.debug_string(index));
         }
 
         if debug.input {
@@ -2631,28 +2216,15 @@ impl Player {
         }
 
         if debug.frame {
-            lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  hitlag: {:?}  tech timer: {:?}  lcancel timer: {}",
-                index, self.shield_hp, self.hitstun, self.hitlag, self.tech_timer, self.lcancel_timer));
+            lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  tech timer: {:?}  lcancel timer: {}",
+                index, self.shield_hp, self.hitstun, self.tech_timer, self.lcancel_timer));
         }
         lines
     }
 
-    pub fn angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
-        if let Some(entity_frame) = self.get_entity_frame(entity_def) {
-             match self.location {
-                Location::Surface { platform_i, .. } if entity_frame.use_platform_angle => {
-                    surfaces.get(platform_i).map_or(0.0, |x| x.floor_angle().unwrap_or_default())
-                }
-                _ => 0.0,
-            }
-        } else {
-            0.0
-        }
-    }
-
     pub fn result(&self) -> RawPlayerResult {
         let mut result = self.result.clone();
-        result.final_damage = Some(self.damage);
+        result.final_damage = Some(self.body.damage);
         result.ended_as_fighter = Some(self.entity_def_key.clone());
         result.team = self.team;
         result
@@ -2689,8 +2261,8 @@ impl Player {
     }
 
     pub fn knockback_particles(&mut self, context: &mut StepContext) {
-        let kb_vel = (self.kb_x_vel * self.kb_x_vel + self.kb_y_vel * self.kb_y_vel).sqrt();
-        let angle = self.kb_y_vel.atan2(self.kb_x_vel) + context.rng.gen_range(-0.2, 0.2);
+        let kb_vel = (self.body.kb_x_vel * self.body.kb_x_vel + self.body.kb_y_vel * self.body.kb_y_vel).sqrt();
+        let angle = self.body.kb_y_vel.atan2(self.body.kb_x_vel) + context.rng.gen_range(-0.2, 0.2);
         let vec_mult = context.rng.gen_range(0.7, 1.0);
         let (x, y) = self.bps_xy(context);
         let num = if self.hitstun > 0.0 {
@@ -2790,7 +2362,7 @@ impl Player {
                 z,
                 angle:       context.rng.gen_range(0.0, 2.0 * PI),
                 p_type:      ParticleType::Spark {
-                    x_vel:      if self.face_right { context.rng.gen_range(-0.3, 0.0) } else { context.rng.gen_range(0.0, 0.3) },
+                    x_vel:      if self.body.face_right { context.rng.gen_range(-0.3, 0.0) } else { context.rng.gen_range(0.0, 0.3) },
                     y_vel:      context.rng.gen_range(0.0, 0.3),
                     z_vel:      context.rng.gen_range(0.0, 0.3) * z.signum(),
                     size:       context.rng.gen_range(2.0, 4.0),
@@ -2818,9 +2390,9 @@ impl Player {
         } else { None };
 
         RenderPlayer {
-            team:        self.team,
-            damage:      self.damage,
-            stocks:      self.stocks,
+            team:   self.team,
+            damage: self.body.damage,
+            stocks: self.stocks,
             shield,
         }
     }

@@ -1,6 +1,6 @@
 use crate::collision::CollisionResult;
 use crate::entity::{DebugEntity, StepContext, EntityKey};
-use crate::location::Location;
+use crate::body::{Body, PhysicsResult};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
@@ -25,10 +25,7 @@ pub struct Item {
     pub action: u64,
     pub frame: i64,
     pub frame_no_restart: i64,
-    pub x_vel: f32,
-    pub y_vel: f32,
-    pub location: Location,
-    pub face_right: bool,
+    pub body: Body,
 }
 
 impl Item {
@@ -57,36 +54,24 @@ impl Item {
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext) {
-        // TODO: Surely I can store all this logic in a shared Location enum
-        match self.location.clone() {
-            Location::Airbourne { x, y } => {
-                let new_x = x + self.x_vel;
-                let new_y = y + self.y_vel;
-                if let Some(platform_i) = self.land_stage_collision(context, (x, y), (new_x, new_y)) {
-                    let x = context.stage.surfaces[platform_i].world_x_to_plat_x(new_x);
-                    //self.land(context, platform_i, x);
-                } else {
-                    self.location = Location::Airbourne { x: new_x, y: new_y };
-                }
+        let fighter_frame = &context.entity_def.actions[self.action as usize].frames[self.frame as usize];
+        match self.body.physics_step(context, fighter_frame) {
+            Some(PhysicsResult::Fall) => {
+                self.set_action(context, ItemAction::Fall);
             }
-            Location::Surface { platform_i, mut x } => {
-                if let Some(platform) = context.stage.surfaces.get(platform_i) {
-                    x += self.x_vel * platform.floor_angle().unwrap_or_default().cos();
-                    //self.floor_move(context, platform, platform_i, x);
-                }
-                else {
-                    self.location = Location::Airbourne { x: 0.0, y: 0.0 };
-                    self.set_action(context, ItemAction::Fall);
-                }
+            Some(PhysicsResult::Land) => {
+                self.set_action(context, ItemAction::Idle);
+            }
+            Some(PhysicsResult::OutOfBounds) => {
+                context.delete_self = true;
             }
             _ => { }
         }
+    }
 
-        let blast = &context.stage.blast;
-        let (x, y) = self.bps_xy(context);
-        if x < blast.left() || x > blast.right() || y < blast.bot() || y > blast.top() {
-            context.delete_self = true;
-        }
+    pub fn _bps_xy(&self, context: &StepContext) -> (f32, f32) {
+        let action_frame = self.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
+        self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces)
     }
 
     fn action_expired(&mut self, context: &mut StepContext) {
@@ -143,8 +128,7 @@ impl Item {
         let mut lines = vec!();
         let entity = &entities[self.entity_def_key.as_ref()];
         if debug.physics {
-            lines.push(format!("Entity: {:?}  location: {:?}  x_vel: {:.5}, y_vel: {:.5}",
-                i, self.location, self.x_vel, self.y_vel));
+            lines.push(self.body.debug_string(i));
         }
         if debug.action {
             let action = ItemAction::from_u64(self.action).unwrap();

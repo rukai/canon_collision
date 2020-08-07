@@ -1,5 +1,5 @@
 use crate::collision::CollisionResult;
-use crate::item::Item;
+use crate::item::{Item, ItemAction};
 use crate::particle::Particle;
 use crate::player::{Player, RenderPlayer};
 use crate::projectile::{Projectile, ProjectileAction};
@@ -43,15 +43,16 @@ pub struct Entity {
 impl Entity {
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
         match &self.ty {
-            EntityType::Player (player) => player.is_hogging_ledge(check_platform_i, face_right),
+            EntityType::Player (player) => player.body.is_hogging_ledge(check_platform_i, face_right),
+            EntityType::Item (item) => item.body.is_hogging_ledge(check_platform_i, face_right),
             _ => false,
         }
     }
 
     pub fn face_right(&self) -> bool {
         match &self.ty {
-            EntityType::Player (player) => player.face_right,
-            EntityType::Item   (item)   => item.face_right,
+            EntityType::Player (player) => player.body.face_right,
+            EntityType::Item   (item)   => item.body.face_right,
             EntityType::Projectile (projectile) => {
                 let angle = projectile.angle % (PI * 2.0); // TODO: does this handle negative numbers?
                 let face_left = angle > PI / 2.0 && angle < PI * 3.0 / 2.0;
@@ -65,9 +66,10 @@ impl Entity {
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
+        let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
         match &self.ty {
-            EntityType::Player     (player)     => player.public_bps_xy(entities, entity_defs, surfaces),
-            EntityType::Item       (item)       => item.public_bps_xy(entities, entity_defs, surfaces),
+            EntityType::Player     (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
+            EntityType::Item       (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
             EntityType::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
@@ -103,11 +105,11 @@ impl Entity {
         }
     }
 
+    /// TODO: Wont need this anymore when we make surfaces into entities as they will be generational
     pub fn platform_deleted(&mut self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
         match &mut self.ty {
             EntityType::Player     (player) => player.platform_deleted(entities, entity_defs, surfaces, deleted_platform_i),
-            EntityType::Player     (item)   => item.platform_deleted(entities, entity_defs, surfaces, deleted_platform_i),
-            EntityType::Projectile (_)      => { }
+            _ => { }
         }
     }
 
@@ -120,10 +122,14 @@ impl Entity {
     }
 
     pub fn angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
-        match &self.ty {
-            EntityType::Player (player) => player.angle(entity_def, surfaces),
-            EntityType::Item (item) => item.angle(entity_def, surfaces),
-            EntityType::Projectile (projectile) => projectile.angle,
+        if let Some(entity_frame) = self.get_entity_frame(entity_def) {
+            match &self.ty {
+                EntityType::Player (player) => player.body.angle(entity_frame, surfaces),
+                EntityType::Item (item) => item.body.angle(entity_frame, surfaces),
+                EntityType::Projectile (projectile) => projectile.angle,
+            }
+        } else {
+            0.0
         }
     }
 
@@ -274,7 +280,8 @@ impl Entity {
 
         let render_type = match &self.ty {
             EntityType::Player (player) => RenderEntityType::Player (player.render(entities, entity_defs, surfaces)),
-            EntityType::Projectile (_) => RenderEntityType::Projectile,
+            EntityType::Projectile (_)  => RenderEntityType::Projectile,
+            EntityType::Item (_)        => RenderEntityType::Item,
         };
 
         RenderEntity {
@@ -321,31 +328,19 @@ pub struct RenderEntity {
 pub enum RenderEntityType {
     Player (RenderPlayer),
     Projectile,
+    Item,
 }
 
 impl RenderEntityType {
     /// TODO: figure out a better spot to put this so we can access from the hurtbox generator.
     pub fn action_index_to_string(&self, action_index: usize) -> String {
         match self {
-            RenderEntityType::Player (_) => {
-                match Action::from_u64(action_index as u64) {
-                    Some(action) => {
-                        let action: &str = action.into();
-                        action.to_string()
-                    }
-                    None => format!("{}", action_index),
-                }
-            }
-            RenderEntityType::Projectile => {
-                match ProjectileAction::from_u64(action_index as u64) {
-                    Some(action) => {
-                        let action: &str = action.into();
-                        action.to_string()
-                    }
-                    None => format!("{}", action_index),
-                }
-            }
+            RenderEntityType::Player (_) =>           Action::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
+            RenderEntityType::Projectile => ProjectileAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
+            RenderEntityType::Item       =>       ItemAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
         }
+        .map(|x| x.to_string())
+        .unwrap_or(format!("{}", action_index))
     }
 }
 

@@ -8,21 +8,21 @@
 
 pub(crate) mod ai;
 pub(crate) mod app;
+pub(crate) mod body;
 pub(crate) mod camera;
 pub(crate) mod cli;
 pub(crate) mod collision;
 pub(crate) mod entity;
 pub(crate) mod game;
 pub(crate) mod graphics;
+pub(crate) mod item;
 pub(crate) mod menu;
 pub(crate) mod particle;
 pub(crate) mod player;
+pub(crate) mod projectile;
 pub(crate) mod replays;
 pub(crate) mod results;
 pub(crate) mod rules;
-pub(crate) mod projectile;
-pub(crate) mod item;
-pub(crate) mod location;
 
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;
