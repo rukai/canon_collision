@@ -1,4 +1,4 @@
-use crate::collision::CollisionResult;
+use crate::collision::collision_box::CollisionResult;
 use crate::item::{Item, ItemAction};
 use crate::particle::Particle;
 use crate::player::{Player, RenderPlayer};
@@ -71,6 +71,14 @@ impl Entity {
             EntityType::Player     (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
             EntityType::Item       (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
             EntityType::Projectile (projectile) => (projectile.x, projectile.y)
+        }
+    }
+
+    pub fn item_grab(&mut self, hit: EntityKey) {
+        match &mut self.ty {
+            EntityType::Player     (player) => player.item_grab(),
+            EntityType::Item       (item)   => item.grabbed(hit),
+            EntityType::Projectile (_)      => { }
         }
     }
 

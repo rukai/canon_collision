@@ -1,5 +1,6 @@
 use crate::camera::Camera;
-use crate::collision::collision_check;
+use crate::collision::collision_box;
+use crate::collision::item_grab;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
 use crate::player::{Player};
@@ -1055,8 +1056,9 @@ impl Game {
             let mut rng = ChaChaRng::from_seed(self.get_seed());
             let mut new_entities = vec!();
 
-            // To synchronize entity stepping, we step through entity logic in stages (action logic, physics logic, collision logic)
+            // To synchronize entity stepping, we step through entity logic in stages (item grab logic, action logic, physics logic, collision logic)
             // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
+
 
             // step each entity action
             let mut action_entities = self.entities.clone();
@@ -1082,6 +1084,15 @@ impl Game {
                 };
                 if delete_self {
                     action_entities.remove(key);
+                }
+            }
+
+            // step each player item grab
+            // No need to clone entity slotmap, all the real logic lives in collision_check which operates on all entities at once.
+            let item_grab_results = item_grab::collision_check(&action_entities, &self.package.entities, &self.stage.surfaces);
+            for (key, hit) in item_grab_results {
+                if let Some(entity) = action_entities.get_mut(key) {
+                    entity.item_grab(hit);
                 }
             }
 
@@ -1112,9 +1123,16 @@ impl Game {
                 }
             }
 
+            // TODO: resolve invalid states resulting from physics_step that occured because are
+            // entities only see other entities from the previous frame.
+            // e.g. Two players both grabbing the same ledge, we should randomly pick a player that misses the ledge.
+            //
+            // Alternatively we could randomize the physics_step order and use the current state of other entities
+            // This might be needed actually, I dont undoing a ledge grab will end up nice and/or possible
+
             // check for hits and run hit logic
             let mut collision_entities = physics_entities.clone();
-            let collision_results = collision_check(&physics_entities, &self.package.entities, &self.stage.surfaces);
+            let collision_results = collision_box::collision_check(&physics_entities, &self.package.entities, &self.stage.surfaces);
             let keys: Vec<_> = collision_entities.keys().collect();
             for key in keys {
                 let delete_self = {

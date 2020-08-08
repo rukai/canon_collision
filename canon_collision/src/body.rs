@@ -1,7 +1,8 @@
 use crate::entity::{EntityKey, Entities, StepContext};
 
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame, LedgeGrabBox};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 use canon_collision_lib::geometry;
+use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::Surface;
 
@@ -292,7 +293,7 @@ impl Body {
         }
     }
 
-    fn check_ledge_grab(&mut self, context: &mut StepContext, ledge_grab_box: &LedgeGrabBox) -> Option<PhysicsResult> {
+    fn check_ledge_grab(&mut self, context: &mut StepContext, ledge_grab_box: &Rect) -> Option<PhysicsResult> {
         for (platform_i, platform) in context.surfaces.iter().enumerate() {
             let left_grab  = platform.left_grab()  && self.check_ledge_collision(ledge_grab_box, platform.left_ledge())  && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, true));
             let right_grab = platform.right_grab() && self.check_ledge_collision(ledge_grab_box, platform.right_ledge()) && context.entities.iter().all(|(_, x)| !x.is_hogging_ledge(platform_i, false));
@@ -319,7 +320,7 @@ impl Body {
         None
     }
 
-    fn check_ledge_collision(&self, ledge_grab_box: &LedgeGrabBox, ledge: (f32, f32)) -> bool {
+    fn check_ledge_collision(&self, ledge_grab_box: &Rect, ledge: (f32, f32)) -> bool {
         if let Location::Airbourne { x: p_x, y: p_y } = self.location {
             let b_x1 = self.relative_f(ledge_grab_box.x1).min(self.relative_f(ledge_grab_box.x2));
             let b_y1 =                 ledge_grab_box.y1.min(ledge_grab_box.y2);

@@ -1,4 +1,4 @@
-use crate::collision::CollisionResult;
+use crate::collision::collision_box::CollisionResult;
 use crate::entity::{DebugEntity, StepContext, EntityKey};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};

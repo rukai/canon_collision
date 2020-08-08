@@ -7,7 +7,7 @@ use canon_collision_lib::stage::Surface;
 use treeflection::KeyedContextVec;
 use slotmap::SecondaryMap;
 
-/// returns a list of hit results for each player
+/// returns a list of hit results for each entity
 pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> SecondaryMap<EntityKey, Vec<CollisionResult>> {
     let mut result = SecondaryMap::<EntityKey, Vec<CollisionResult>>::new();
     for key in entities.keys() {
@@ -17,14 +17,13 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
     'entity_atk: for (entity_atk_i, entity_atk) in entities.iter() {
         let entity_atk_xy = entity_atk.public_bps_xy(entities, entity_definitions, surfaces);
         let entity_atk_def = &entity_definitions[entity_atk.entity_def_key()];
+        let frame_atk = entity_atk.relative_frame(entity_atk_def, surfaces);
+        let colboxes_atk = frame_atk.get_hitboxes();
         for (entity_defend_i, entity_defend) in entities.iter() {
             let entity_defend_xy = entity_defend.public_bps_xy(entities, entity_definitions, surfaces);
             if entity_atk_i != entity_defend_i && entity_atk.can_hit(entity_defend) && entity_atk.hitlist().iter().all(|x| *x != entity_defend_i) {
                 let entity_defend_def = &entity_definitions[entity_defend.entity_def_key()];
-
-                let frame_atk = &entity_atk.relative_frame(entity_atk_def, surfaces);
-                let frame_defend = &entity_defend.relative_frame(entity_defend_def, surfaces);
-                let colboxes_atk = frame_atk.get_hitboxes();
+                let frame_defend = entity_defend.relative_frame(entity_defend_def, surfaces);
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
@@ -47,7 +46,7 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
                         if hitbox_atk.enable_clang {
                             for colbox_def in frame_defend.colboxes.iter() {
                                 match &colbox_def.role {
-                                // TODO: How do we only run the clang handler once?
+                                    // TODO: How do we only run the clang handler once?
                                     &CollisionBoxRole::Hit (ref hitbox_def) => {
                                         if let ColBoxCollisionResult::Hit (point) = colbox_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, colbox_def) {
                                             let damage_diff = hitbox_atk.damage as i64 - hitbox_def.damage as i64; // TODO: retrieve proper damage with move staling etc

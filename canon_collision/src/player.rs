@@ -1,4 +1,4 @@
-use crate::collision::CollisionResult;
+use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
@@ -6,6 +6,7 @@ use crate::rules::{Goal, Rules};
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey};
 use crate::projectile::Projectile;
 use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
+use crate::item::{Item, ItemAction};
 
 use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;
@@ -586,6 +587,8 @@ impl Player {
                 Action::Dsmash    | Action::Fsmash |
                 Action::Usmash    | Action::Idle |
                 Action::Grab      | Action::DashGrab |
+                Action::TauntUp   | Action::TauntDown |
+                Action::TauntLeft | Action::TauntRight |
                 Action::CrouchEnd
                 => self.ground_idle_action(context),
 
@@ -997,8 +1000,29 @@ impl Player {
             }
         }
 
+        if let Some(Action::TauntRight) = Action::from_u64(self.action) {
+            if self.frame == 0 {
+                let (x, y) = self.bps_xy(context);
+                let x = x + 15.0;
+                let y = y + 10.0;
+                context.new_entities.push(Entity {
+                    ty: EntityType::Item(
+                        Item {
+                            owner_id: None,
+                            entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
+                            action: ItemAction::Fall as u64,
+                            frame: 0,
+                            frame_no_restart: 0,
+                            body: Body::new(Location::Airbourne { x, y }, true),
+                        }
+                    )
+                });
+            }
+        }
+
         if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
+            else if self.check_item_grab(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
             else if self.check_smash(context) { }
@@ -1691,6 +1715,10 @@ impl Player {
         }
     }
 
+    fn check_item_grab(&mut self, _context: &mut StepContext) -> bool {
+        false
+    }
+
     fn check_shield(&mut self, context: &mut StepContext) -> bool {
         match (&context.entity_def.shield, &context.entity_def.power_shield) {
             (&Some(_), &Some(_)) => {
@@ -1973,6 +2001,32 @@ impl Player {
                 }
             }
         }
+    }
+
+    pub fn get_held_item(&self, entities: &Entities) -> Option<EntityKey> {
+        for (key, entity) in entities.iter() {
+            if let EntityType::Item (item) = &entity.ty {
+                if let Location::GrabbedByPlayer (player_entity_key) = item.body.location {
+                    if let Some(player) = entities.get(player_entity_key) {
+                        if let EntityType::Player (player) = &player.ty {
+                            if player.id == self.id {
+                                return Some(key);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn item_grab(&mut self) {
+        // TODO: make the context available here so we can call this:
+        //match Action::from_u64(self.action) {
+        //    Some(Action::Jab) => self.set_action(context, Action::ItemGrab),
+        //    _ => {}
+        //}
     }
 
     /*

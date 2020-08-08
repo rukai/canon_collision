@@ -1,6 +1,6 @@
-use crate::collision::CollisionResult;
+use crate::collision::collision_box::CollisionResult;
 use crate::entity::{DebugEntity, StepContext, EntityKey};
-use crate::body::{Body, PhysicsResult};
+use crate::body::{Body, PhysicsResult, Location};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
@@ -51,6 +51,26 @@ impl Item {
             self.action_expired(context);
         }
 
+        if let Some(action) = ItemAction::from_u64(self.action) {
+            match action {
+                ItemAction::Spawn |
+                ItemAction::Idle |
+                ItemAction::Held => { }
+
+                ItemAction::Thrown |
+                ItemAction::Fall |
+                ItemAction::Dropped => {
+                    self.body.y_vel += context.entity_def.gravity;
+                    if self.body.y_vel < context.entity_def.terminal_vel {
+                        self.body.y_vel = context.entity_def.terminal_vel;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn grabbed(&mut self, grabbed_by: EntityKey) {
+        self.body.location = Location::GrabbedByPlayer (grabbed_by);
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext) {

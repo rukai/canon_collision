@@ -3,6 +3,7 @@ use strum::IntoEnumIterator;
 use num_traits::{FromPrimitive, ToPrimitive};
 
 use crate::files::engine_version;
+use crate::geometry::Rect;
 
 impl Default for EntityDef {
     fn default() -> EntityDef {
@@ -294,7 +295,8 @@ pub struct ActionFrame {
     pub ledge_cancel:        bool, // only used on ground actions
     pub use_platform_angle:  bool, // only used on ground actions
     // TODO: pub land_cancel: bool // only used on aerial attacks
-    pub ledge_grab_box:      Option<LedgeGrabBox>,
+    pub ledge_grab_box:      Option<Rect>,
+    pub item_grab_box:       Option<Rect>,
     pub force_hitlist_reset: bool,
     /// Affects the next frames velocity
     pub x_vel_modify: VelModify,
@@ -326,6 +328,7 @@ impl Default for ActionFrame {
             ledge_cancel:        true,
             use_platform_angle:  false,
             ledge_grab_box:      None,
+            item_grab_box:       None,
             force_hitlist_reset: false,
         }
     }
@@ -355,25 +358,6 @@ impl ActionFrame {
                 }
             )
             .collect()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Node)]
-pub struct LedgeGrabBox {
-    pub x1: f32,
-    pub y1: f32,
-    pub x2: f32,
-    pub y2: f32,
-}
-
-impl Default for LedgeGrabBox {
-    fn default() -> LedgeGrabBox {
-        LedgeGrabBox {
-            x1: 0.0,
-            y1: 12.0,
-            x2: 14.0,
-            y2: 22.0,
-        }
     }
 }
 
@@ -490,6 +474,9 @@ pub enum Action {
     Dthrow,
     Fthrow,
     Bthrow,
+
+    // Items
+    //ItemGrab,
 
     // Getup attacks
     LedgeAttack,

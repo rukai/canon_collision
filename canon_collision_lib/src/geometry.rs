@@ -81,4 +81,23 @@ impl Rect {
         &&
         ((y > self.y1 && y < self.y2) || (y > self.y2 && y < self.y1))
     }
+
+    pub fn collision(&self, self_offset: (f32, f32), other_offset: (f32, f32), other_rect: &Rect) -> bool {
+        let self_rect = Rect {
+            x1: self.x1 + self_offset.0,
+            x2: self.x2 + self_offset.0,
+            y1: self.y1 + self_offset.1,
+            y2: self.y2 + self_offset.1
+        };
+        let other_rect = Rect {
+            x1: other_rect.x1 + other_offset.0,
+            x2: other_rect.x2 + other_offset.0,
+            y1: other_rect.y1 + other_offset.1,
+            y2: other_rect.y2 + other_offset.1
+        };
+        self_rect.left() < other_rect.right() &&
+        self_rect.right() > other_rect.left() &&
+        self_rect.bot() < other_rect.top() &&
+        self_rect.top() > other_rect.bot()
+    }
 }
