@@ -41,6 +41,13 @@ pub struct Entity {
 }
 
 impl Entity {
+    pub fn process_message(&mut self, message: Message, context: &StepContext) {
+        match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
+            (EntityType::Item (item), MessageContents::Item (message)) => item.process_message(message, context),
+            _ => error!("Message received by entity type that cannot process it"),
+        }
+    }
+
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
         match &self.ty {
             EntityType::Player (player) => player.body.is_hogging_ledge(check_platform_i, face_right),
@@ -74,10 +81,10 @@ impl Entity {
         }
     }
 
-    pub fn item_grab(&mut self, hit: EntityKey) {
+    pub fn item_grab(&mut self, hit_key: EntityKey, hit_id: Option<usize>) {
         match &mut self.ty {
             EntityType::Player     (player) => player.item_grab(),
-            EntityType::Item       (item)   => item.grabbed(hit),
+            EntityType::Item       (item)   => item.grabbed(hit_key, hit_id),
             EntityType::Projectile (_)      => { }
         }
     }
@@ -512,5 +519,30 @@ pub struct StepContext<'a> {
     pub surfaces:     &'a [Surface],
     pub rng:          &'a mut ChaChaRng,
     pub new_entities: &'a mut Vec<Entity>,
+    pub messages:     &'a mut Vec<Message>,
     pub delete_self:  bool,
+}
+
+pub struct Message {
+    pub recipient: EntityKey,
+    pub contents:  MessageContents,
+}
+
+#[allow(dead_code)]
+pub enum MessageContents {
+    Player (MessagePlayer),
+    Item   (MessageItem),
+}
+
+#[allow(dead_code)]
+pub enum MessagePlayer {
+    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32 }, // TODO: maybe just include a HitBox
+    Released,
+}
+
+// TODO: move into item.rs
+#[allow(dead_code)]
+pub enum MessageItem {
+    Thrown { x_vel: f32, y_vel: f32 },
+    Dropped,
 }

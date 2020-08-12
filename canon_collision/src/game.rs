@@ -1055,6 +1055,7 @@ impl Game {
         {
             let mut rng = ChaChaRng::from_seed(self.get_seed());
             let mut new_entities = vec!();
+            let mut messages = vec!();
 
             // To synchronize entity stepping, we step through entity logic in stages (item grab logic, action logic, physics logic, collision logic)
             // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
@@ -1076,6 +1077,7 @@ impl Game {
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
                         new_entities: &mut new_entities,
+                        messages:     &mut messages,
                         delete_self:  false,
                         input,
                     };
@@ -1090,9 +1092,10 @@ impl Game {
             // step each player item grab
             // No need to clone entity slotmap, all the real logic lives in collision_check which operates on all entities at once.
             let item_grab_results = item_grab::collision_check(&action_entities, &self.package.entities, &self.stage.surfaces);
-            for (key, hit) in item_grab_results {
-                if let Some(entity) = action_entities.get_mut(key) {
-                    entity.item_grab(hit);
+            for (current_key, hit_key) in item_grab_results {
+                let hit_id = action_entities.get_mut(hit_key).and_then(|x| x.player_id());
+                if let Some(current_entity) = action_entities.get_mut(current_key) {
+                    current_entity.item_grab(hit_key, hit_id);
                 }
             }
 
@@ -1112,6 +1115,7 @@ impl Game {
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
                         new_entities: &mut new_entities,
+                        messages:     &mut messages,
                         delete_self:  false,
                         input,
                     };
@@ -1147,6 +1151,7 @@ impl Game {
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
                         new_entities: &mut new_entities,
+                        messages:     &mut messages,
                         delete_self:  false,
                         input,
                     };
@@ -1156,6 +1161,25 @@ impl Game {
                 if delete_self {
                     collision_entities.remove(key);
                 }
+            }
+
+            for message in messages {
+                let entity = &mut collision_entities[message.recipient];
+                let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                let context = StepContext {
+                    entities:     &physics_entities,
+                    entity_defs:  &self.package.entities,
+                    entity_def:   &self.package.entities[entity.entity_def_key()],
+                    stage:        &self.stage,
+                    surfaces:     &self.stage.surfaces,
+                    rng:          &mut rng,
+                    new_entities: &mut new_entities,
+                    messages:     &mut vec!(),
+                    delete_self:  false,
+                    input,
+                };
+                entity.process_message(message, &context);
             }
 
             for entity in new_entities {

@@ -3,7 +3,7 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey};
+use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, MessageItem};
 use crate::projectile::Projectile;
 use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
 use crate::item::{Item, ItemAction};
@@ -1580,6 +1580,14 @@ impl Player {
             }
             else if context.input[0].stick_y > 0.3 {
                 self.set_action(context, Action::Uair);
+            }
+            else if self.get_held_item(&context.entities).is_some() && context.input.z.press {
+                if let Some(item) = self.get_held_item(&context.entities) {
+                    context.messages.push(Message {
+                        recipient: item,
+                        contents:  MessageContents::Item(MessageItem::Dropped)
+                    });
+                }
             }
             else {
                 self.set_action(context, Action::Nair);

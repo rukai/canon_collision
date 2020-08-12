@@ -1,5 +1,5 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{DebugEntity, StepContext, EntityKey};
+use crate::entity::{DebugEntity, StepContext, EntityKey, MessageItem};
 use crate::body::{Body, PhysicsResult, Location};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
@@ -29,6 +29,17 @@ pub struct Item {
 }
 
 impl Item {
+    pub fn process_message(&mut self, message: &MessageItem, context: &StepContext) {
+        match message {
+            MessageItem::Thrown { .. } => { } // TODO
+            MessageItem::Dropped => {
+                let (x, y) = self.bps_xy(context);
+                self.body.location = Location::Airbourne { x, y };
+                self.action = ItemAction::Dropped as u64;
+            }
+        }
+    }
+
     pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
         if entity_def.actions.len() > self.action as usize {
             let frames = &entity_def.actions[self.action as usize].frames;
@@ -69,8 +80,9 @@ impl Item {
         }
     }
 
-    pub fn grabbed(&mut self, grabbed_by: EntityKey) {
-        self.body.location = Location::GrabbedByPlayer (grabbed_by);
+    pub fn grabbed(&mut self, grabbed_by_key: EntityKey, grabbed_by_id: Option<usize>) {
+        self.body.location = Location::GrabbedByPlayer (grabbed_by_key);
+        self.owner_id = grabbed_by_id;
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext) {
@@ -89,7 +101,7 @@ impl Item {
         }
     }
 
-    pub fn _bps_xy(&self, context: &StepContext) -> (f32, f32) {
+    pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
         let action_frame = self.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
         self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces)
     }
