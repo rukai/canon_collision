@@ -20,7 +20,7 @@ use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use std::{mem, f32};
 use std::borrow::Cow;
-use std::borrow::Cow::Borrowed;
+use std::num::NonZeroU8;
 
 use cgmath::Rad;
 use cgmath::prelude::*;
@@ -111,21 +111,23 @@ impl WgpuGraphics {
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: Borrowed(&[
-                    wgpu::BindGroupLayoutEntry::new(
-                        0,
-                        wgpu::ShaderStage::all(),
-                        wgpu::BindingType::UniformBuffer {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::all(),
+                        ty: wgpu::BindingType::UniformBuffer {
                             dynamic: false,
                             min_binding_size: None,
                         },
-                    ),
-                ])
+                        count: None,
+                    },
+                ]
             }
         );
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: Borrowed(&[&bind_group_layout_generic]),
-            push_constant_ranges: Borrowed(&[]),
+            label: None,
+            bind_group_layouts: &[&bind_group_layout_generic],
+            push_constant_ranges: &[],
         });
 
         let rasterization_state_back_face_culling = Some(wgpu::RasterizationStateDescriptor {
@@ -158,36 +160,33 @@ impl WgpuGraphics {
             format: wgpu::TextureFormat::Depth32Float,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::LessEqual,
-            stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_read_mask: 0,
-            stencil_write_mask: 0,
+            stencil: Default::default(),
         });
 
         let pipeline_color_2d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -195,29 +194,29 @@ impl WgpuGraphics {
         });
 
         let pipeline_color_3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -228,21 +227,18 @@ impl WgpuGraphics {
             format: wgpu::TextureFormat::Depth32Float,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Always,
-            stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-            stencil_read_mask: 0,
-            stencil_write_mask: 0,
+            stencil: Default::default(),
         });
 
         let pipeline_debug = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &color_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Ccw,
@@ -250,18 +246,18 @@ impl WgpuGraphics {
                 .. Default::default()
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state_disable.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float4  // color
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -275,30 +271,30 @@ impl WgpuGraphics {
         let hitbox_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(hitbox_fs)));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &hitbox_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &hitbox_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state_disable,
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float2, // position
                         1 => Float,  // edge
                         2 => Uint    // render_id
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -320,61 +316,65 @@ impl WgpuGraphics {
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: Borrowed(&[
-                    wgpu::BindGroupLayoutEntry::new(
-                        0,
-                        wgpu::ShaderStage::all(),
-                        wgpu::BindingType::UniformBuffer {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::all(),
+                        ty: wgpu::BindingType::UniformBuffer {
                             dynamic: false,
                             min_binding_size: None,
                         },
-                    ),
-                    wgpu::BindGroupLayoutEntry::new(
-                        1,
-                        wgpu::ShaderStage::FRAGMENT,
-                        wgpu::BindingType::SampledTexture {
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::SampledTexture {
                             multisampled: false,
                             dimension: wgpu::TextureViewDimension::D2,
                             component_type: wgpu::TextureComponentType::Float
                         },
-                    ),
-                    wgpu::BindGroupLayoutEntry::new(
-                        2,
-                        wgpu::ShaderStage::FRAGMENT,
-                        wgpu::BindingType::Sampler { comparison: false },
-                    ),
-                ])
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler { comparison: false },
+                        count: None,
+                    },
+                ]
             }
         );
         let pipeline_model3d_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: Borrowed(&[&bind_group_layout_model3d]),
-            push_constant_ranges: Borrowed(&[]),
+            label: None,
+            bind_group_layouts: &[&bind_group_layout_model3d],
+            push_constant_ranges: &[],
         });
 
         let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_model3d_layout,
+            layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_standard_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2  // uv
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -382,29 +382,29 @@ impl WgpuGraphics {
         });
 
         let pipeline_model3d_static_lava = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_model3d_layout,
+            layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_lava_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2  // uv
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -412,31 +412,31 @@ impl WgpuGraphics {
         });
 
         let pipeline_model3d_animated = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_model3d_layout,
+            layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_animated_vs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             },
             fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                 module: &model3d_standard_fs_module,
-                entry_point: Borrowed("main"),
+                entry_point: "main",
             }),
             rasterization_state: rasterization_state_back_face_culling.clone(),
             primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-            color_states: Borrowed(&color_states),
+            color_states: &color_states,
             depth_stencil_state: depth_stencil_state.clone(),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: Borrowed(&[wgpu::VertexBufferDescriptor {
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
                     stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: Borrowed(&wgpu::vertex_attr_array![
+                    attributes: &wgpu::vertex_attr_array![
                         0 => Float4, // position
                         1 => Float2, // uv
                         2 => Uint4,  // joints
                         3 => Float4  // weights
-                    ]),
-                }]),
+                    ],
+                }],
             },
             sample_count: SAMPLE_COUNT,
             sample_mask: !0,
@@ -449,7 +449,7 @@ impl WgpuGraphics {
             address_mode_w: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            anisotropy_clamp: Some(16),
+            anisotropy_clamp: Some(NonZeroU8::new(16).unwrap()),
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
@@ -686,14 +686,14 @@ impl WgpuGraphics {
             let mut bind_groups = vec!();
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: Borrowed(&[wgpu::RenderPassColorAttachmentDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                         attachment: &wsd.multisampled_framebuffer,
                         resolve_target: Some(&frame.view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
                         },
-                    }]),
+                    }],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                         attachment: &wsd.depth_stencil,
                         depth_ops: Some(wgpu::Operations {
@@ -716,80 +716,80 @@ impl WgpuGraphics {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                entries: Borrowed(&[wgpu::BindGroupEntry {
+                                entries: &[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
-                                }])
+                                }]
                             })
                         }
                         DrawType::Hitbox { .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_generic,
-                                entries: Borrowed(&[wgpu::BindGroupEntry {
+                                entries: &[wgpu::BindGroupEntry {
                                     binding: 0,
                                     resource: uniform_resource,
-                                }])
+                                }]
                             })
                         }
                         DrawType::ModelAnimated { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: Borrowed(&[
+                                entries: &[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ])
+                                ]
                             })
                         }
                         DrawType::ModelStatic { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: Borrowed(&[
+                                entries: &[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ])
+                                ]
                             })
                         }
                         DrawType::Lava { texture, .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: None,
                                 layout: &self.bind_group_layout_model3d,
-                                entries: Borrowed(&[
+                                entries: &[
                                     wgpu::BindGroupEntry {
                                         binding: 0,
                                         resource: uniform_resource,
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_default_view()),
+                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
                                     },
                                     wgpu::BindGroupEntry {
                                         binding: 2,
                                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                                     },
-                                ])
+                                ]
                             })
                         }
                     };
@@ -1792,7 +1792,7 @@ impl WindowSizeDependent {
             format: wgpu::TextureFormat::Bgra8Unorm,
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
         };
-        let multisampled_framebuffer = device.create_texture(multisampled_frame_descriptor).create_default_view();
+        let multisampled_framebuffer = device.create_texture(multisampled_frame_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
 
         let depth_stencil_descriptor = &wgpu::TextureDescriptor {
             label: None,
@@ -1803,7 +1803,7 @@ impl WindowSizeDependent {
             format: wgpu::TextureFormat::Depth32Float,
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
         };
-        let depth_stencil = device.create_texture(depth_stencil_descriptor).create_default_view();
+        let depth_stencil = device.create_texture(depth_stencil_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
 
         WindowSizeDependent {
             swap_chain,
