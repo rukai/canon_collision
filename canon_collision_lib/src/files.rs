@@ -11,7 +11,7 @@ use serde_cbor;
 
 pub fn build_version() -> String { String::from(env!("BUILD_VERSION")) }
 
-pub fn engine_version() -> u64 { 17 }
+pub fn engine_version() -> u64 { 18 }
 
 pub fn save_struct_json<T: Serialize>(filename: &Path, object: &T) {
     // ensure parent directories exists

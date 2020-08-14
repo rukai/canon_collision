@@ -91,6 +91,7 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     else if entity_engine_version < engine_version() {
         for upgrade_from in entity_engine_version..engine_version() {
             match upgrade_from {
+                17 => { upgrade_entity17(&mut entity) }
                 16 => { upgrade_entity16(&mut entity) }
                 15 => { upgrade_entity15(&mut entity) }
                 _  => { }
@@ -110,6 +111,45 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     }
 
     println!("Upgraded entity from version {} to version {}.", entity_engine_version, engine_version());
+}
+
+fn upgrade_entity17(entity: &mut Value) {
+    let action = new_object(vec!(
+        ("frames", Value::Array(vec!(
+            new_object(vec!(
+                ("ecb", new_object(vec!(
+                    ("top", Value::Float(16.0)),
+                    ("left", Value::Float(-4.0)),
+                    ("right", Value::Float(4.0)),
+                    ("bottom", Value::Float(0.0)),
+                ))),
+                ("colboxes", Value::Array(vec!())),
+                ("item_hold_x", Value::Float(4.0)),
+                ("item_hold_y", Value::Float(11.0)),
+                ("grabbing_x", Value::Float(8.0)),
+                ("grabbing_y", Value::Float(11.0)),
+                ("grabbed_x", Value::Float(4.0)),
+                ("grabbed_y", Value::Float(11.0)),
+                ("pass_through", Value::Bool(true)),
+                ("ledge_cancel", Value::Bool(true)),
+                ("use_platform_angle", Value::Bool(false)),
+                ("ledge_grab_box", Value::Null),
+                ("force_hitlist_reset", Value::Bool(false)),
+                ("x_vel_modify", Value::Text("None".into())),
+                ("y_vel_modify", Value::Text("None".into())),
+                ("x_vel_temp", Value::Float(0.0)),
+                ("y_vel_temp", Value::Float(0.0)),
+            ))
+        ))),
+        ("iasa", Value::Integer(0))
+    ));
+
+    let action_indexes = [78, 79, 80, 81, 82, 83, 84, 85, 86, 87];
+    if let Some (actions) = get_vec(entity, "actions") {
+        for action_index in &action_indexes {
+            actions.insert(*action_index, action.clone());
+        }
+    }
 }
 
 fn upgrade_entity16(entity: &mut Value) {

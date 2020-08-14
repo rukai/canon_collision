@@ -476,7 +476,16 @@ pub enum Action {
     Bthrow,
 
     // Items
-    //ItemGrab,
+    ItemGrab,
+    ItemEat,
+    ItemThrowU,
+    ItemThrowD,
+    ItemThrowF,
+    ItemThrowB,
+    ItemThrowAirU,
+    ItemThrowAirD,
+    ItemThrowAirF,
+    ItemThrowAirB,
 
     // Getup attacks
     LedgeAttack,

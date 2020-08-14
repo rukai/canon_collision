@@ -592,6 +592,12 @@ impl Player {
                 Action::CrouchEnd
                 => self.ground_idle_action(context),
 
+                Action::ItemThrowU    | Action::ItemThrowD |
+                Action::ItemThrowF    | Action::ItemThrowB |
+                Action::ItemThrowAirU | Action::ItemThrowAirD |
+                Action::ItemThrowAirF | Action::ItemThrowAirB
+                => self.item_throw_action(context),
+
                 Action::FairLand | Action::BairLand |
                 Action::UairLand | Action::DairLand |
                 Action::NairLand | Action::SpecialLand
@@ -1022,7 +1028,6 @@ impl Player {
 
         if self.interruptible(&context.entity_def) {
             if self.check_jump(context) { }
-            else if self.check_item_grab(context) { }
             else if self.check_shield(context) { }
             else if self.check_special(context) { }
             else if self.check_smash(context) { }
@@ -1040,6 +1045,17 @@ impl Player {
         }
         else {
             self.apply_friction(&context.entity_def);
+        }
+    }
+
+    fn item_throw_action(&mut self, context: &mut StepContext) {
+        if self.frame == 4 {
+            if let Some(item) = self.get_held_item(&context.entities) {
+                context.messages.push(Message {
+                    recipient: item,
+                    contents:  MessageContents::Item(MessageItem::Dropped)
+                });
+            }
         }
     }
 
@@ -1570,18 +1586,38 @@ impl Player {
     fn check_attacks_aerial(&mut self, context: &mut StepContext) -> bool {
         if context.input.a.press || context.input.z.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
-                self.set_action(context, Action::Fair);
+                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowAirU);
+                }
+                else {
+                    self.set_action(context, Action::Fair);
+                }
             }
             else if self.relative_f(context.input[0].stick_x) < -0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
-                self.set_action(context, Action::Bair);
+                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowAirU);
+                }
+                else {
+                    self.set_action(context, Action::Bair);
+                }
             }
             else if context.input[0].stick_y < -0.3 {
-                self.set_action(context, Action::Dair);
+                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowAirU);
+                }
+                else {
+                    self.set_action(context, Action::Dair);
+                }
             }
             else if context.input[0].stick_y > 0.3 {
-                self.set_action(context, Action::Uair);
+                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowAirU);
+                }
+                else {
+                    self.set_action(context, Action::Uair);
+                }
             }
-            else if self.get_held_item(&context.entities).is_some() && context.input.z.press {
+            else if context.input.z.press && self.get_held_item(&context.entities).is_some() {
                 if let Some(item) = self.get_held_item(&context.entities) {
                     context.messages.push(Message {
                         recipient: item,
@@ -1597,21 +1633,41 @@ impl Player {
         else if self.relative_f(context.input[0].c_stick_x) >= 0.3 && self.relative_f(context.input[1].c_stick_x) < 0.3 
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
-            self.set_action(context, Action::Fair);
+            if self.get_held_item(&context.entities).is_some() {
+                self.set_action(context, Action::ItemThrowAirF);
+            }
+            else {
+                self.set_action(context, Action::Fair);
+            }
             true
         }
         else if self.relative_f(context.input[0].c_stick_x) <= -0.3 && self.relative_f(context.input[1].c_stick_x) > -0.3
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
-            self.set_action(context, Action::Bair);
+            if self.get_held_item(&context.entities).is_some() {
+                self.set_action(context, Action::ItemThrowAirB);
+            }
+            else {
+                self.set_action(context, Action::Bair);
+            }
             true
         }
         else if context.input[0].c_stick_y < -0.3 && context.input[1].c_stick_y > -0.3 {
-            self.set_action(context, Action::Dair);
+            if self.get_held_item(&context.entities).is_some() {
+                self.set_action(context, Action::ItemThrowAirD);
+            }
+            else {
+                self.set_action(context, Action::Dair);
+            }
             true
         }
         else if context.input[0].c_stick_y >= 0.3 && context.input[1].c_stick_y < 0.3 {
-            self.set_action(context, Action::Uair);
+            if self.get_held_item(&context.entities).is_some() {
+                self.set_action(context, Action::ItemThrowAirU);
+            }
+            else {
+                self.set_action(context, Action::Uair);
+            }
             true
         }
         else {
@@ -1622,16 +1678,36 @@ impl Player {
     fn check_attacks(&mut self, context: &mut StepContext) -> bool {
         if context.input.a.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() - context.input[0].stick_y.abs() > -0.05 {
-                self.set_action(context, Action::Ftilt);
+                if self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowF);
+                }
+                else {
+                    self.set_action(context, Action::Ftilt);
+                }
             }
             else if context.input[0].stick_y < -0.3 {
-                self.set_action(context, Action::Dtilt);
+                if self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowD);
+                }
+                else {
+                    self.set_action(context, Action::Dtilt);
+                }
             }
             else if context.input[0].stick_y > 0.3 {
-                self.set_action(context, Action::Utilt);
+                if self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowU);
+                }
+                else {
+                    self.set_action(context, Action::Utilt);
+                }
             }
             else {
-                self.set_action(context, Action::Jab);
+                if self.get_held_item(&context.entities).is_some() {
+                    self.set_action(context, Action::ItemThrowF);
+                }
+                else {
+                    self.set_action(context, Action::Jab);
+                }
             }
             true
         }
@@ -1721,10 +1797,6 @@ impl Player {
         else {
             false
         }
-    }
-
-    fn check_item_grab(&mut self, _context: &mut StepContext) -> bool {
-        false
     }
 
     fn check_shield(&mut self, context: &mut StepContext) -> bool {
@@ -1918,6 +1990,18 @@ impl Player {
             Some(Action::Dthrow) => self.set_action(context, Action::Idle),
             Some(Action::Fthrow) => self.set_action(context, Action::Idle),
             Some(Action::Bthrow) => self.set_action(context, Action::Idle),
+
+            // Items
+            Some(Action::ItemGrab)      => self.set_action(context, Action::Idle),
+            Some(Action::ItemEat)       => self.set_action(context, Action::Idle),
+            Some(Action::ItemThrowU)    => self.set_action(context, Action::Idle),
+            Some(Action::ItemThrowD)    => self.set_action(context, Action::Idle),
+            Some(Action::ItemThrowF)    => self.set_action(context, Action::Idle),
+            Some(Action::ItemThrowB)    => self.set_action(context, Action::Idle),
+            Some(Action::ItemThrowAirU) => self.set_action(context, Action::Fall),
+            Some(Action::ItemThrowAirD) => self.set_action(context, Action::Fall),
+            Some(Action::ItemThrowAirF) => self.set_action(context, Action::Fall),
+            Some(Action::ItemThrowAirB) => self.set_action(context, Action::Fall),
 
             // Aerials
             Some(Action::Uair)     => self.set_action(context, Action::Fall),
