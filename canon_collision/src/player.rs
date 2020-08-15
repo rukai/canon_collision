@@ -3,10 +3,10 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, MessageItem};
+use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents};
 use crate::projectile::Projectile;
 use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
-use crate::item::{Item, ItemAction};
+use crate::item::{Item, ItemAction, MessageItem};
 
 use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;
@@ -35,6 +35,12 @@ impl LockTimer {
             _                      => false
         }
     }
+}
+
+#[allow(dead_code)]
+pub enum MessagePlayer {
+    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32 }, // TODO: maybe just include a HitBox
+    Released,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1051,9 +1057,16 @@ impl Player {
     fn item_throw_action(&mut self, context: &mut StepContext) {
         if self.frame == 4 {
             if let Some(item) = self.get_held_item(&context.entities) {
+                let message_item = match Action::from_u64(self.action) {
+                    Some(Action::ItemThrowF) | Some(Action::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
+                    Some(Action::ItemThrowB) | Some(Action::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
+                    Some(Action::ItemThrowU) | Some(Action::ItemThrowAirU) => MessageItem::Thrown { x_vel: 0.0,  y_vel: 4.0 },
+                    Some(Action::ItemThrowD) | Some(Action::ItemThrowAirD) => MessageItem::Thrown { x_vel: 0.0,  y_vel: -4.0 },
+                    _ => MessageItem::Dropped,
+                };
                 context.messages.push(Message {
                     recipient: item,
-                    contents:  MessageContents::Item(MessageItem::Dropped)
+                    contents:  MessageContents::Item(message_item)
                 });
             }
         }
@@ -2152,7 +2165,7 @@ impl Player {
         }
     }
 
-    fn apply_friction(&mut self, fighter: &EntityDef) {
+    fn apply_friction(&mut self, entity: &EntityDef) {
         match Action::from_u64(self.action) {
             Some(Action::Idle) |
             Some(Action::Dash) |
@@ -2160,17 +2173,17 @@ impl Player {
             Some(Action::ShieldOn) |
             Some(Action::ShieldOff) |
             Some(Action::Damage)
-              => { self.body.apply_friction_weak(fighter) }
-            _ => { self.body.apply_friction_strong(fighter) }
+              => { self.body.apply_friction_weak(entity) }
+            _ => { self.body.apply_friction_strong(entity) }
         }
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         match Action::from_u64(self.action) {
             Some(Action::Eliminated) => None,
             _ => {
-                let (x, y) = self.public_bps_xy(entities, fighters, surfaces);
+                let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces);
                 let mut left  = x;
                 let mut right = x;
                 let mut bot   = y - 5.0;

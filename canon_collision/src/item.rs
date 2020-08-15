@@ -1,5 +1,5 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{DebugEntity, StepContext, EntityKey, MessageItem};
+use crate::entity::{DebugEntity, StepContext, EntityKey};
 use crate::body::{Body, PhysicsResult, Location};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
@@ -18,6 +18,11 @@ pub enum ItemAction {
     Dropped,
 }
 
+pub enum MessageItem {
+    Thrown { x_vel: f32, y_vel: f32 },
+    Dropped,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Item {
     pub owner_id: Option<usize>,
@@ -31,7 +36,13 @@ pub struct Item {
 impl Item {
     pub fn process_message(&mut self, message: &MessageItem, context: &StepContext) {
         match message {
-            MessageItem::Thrown { .. } => { } // TODO
+            MessageItem::Thrown { x_vel, y_vel } => {
+                let (x, y) = self.bps_xy(context);
+                self.body.location = Location::Airbourne { x, y };
+                self.body.x_vel = *x_vel;
+                self.body.y_vel = *y_vel;
+                self.action = ItemAction::Thrown as u64;
+            }
             MessageItem::Dropped => {
                 let (x, y) = self.bps_xy(context);
                 self.body.location = Location::Airbourne { x, y };
@@ -64,9 +75,11 @@ impl Item {
 
         if let Some(action) = ItemAction::from_u64(self.action) {
             match action {
-                ItemAction::Spawn |
-                ItemAction::Idle |
                 ItemAction::Held => { }
+                ItemAction::Spawn |
+                ItemAction::Idle => {
+                    self.body.apply_friction_strong(&context.entity_def);
+                }
 
                 ItemAction::Thrown |
                 ItemAction::Fall |

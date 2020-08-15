@@ -1,7 +1,7 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::item::{Item, ItemAction};
+use crate::item::{Item, ItemAction, MessageItem};
 use crate::particle::Particle;
-use crate::player::{Player, RenderPlayer};
+use crate::player::{Player, RenderPlayer, MessagePlayer};
 use crate::projectile::{Projectile, ProjectileAction};
 use crate::rules::Goal;
 use crate::graphics;
@@ -532,17 +532,4 @@ pub struct Message {
 pub enum MessageContents {
     Player (MessagePlayer),
     Item   (MessageItem),
-}
-
-#[allow(dead_code)]
-pub enum MessagePlayer {
-    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32 }, // TODO: maybe just include a HitBox
-    Released,
-}
-
-// TODO: move into item.rs
-#[allow(dead_code)]
-pub enum MessageItem {
-    Thrown { x_vel: f32, y_vel: f32 },
-    Dropped,
 }
