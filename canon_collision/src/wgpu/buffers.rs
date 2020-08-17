@@ -2,10 +2,10 @@ use canon_collision_lib::entity_def::CollisionBox;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Surface;
-use crate::player::RenderShield;
-use crate::graphics;
 use crate::entity::RenderEntity;
+use crate::entity::player::RenderShield;
 use crate::game::{SurfaceSelection, RenderRect};
+use crate::graphics;
 
 use wgpu::{Device, Buffer};
 use wgpu::util::DeviceExt;

@@ -1,4 +1,4 @@
-use crate::player::Player;
+use crate::entity::player::Player;
 use crate::entity::{Entities, EntityKey, EntityType};
 
 use canon_collision_lib::entity_def::{EntityDef, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};

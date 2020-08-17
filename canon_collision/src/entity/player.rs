@@ -3,10 +3,10 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
+use crate::entity::item::{Item, ItemAction, MessageItem};
+use crate::entity::projectile::Projectile;
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents};
-use crate::projectile::Projectile;
 use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
-use crate::item::{Item, ItemAction, MessageItem};
 
 use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;
@@ -288,7 +288,7 @@ impl Player {
                 &CollisionResult::HitAtk { entity_defend_i, ref hitbox, ref point } => {
                     self.hit_particles(point.clone(), hitbox);
                     self.hitlist.push(entity_defend_i);
-                    self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                    self.body.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     let entity_atk = &context.entities[entity_atk_i];
@@ -381,7 +381,7 @@ impl Player {
                         if self.body.is_platform() {
                             self.body.x_vel += vel * x_diff.signum();
                         }
-                        self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                        self.body.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                     }
                 }
                 &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
@@ -406,7 +406,7 @@ impl Player {
                     let vel = (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
                     self.body.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
-                    self.body.hitlag = Hitlag::Some ((hitbox.damage / 3.0 + 3.0) as u64);
+                    self.body.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
                 &CollisionResult::GrabAtk (_entity_defend_i) => {
                     self.set_action(context, Action::GrabbingIdle);

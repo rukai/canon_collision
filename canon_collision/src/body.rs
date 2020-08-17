@@ -14,7 +14,7 @@ use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Hitlag {
-    Some (u64), // TODO: rename Some
+    Attack { counter: u64 },
     Launch { counter: u64, kb_vel: f32, angle: f32, wobble_x: f32 },
     None
 }
@@ -22,7 +22,7 @@ pub enum Hitlag {
 impl Hitlag {
     pub fn decrement(&mut self) -> bool {
         let end = match self {
-            &mut Hitlag::Some (ref mut counter) |
+            &mut Hitlag::Attack { ref mut counter} |
             &mut Hitlag::Launch { ref mut counter, .. } => {
                 *counter -= 1;
                 *counter <= 1
@@ -436,7 +436,7 @@ impl Body {
 
     pub fn hitlag_step(&mut self, context: &mut StepContext, action_frame: Option<&ActionFrame>) -> HitlagResult {
         match self.hitlag.clone() {
-            Hitlag::Some (_) => {
+            Hitlag::Attack { .. } => {
                 self.hitlag.decrement();
                 HitlagResult::Hitlag
             }

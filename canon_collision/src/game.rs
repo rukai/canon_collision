@@ -1,14 +1,14 @@
 use crate::camera::Camera;
 use crate::collision::collision_box;
 use crate::collision::item_grab;
+use crate::entity::player::{Player};
+use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
-use crate::player::{Player};
 use crate::replays::Replay;
 use crate::replays;
 use crate::results::{GameResults, RawPlayerResult, PlayerResult};
 use crate::rules::{Rules, Goal};
-use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -20,19 +20,19 @@ use canon_collision_lib::network::Netplay;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::{Stage, DebugStage, SpawnPoint, Surface, Floor, RenderStageMode};
 
-use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaChaRng;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
+
+use byteorder::{LittleEndian, WriteBytesExt};
 use chrono::Local;
 use num_traits::{FromPrimitive, ToPrimitive};
-
+use rand_chacha::ChaChaRng;
+use rand_chacha::rand_core::SeedableRng;
 use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
-use byteorder::{LittleEndian, WriteBytesExt};
 
 #[NodeActions(
     NodeAction(function="save_replay", return_string),

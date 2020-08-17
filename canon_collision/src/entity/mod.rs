@@ -1,8 +1,13 @@
+pub(crate) mod player;
+pub(crate) mod projectile;
+pub(crate) mod item;
+
+use player::{Player, RenderPlayer, MessagePlayer};
+use projectile::{Projectile, ProjectileAction};
+use item::{Item, ItemAction, MessageItem};
+
 use crate::collision::collision_box::CollisionResult;
-use crate::item::{Item, ItemAction, MessageItem};
 use crate::particle::Particle;
-use crate::player::{Player, RenderPlayer, MessagePlayer};
-use crate::projectile::{Projectile, ProjectileAction};
 use crate::rules::Goal;
 use crate::graphics;
 
