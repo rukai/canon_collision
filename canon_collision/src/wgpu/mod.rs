@@ -164,6 +164,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_color_2d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
@@ -194,6 +195,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_color_3d = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
@@ -231,6 +233,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_debug = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &color_vs_module,
@@ -271,6 +274,7 @@ impl WgpuGraphics {
         let hitbox_fs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(hitbox_fs)));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &hitbox_vs_module,
@@ -352,6 +356,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
@@ -382,6 +387,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_model3d_static_lava = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_static_vs_module,
@@ -412,6 +418,7 @@ impl WgpuGraphics {
         });
 
         let pipeline_model3d_animated = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
             layout: Some(&pipeline_model3d_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &model3d_animated_vs_module,
