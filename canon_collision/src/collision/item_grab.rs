@@ -19,16 +19,14 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
             if let EntityType::Player (player) = &entity_player.ty {
                 if player.get_held_item(entities).is_none() {
                     let (player_x, player_y) = entity_player.public_bps_xy(entities, entity_definitions, surfaces);
-                    let player_entity_def = &entity_definitions[entity_player.entity_def_key()];
-                    let player_frame = entity_player.relative_frame(player_entity_def, surfaces);
+                    let player_item_grab_box = entity_player.item_grab_box(entities, entity_definitions, surfaces);
                     'entity_check: for (item_i, entity_item) in entities.iter() {
                         if let EntityType::Item (item) = &entity_item.ty {
                             if !item.body.is_grabbed() {
                                 let (item_x, item_y) = entity_item.public_bps_xy(entities, entity_definitions, surfaces);
-                                let item_entity_def = &entity_definitions[entity_item.entity_def_key()];
-                                let item_frame = entity_item.relative_frame(item_entity_def, surfaces);
-                                let collision = match (&player_frame.item_grab_box, &item_frame.item_grab_box) {
-                                    (Some(a), Some(b)) => a.collision((player_x, player_y), (item_x, item_y), b),
+                                let item_item_grab_box = entity_item.item_grab_box(entities, entity_definitions, surfaces);
+                                let collision = match (&player_item_grab_box, &item_item_grab_box) {
+                                    (Some(a), Some(b)) => a.collision(b),
                                     _ => false,
                                 };
                                 if collision {

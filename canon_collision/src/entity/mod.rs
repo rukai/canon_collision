@@ -184,6 +184,11 @@ impl Entity {
                 }
             }
 
+            if let Some(ref mut item_grab_box) = fighter_frame.item_grab_box {
+                item_grab_box.x1 = self.relative_f(item_grab_box.x1);
+                item_grab_box.x2 = self.relative_f(item_grab_box.x2);
+            }
+
             fighter_frame
         } else {
             ActionFrame::default()
@@ -235,6 +240,13 @@ impl Entity {
             EntityType::Player (player) => player.cam_area(cam_max, entities, entity_defs, surfaces),
             _ => None
         }
+    }
+
+    pub fn item_grab_box(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
+        let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces);
+        let entity_def = &entity_defs[self.entity_def_key()];
+        let frame = self.relative_frame(entity_def, surfaces);
+        frame.item_grab_box.map(|rect| rect.offset(x, y))
     }
 
     pub fn hitlist(&self) -> &[EntityKey] {
@@ -431,6 +443,7 @@ pub struct DebugEntity {
     pub hitbox_vectors: bool,
     pub ecb:            bool,
     pub cam_area:       bool,
+    pub item_grab_area: bool,
 }
 
 impl DebugEntity {
@@ -470,7 +483,12 @@ impl DebugEntity {
             self.render.step();
         }
         if os_input.key_pressed(VirtualKeyCode::F10) {
-            self.cam_area = !self.cam_area;
+            if os_input.held_shift() {
+                self.item_grab_area = !self.item_grab_area;
+            }
+            else {
+                self.cam_area = !self.cam_area;
+            }
         }
         if os_input.key_pressed(VirtualKeyCode::F11) {
             *self = DebugEntity::all();
@@ -494,6 +512,7 @@ impl DebugEntity {
             hitbox_vectors: true,
             ecb:            true,
             cam_area:       true,
+            item_grab_area: true,
         }
     }
 }

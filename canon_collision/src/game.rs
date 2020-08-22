@@ -1340,6 +1340,8 @@ impl Game {
     pub fn render(&self) -> RenderGame {
         let mut render_entities = vec!();
 
+        let entity_defs = &self.package.entities;
+        let surfaces = &self.stage.surfaces;
         for (i, entity) in self.entities.iter() {
             let mut selected_colboxes = HashSet::new();
             let mut entity_selected = false;
@@ -1361,9 +1363,12 @@ impl Game {
                     render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
                 }
             }
+            if debug.item_grab_area {
+                if let Some(item_grab_box) = entity.item_grab_box(&self.entities, &self.package.entities, &self.stage.surfaces) {
+                    render_entities.push(RenderObject::rect_outline(item_grab_box, 0.0, 1.0, 0.0));
+                }
+            }
 
-            let entity_defs = &self.package.entities;
-            let surfaces = &self.stage.surfaces;
             let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, entity_defs, surfaces);
             render_entities.push(RenderObject::Entity(player_render));
         }
