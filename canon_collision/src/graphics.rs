@@ -26,8 +26,6 @@ pub fn get_render_id(role: &CollisionBoxRole) -> u32 {
         &CollisionBoxRole::Hurt (_)       => { 1 }
         &CollisionBoxRole::Hit (_)        => { 2 }
         &CollisionBoxRole::Grab           => { 3 }
-        &CollisionBoxRole::Intangible     => { 4 }
-        &CollisionBoxRole::IntangibleItem => { 5 }
         &CollisionBoxRole::Invincible     => { 6 }
         &CollisionBoxRole::Reflect        => { 7 }
         &CollisionBoxRole::Absorb         => { 8 }

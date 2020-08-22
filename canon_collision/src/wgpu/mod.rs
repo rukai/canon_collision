@@ -1105,9 +1105,9 @@ impl WgpuGraphics {
             match entity {
                 RenderObject::Entity (entity) => {
                     fn entity_matrix(frame: &RenderEntityFrame) -> Matrix4<f32> {
-                        let dir      = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let rotate   = Matrix4::from_angle_z(Rad(frame.angle));
-                        let position = Matrix4::from_translation(Vector3::new(frame.bps.0, frame.bps.1, 0.0));
+                        let dir = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
+                        let rotate = Matrix4::from_angle_z(Rad(frame.frame_angle));
+                        let position = Matrix4::from_translation(Vector3::new(frame.frame_bps.0, frame.frame_bps.1, 0.0));
                         position * rotate * dir
                     }
 
@@ -1119,10 +1119,14 @@ impl WgpuGraphics {
                         Some(Action::Eliminated) => { }
                         _ => {
                             let fighter_model_name = &entity.frames[0].model_name;
-                            if entity.debug.render.normal() {
-                                let dir      = Matrix4::from_angle_y(if entity.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
-                                let rotate   = Matrix4::from_angle_z(Rad(entity.frames[0].angle));
-                                let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
+                            if entity.debug.render.normal() && entity.visible {
+                                let dir = Matrix4::from_angle_y(if entity.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+                                let rotate: Matrix4<f32> = entity.frames[0].render_angle.into();
+                                let position = Matrix4::from_translation(Vector3::new(
+                                    entity.frames[0].render_bps.0,
+                                    entity.frames[0].render_bps.1,
+                                    entity.frames[0].render_bps.2,
+                                ));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(fighter_model_name) {
                                     let action = entity.render_type.action_index_to_string(action_index);
@@ -1137,7 +1141,7 @@ impl WgpuGraphics {
                         // TODO: Set individual corner vertex colours to show which points of the ecb are selected
                         let buffers  = Buffers::new_ecb(&self.device, &entity);
                         let dir      = Matrix4::from_nonuniform_scale(if entity.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
+                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
                         let transformation = position * dir;
 
                         draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
@@ -1198,8 +1202,8 @@ impl WgpuGraphics {
                                 let squish_kbg = Matrix4::from_nonuniform_scale(0.6, hitbox.kbg * kb_squish, 1.0);
                                 let squish_bkb = Matrix4::from_nonuniform_scale(0.3, (hitbox.bkb / 100.0) * kb_squish, 1.0); // divide by 100 so the arrows are comparable if the hit fighter is on 100%
                                 let rotate = Matrix4::from_angle_z(Rad(hitbox.angle.to_radians() - f32::consts::PI / 2.0));
-                                let x = entity.frames[0].bps.0 + colbox.point.0;
-                                let y = entity.frames[0].bps.1 + colbox.point.1;
+                                let x = entity.frames[0].frame_bps.0 + colbox.point.0;
+                                let y = entity.frames[0].frame_bps.1 + colbox.point.1;
                                 let position = Matrix4::from_translation(Vector3::new(x, y, 0.0));
                                 let transformation_bkb = position * rotate * squish_bkb;
                                 let transformation_kbg = position * rotate * squish_kbg;
@@ -1215,7 +1219,7 @@ impl WgpuGraphics {
                         let arrow_buffers = Buffers::new_arrow(&self.device, arrow.color.clone());
                         let squish = Matrix4::from_nonuniform_scale((num_arrows - i as f32) / num_arrows, 1.0, 1.0); // consecutive arrows are drawn slightly thinner so we can see arrows behind
                         let rotate = Matrix4::from_angle_z(Rad(arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0));
-                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].bps.0, entity.frames[0].bps.1, 0.0));
+                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
                         let transformation = position * rotate * squish;
                         draws.push(self.render_color_buffers(&render, arrow_buffers, &transformation, false, false));
                     }
@@ -1270,10 +1274,9 @@ impl WgpuGraphics {
                                 let width = 15.0;
                                 let height = width / 4.0;
                                 let scale = Matrix4::from_nonuniform_scale(width, -height, 1.0); // negative y to point triangle downwards.
-                                let rotate = Matrix4::from_angle_z(Rad(entity.frames[0].angle));
-                                let bps = &entity.frames[0].bps;
-                                let position = Matrix4::from_translation(Vector3::new(bps.0, bps.1, 0.0));
-                                let transformation = position * rotate * scale;
+                                let frame_bps = &entity.frames[0].frame_bps;
+                                let position = Matrix4::from_translation(Vector3::new(frame_bps.0, frame_bps.1, 0.0));
+                                let transformation = position * scale;
 
                                 let c = entity.fighter_color.clone();
                                 let color = [c[0], c[1], c[2], 1.0];

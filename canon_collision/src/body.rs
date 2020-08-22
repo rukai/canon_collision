@@ -50,6 +50,7 @@ pub enum Location {
     Surface { platform_i: usize, x: f32 },
     GrabbedLedge { platform_i: usize, d_x: f32, d_y: f32, logic: LedgeLogic }, // player.face_right determines which edge on the platform
     GrabbedByPlayer (EntityKey),
+    ItemHeldByPlayer (EntityKey),
     Airbourne { x: f32, y: f32 },
 }
 
@@ -125,6 +126,14 @@ impl Body {
         }
     }
 
+    pub fn is_item_held(&self) -> bool {
+        if let &Location::ItemHeldByPlayer (_) = &self.location {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_airbourne(&self) -> bool {
         if let &Location::Airbourne { .. } = &self.location {
             true
@@ -177,6 +186,25 @@ impl Body {
                     (0.0, 0.0)
                 }
             }
+            Location::ItemHeldByPlayer (entity_i) => {
+                if let Some(player) = entities.get(entity_i) {
+                    if let Some(action_frame) = player.get_entity_frame(&entity_defs[player.entity_def_key()]) {
+                        let (x, y) = player.public_bps_xy(entities, entity_defs, surfaces);
+                        if let Some(item_hold) = action_frame.item_hold.as_ref() {
+                            (
+                                x + player.relative_f(item_hold.translation_x),
+                                y + item_hold.translation_y,
+                            )
+                        } else {
+                            (x, y)
+                        }
+                    } else {
+                        (0.0, 0.0)
+                    }
+                } else {
+                    (0.0, 0.0)
+                }
+            }
             Location::Airbourne { x, y } => {
                 (x, y)
             }
@@ -190,6 +218,25 @@ impl Body {
                 bps_xy
             }
         }
+    }
+
+    /// only used for rendering
+    pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface]) -> (f32, f32, f32) {
+        let z = match self.location {
+            Location::ItemHeldByPlayer (entity_i) => {
+                if let Some(player) = entities.get(entity_i) {
+                    player.get_entity_frame(&entity_defs[player.entity_def_key()])
+                        .and_then(|action_frame| action_frame.item_hold.as_ref())
+                        .map(|item_hold| player.relative_f(item_hold.translation_z))
+                        .unwrap_or(0.0)
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        };
+        let (x, y) = self.public_bps_xy(entities, entity_defs, action_frame, surfaces);
+        (x, y, z)
     }
 
     pub fn angle(&self, action_frame: &ActionFrame, surfaces: &[Surface]) -> f32 {
@@ -228,8 +275,8 @@ impl Body {
                 }
             }
 
-            let x_vel = self.x_vel + self.kb_x_vel + self.relative_f(action_frame.x_vel_temp);
-            let y_vel = self.y_vel + self.kb_y_vel + action_frame.y_vel_temp;
+            let x_vel = self.x_vel + self.kb_x_vel;
+            let y_vel = self.y_vel + self.kb_y_vel;
 
             if self.is_ledge() {
                 self.frames_since_ledge = 0;

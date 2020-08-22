@@ -489,7 +489,7 @@ impl Game {
                     if self.selector.moving {
                         // undo the operations used to render the entity
                         let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                        let angle = -self.entities[entity_i].angle(&self.package.entities[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
+                        let angle = -self.entities[entity_i].frame_angle(&self.package.entities[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
                         let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                         let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
                         let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
@@ -1092,15 +1092,36 @@ impl Game {
             // step each player item grab
             // No need to clone entity slotmap, all the real logic lives in collision_check which operates on all entities at once.
             let item_grab_results = item_grab::collision_check(&action_entities, &self.package.entities, &self.stage.surfaces);
+            let mut grab_entities = action_entities.clone();
             for (current_key, hit_key) in item_grab_results {
-                let hit_id = action_entities.get_mut(hit_key).and_then(|x| x.player_id());
-                if let Some(current_entity) = action_entities.get_mut(current_key) {
-                    current_entity.item_grab(hit_key, hit_id);
+                let hit_id = grab_entities.get_mut(hit_key).and_then(|x| x.player_id());
+                if let Some(entity) = grab_entities.get_mut(current_key) {
+                    let delete_self = {
+                        let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                        let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                        let mut context = StepContext {
+                            entities:     &action_entities,
+                            entity_defs:  &self.package.entities,
+                            entity_def:   &self.package.entities[entity.entity_def_key()],
+                            stage:        &self.stage,
+                            surfaces:     &self.stage.surfaces,
+                            rng:          &mut rng,
+                            new_entities: &mut new_entities,
+                            messages:     &mut messages,
+                            delete_self:  false,
+                            input,
+                        };
+                        entity.item_grab(&mut context, hit_key, hit_id);
+                        context.delete_self
+                    };
+                    if delete_self {
+                        grab_entities.remove(hit_key);
+                    }
                 }
             }
 
             // step each entity physics
-            let mut physics_entities = action_entities.clone();
+            let mut physics_entities = grab_entities.clone();
             let keys: Vec<_> = physics_entities.keys().collect();
             for key in keys {
                 let delete_self = {
@@ -1108,7 +1129,7 @@ impl Game {
                     let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
-                        entities:     &action_entities,
+                        entities:     &grab_entities,
                         entity_defs:  &self.package.entities,
                         entity_def:   &self.package.entities[entity.entity_def_key()],
                         stage:        &self.stage,
@@ -1127,12 +1148,12 @@ impl Game {
                 }
             }
 
-            // TODO: resolve invalid states resulting from physics_step that occured because are
+            // TODO: resolve invalid states resulting from physics_step that occured because
             // entities only see other entities from the previous frame.
             // e.g. Two players both grabbing the same ledge, we should randomly pick a player that misses the ledge.
             //
             // Alternatively we could randomize the physics_step order and use the current state of other entities
-            // This might be needed actually, I dont undoing a ledge grab will end up nice and/or possible
+            // This might be needed actually, I dont think undoing a ledge grab will end up nice and/or possible
 
             // check for hits and run hit logic
             let mut collision_entities = physics_entities.clone();
@@ -1167,7 +1188,7 @@ impl Game {
                 let entity = &mut collision_entities[message.recipient];
                 let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                 let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
-                let context = StepContext {
+                let mut context = StepContext {
                     entities:     &physics_entities,
                     entity_defs:  &self.package.entities,
                     entity_def:   &self.package.entities[entity.entity_def_key()],
@@ -1179,7 +1200,7 @@ impl Game {
                     delete_self:  false,
                     input,
                 };
-                entity.process_message(message, &context);
+                entity.process_message(message, &mut context);
             }
 
             for entity in new_entities {
@@ -1189,9 +1210,10 @@ impl Game {
             self.entities = collision_entities;
         }
 
+        let players_count = self.players_iter().count();
         if self.time_out() ||
-           (self.entities.len() == 1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (self.entities.len() >  1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
+           (players_count == 1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
+           (players_count >  1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }

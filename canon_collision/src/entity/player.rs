@@ -598,11 +598,13 @@ impl Player {
                 Action::CrouchEnd
                 => self.ground_idle_action(context),
 
-                Action::ItemThrowU    | Action::ItemThrowD |
-                Action::ItemThrowF    | Action::ItemThrowB |
+                Action::ItemThrowU | Action::ItemThrowD |
+                Action::ItemThrowF | Action::ItemThrowB
+                => self.item_throw_action(context),
+
                 Action::ItemThrowAirU | Action::ItemThrowAirD |
                 Action::ItemThrowAirF | Action::ItemThrowAirB
-                => self.item_throw_action(context),
+                => self.item_throw_air_action(context),
 
                 Action::FairLand | Action::BairLand |
                 Action::UairLand | Action::DairLand |
@@ -1052,6 +1054,11 @@ impl Player {
         else {
             self.apply_friction(&context.entity_def);
         }
+    }
+
+    fn item_throw_air_action(&mut self, context: &mut StepContext) {
+        self.item_throw_action(context);
+        self.aerial_action(context);
     }
 
     fn item_throw_action(&mut self, context: &mut StepContext) {
@@ -2111,7 +2118,7 @@ impl Player {
     pub fn get_held_item(&self, entities: &Entities) -> Option<EntityKey> {
         for (key, entity) in entities.iter() {
             if let EntityType::Item (item) = &entity.ty {
-                if let Location::GrabbedByPlayer (player_entity_key) = item.body.location {
+                if let Location::ItemHeldByPlayer (player_entity_key) = item.body.location {
                     if let Some(player) = entities.get(player_entity_key) {
                         if let EntityType::Player (player) = &player.ty {
                             if player.id == self.id {

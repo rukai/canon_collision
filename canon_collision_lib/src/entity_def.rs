@@ -269,24 +269,10 @@ pub struct ActionDef {
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
-pub enum VelModify {
-    Set (f32),
-    Add (f32),
-    None,
-}
-
-impl Default for VelModify {
-    fn default() -> Self {
-        VelModify::None
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Node)]
 pub struct ActionFrame {
     pub ecb:                 ECB,
     pub colboxes:            ContextVec<CollisionBox>,
-    pub item_hold_x:         f32,
-    pub item_hold_y:         f32,
+    pub item_hold:           Option<ItemHold>,
     pub grabbing_x:          f32,
     pub grabbing_y:          f32,
     pub grabbed_x:           f32,
@@ -298,32 +284,18 @@ pub struct ActionFrame {
     pub ledge_grab_box:      Option<Rect>,
     pub item_grab_box:       Option<Rect>,
     pub force_hitlist_reset: bool,
-    /// Affects the next frames velocity
-    pub x_vel_modify: VelModify,
-    /// Affects the next frames velocity
-    pub y_vel_modify: VelModify,
-    /// Does not affect the next frames velocity
-    pub x_vel_temp: f32,
-    /// Does not affect the next frames velocity
-    pub y_vel_temp: f32,
-
 }
 
 impl Default for ActionFrame {
     fn default() -> ActionFrame {
         ActionFrame {
-            colboxes:            ContextVec::new(),
             ecb:                 ECB::default(),
-            item_hold_x:         4.0,
-            item_hold_y:         11.0,
+            colboxes:            ContextVec::new(),
+            item_hold:           None,
             grabbing_x:          8.0,
             grabbing_y:          11.0,
             grabbed_x:           4.0,
             grabbed_y:           11.0,
-            x_vel_modify:        VelModify::None,
-            y_vel_modify:        VelModify::None,
-            x_vel_temp:          0.0,
-            y_vel_temp:          0.0,
             pass_through:        true,
             ledge_cancel:        true,
             use_platform_angle:  false,
@@ -359,6 +331,17 @@ impl ActionFrame {
             )
             .collect()
     }
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, Node)]
+pub struct ItemHold {
+    pub translation_x: f32,
+    pub translation_y: f32,
+    pub translation_z: f32,
+    pub quaternion_x: f32,
+    pub quaternion_y: f32,
+    pub quaternion_z: f32,
+    pub quaternion_rotation: f32,
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
@@ -594,14 +577,11 @@ impl Default for CollisionBox {
     }
 }
 
-// TODO: Pretty sure I should delete all variants except Hit and hurt
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum CollisionBoxRole {
     Hurt (HurtBox), // a target
     Hit  (HitBox),  // a launching attack
     Grab,           // a grabbing attack
-    Intangible,     // cannot be interacted with rendered transparent with normal outline
-    IntangibleItem, // cannot be interacted with rendered as a grey surface with no outline
     Invincible,     // cannot receive damage or knockback.
     Reflect,        // reflects projectiles
     Absorb,         // absorb projectiles

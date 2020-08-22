@@ -7,21 +7,22 @@ use projectile::{Projectile, ProjectileAction};
 use item::{Item, ItemAction, MessageItem};
 
 use crate::collision::collision_box::CollisionResult;
+use crate::graphics;
 use crate::particle::Particle;
 use crate::rules::Goal;
-use crate::graphics;
 
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB, Action};
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
-use treeflection::KeyedContextVec;
+use cgmath::{Quaternion, Rotation3, Rad};
 use num_traits::FromPrimitive;
 use rand_chacha::ChaChaRng;
+use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
+use treeflection::KeyedContextVec;
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
-use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 
 use std::collections::HashSet;
 use std::f32::consts::PI;
@@ -46,7 +47,7 @@ pub struct Entity {
 }
 
 impl Entity {
-    pub fn process_message(&mut self, message: Message, context: &StepContext) {
+    pub fn process_message(&mut self, message: Message, context: &mut StepContext) {
         match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
             (EntityType::Item (item), MessageContents::Item (message)) => item.process_message(message, context),
             _ => error!("Message received by entity type that cannot process it"),
@@ -86,10 +87,20 @@ impl Entity {
         }
     }
 
-    pub fn item_grab(&mut self, hit_key: EntityKey, hit_id: Option<usize>) {
+    /// only used for rendering
+    pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32, f32) {
+        let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
+        match &self.ty {
+            EntityType::Player     (player)     => player.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces),
+            EntityType::Item       (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces),
+            EntityType::Projectile (projectile) => (projectile.x, projectile.y, 0.0)
+        }
+    }
+
+    pub fn item_grab(&mut self, context: &mut StepContext, hit_key: EntityKey, hit_id: Option<usize>) {
         match &mut self.ty {
             EntityType::Player     (player) => player.item_grab(),
-            EntityType::Item       (item)   => item.grabbed(hit_key, hit_id),
+            EntityType::Item       (item)   => item.grabbed(context, hit_key, hit_id),
             EntityType::Projectile (_)      => { }
         }
     }
@@ -141,7 +152,7 @@ impl Entity {
         }
     }
 
-    pub fn angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
+    pub fn frame_angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
         if let Some(entity_frame) = self.get_entity_frame(entity_def) {
             match &self.ty {
                 EntityType::Player (player) => player.body.angle(entity_frame, surfaces),
@@ -166,7 +177,7 @@ impl Entity {
     }
 
     pub fn relative_frame(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> ActionFrame {
-        let angle = self.angle(entity_def, surfaces);
+        let angle = self.frame_angle(entity_def, surfaces);
         if let Some(fighter_frame) = self.get_entity_frame(entity_def) {
             let mut fighter_frame = fighter_frame.clone();
 
@@ -300,7 +311,7 @@ impl Entity {
         };
 
         let mut frames = vec!(self.render_frame(entities, entity_defs, surfaces));
-        let range = entity_history.len().saturating_sub(10) .. entity_history.len();
+        let range = entity_history.len().saturating_sub(5) .. entity_history.len();
         for entities in entity_history[range].iter().rev() {
             if let Some(entity) = entities.get(entity_i) {
                 // handle deleted frames by just skipping it, only encountered when the editor is used.
@@ -316,10 +327,16 @@ impl Entity {
             EntityType::Item (_)        => RenderEntityType::Item,
         };
 
+        let visible = match &self.ty {
+            EntityType::Item (item) => !item.body.is_item_held() || item.held_render_angle(entities, entity_defs).is_some(),
+            _ => true
+        };
+
         RenderEntity {
-            render_type,
             frame_data:  self.relative_frame(entity_def, surfaces),
             particles:   self.particles().clone(),
+            visible,
+            render_type,
             frames,
             fighter_color,
             entity_selected,
@@ -334,18 +351,35 @@ impl Entity {
         RenderEntityFrame {
             entity_def_key: self.entity_def_key().to_string(),
             model_name:     entity_def.name.clone(),
-            bps:            self.public_bps_xy(entities, entity_defs, surfaces),
+            frame_bps:      self.public_bps_xy(entities, entity_defs, surfaces),
+            render_bps:     self.public_bps_xyz(entities, entity_defs, surfaces),
             ecb:            self.ecb(),
             frame:          self.frame() as usize,
             action:         self.action() as usize,
             face_right:     self.face_right(),
-            angle:          self.angle(entity_def, surfaces),
+            frame_angle:    self.frame_angle(entity_def, surfaces),
+            render_angle:   self.render_angle(entities, entity_defs, surfaces),
+        }
+    }
+
+    fn render_angle(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Quaternion<f32> {
+        let entity_def = &entity_defs[self.entity_def_key()];
+        match &self.ty {
+            EntityType::Item (item) => {
+                if let Some(render_angle) = item.held_render_angle(entities, entity_defs) {
+                    render_angle
+                } else {
+                    Quaternion::from_angle_z(Rad(self.frame_angle(entity_def, surfaces)))
+                }
+            }
+            _ => Quaternion::from_angle_z(Rad(self.frame_angle(entity_def, surfaces)))
         }
     }
 }
 
 pub struct RenderEntity {
     pub render_type:       RenderEntityType,
+    pub visible:           bool,
     pub debug:             DebugEntity,
     /// Gauranteed to have at least one value (the current frame), and can have up to and including 10 values
     pub frames:            Vec<RenderEntityFrame>,
@@ -520,12 +554,14 @@ impl DebugEntity {
 pub struct RenderEntityFrame {
     pub entity_def_key: String,
     pub model_name:     String,
-    pub bps:            (f32, f32),
+    pub frame_bps:      (f32, f32),
+    pub render_bps:     (f32, f32, f32),
     pub ecb:            ECB,
     pub frame:          usize,
     pub action:         usize,
     pub face_right:     bool,
-    pub angle:          f32,
+    pub frame_angle:    f32,
+    pub render_angle:   Quaternion<f32>,
 }
 
 pub struct VectorArrow {

@@ -5,13 +5,14 @@ mod animation;
 // TODO: Move duplicate code in hurtbox and animation modules into canon_collision_lib
 
 use canon_collision_lib::assets::Assets;
-use canon_collision_lib::entity_def::{Action, ActionDef, ActionFrame, CollisionBoxRole, CollisionBox};
+use canon_collision_lib::entity_def::{Action, ActionDef, ActionFrame, CollisionBoxRole, CollisionBox, ItemHold};
 use canon_collision_lib::package::Package;
 use cli::CLIResults;
 use model::{Model3D, Joint, Animation};
 use hurtbox::HurtBox;
 
-use cgmath::{Point3, Vector3, Matrix4, SquareMatrix, Transform, VectorSpace};
+use cgmath::{Point3, Vector3, Matrix4, SquareMatrix, Transform, VectorSpace, Rad};
+use std::f32;
 
 fn main() {
     let cli = cli::cli();
@@ -100,6 +101,8 @@ fn regenerate_action(action: &mut ActionDef, root_joint: &Joint, animation: &Ani
         for hurtbox in hurtboxes {
             generate_hurtbox(frame, &root_joint, hurtbox);
         }
+
+        generate_item_hold(frame, &root_joint, "Hand.R");
     }
 }
 
@@ -132,5 +135,74 @@ fn generate_hurtbox(frame: &mut ActionFrame, root_joint: &Joint, hurtbox: &HurtB
             let point = (point1.z, point1.y);
             frame.colboxes.push(CollisionBox { point, radius, role });
         }
+    }
+}
+
+fn generate_item_hold(frame: &mut ActionFrame, root_joint: &Joint, bone_name: &str) {
+    for child in &root_joint.children {
+        generate_item_hold(frame, child, bone_name);
+    }
+
+    if root_joint.name == bone_name {
+        let transform = Matrix4::from_angle_y(Rad(f32::consts::PI / 2.0)) * &root_joint.transform;
+        let point = transform.transform_point(Point3::new(0.0, 0.0, 0.0));
+        let quaternion = matrix_to_quaternion(&transform);
+
+        if frame.item_hold.is_some() {
+            frame.item_hold = Some(ItemHold {
+                translation_x: point.x,
+                translation_y: point.y,
+                translation_z: point.z,
+                quaternion_x: quaternion.3,
+                quaternion_y: quaternion.1,
+                quaternion_z: quaternion.2,
+                quaternion_rotation: quaternion.0,
+            });
+        }
+    }
+}
+
+/// copied from three.js
+/// which copied from http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
+/// assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
+fn matrix_to_quaternion(m: &Matrix4<f32>) -> (f32, f32, f32, f32) {
+    let trace = m.x.x + m.y.y + m.z.z;
+
+    if trace > 0.0 {
+        let s = 0.5 / (trace + 1.0).sqrt();
+
+        (
+            0.25 / s,
+            (m.z.y - m.y.z) * s,
+            (m.x.z - m.z.x) * s,
+            (m.y.x - m.x.y) * s,
+        )
+    } else if m.x.x > m.y.y && m.x.x > m.z.z {
+        let s = 2.0 * (1.0 + m.x.x - m.y.y - m.z.z).sqrt();
+
+        (
+            (m.z.y - m.y.z) / s,
+            0.25 * s,
+            (m.x.y + m.y.x) / s,
+            (m.x.z + m.z.x) / s,
+        )
+    } else if m.y.y > m.z.z {
+        let s = 2.0 * (1.0 + m.y.y - m.x.x - m.z.z).sqrt();
+
+        (
+            (m.x.z - m.z.x) / s,
+            (m.x.y + m.y.x) / s,
+            0.25 * s,
+            (m.y.z + m.z.y) / s,
+        )
+    } else {
+        let s = 2.0 * (1.0 + m.z.z - m.x.x - m.y.y).sqrt();
+
+        (
+            (m.y.x - m.x.y) / s,
+            (m.x.z + m.z.x) / s,
+            (m.y.z + m.z.y) / s,
+            0.25 * s,
+        )
     }
 }

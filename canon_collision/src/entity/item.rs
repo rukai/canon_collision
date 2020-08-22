@@ -1,11 +1,12 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{DebugEntity, StepContext, EntityKey};
+use crate::entity::{Entities, DebugEntity, StepContext, EntityKey};
 use crate::body::{Body, PhysicsResult, Location};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
-use treeflection::KeyedContextVec;
+use cgmath::Quaternion;
 use num_traits::FromPrimitive;
+use treeflection::KeyedContextVec;
 
 #[repr(u64)]
 #[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
@@ -34,19 +35,19 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn process_message(&mut self, message: &MessageItem, context: &StepContext) {
+    pub fn process_message(&mut self, message: &MessageItem, context: &mut StepContext) {
         match message {
             MessageItem::Thrown { x_vel, y_vel } => {
                 let (x, y) = self.bps_xy(context);
                 self.body.location = Location::Airbourne { x, y };
                 self.body.x_vel = *x_vel;
                 self.body.y_vel = *y_vel;
-                self.action = ItemAction::Thrown as u64;
+                self.set_action(context, ItemAction::Thrown);
             }
             MessageItem::Dropped => {
                 let (x, y) = self.bps_xy(context);
                 self.body.location = Location::Airbourne { x, y };
-                self.action = ItemAction::Dropped as u64;
+                self.set_action(context, ItemAction::Dropped);
             }
         }
     }
@@ -93,8 +94,9 @@ impl Item {
         }
     }
 
-    pub fn grabbed(&mut self, grabbed_by_key: EntityKey, grabbed_by_id: Option<usize>) {
-        self.body.location = Location::GrabbedByPlayer (grabbed_by_key);
+    pub fn grabbed(&mut self, context: &mut StepContext, grabbed_by_key: EntityKey, grabbed_by_id: Option<usize>) {
+        self.set_action(context, ItemAction::Held);
+        self.body.location = Location::ItemHeldByPlayer (grabbed_by_key);
         self.owner_id = grabbed_by_id;
     }
 
@@ -185,5 +187,22 @@ impl Item {
         }
 
         lines
+    }
+
+    pub fn held_render_angle(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>) -> Option<Quaternion<f32>> {
+        match self.body.location {
+            Location::ItemHeldByPlayer (player_i) => {
+                entities.get(player_i)
+                    .and_then(|player| player.get_entity_frame(&entity_defs[player.entity_def_key()]))
+                    .and_then(|action_frame| action_frame.item_hold.as_ref())
+                    .and_then(|item_hold| Some(Quaternion::new(
+                        item_hold.quaternion_x,
+                        item_hold.quaternion_y,
+                        item_hold.quaternion_z,
+                        item_hold.quaternion_rotation
+                    )))
+            }
+            _ => None
+        }
     }
 }
