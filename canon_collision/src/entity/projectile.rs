@@ -40,6 +40,7 @@ impl Projectile {
 
     pub fn action_hitlag_step(&mut self, context: &mut StepContext) {
         self.frame += 1;
+        self.frame_no_restart += 1;
         self.frame_step(context);
     }
 

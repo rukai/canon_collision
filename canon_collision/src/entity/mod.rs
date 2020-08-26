@@ -230,6 +230,14 @@ impl Entity {
         }
     }
 
+    pub fn frame_norestart(&self) -> i64 {
+        match &self.ty {
+            EntityType::Player (player) => player.frame_norestart,
+            EntityType::Item (item) => item.frame_no_restart,
+            EntityType::Projectile (projectile) => projectile.frame_no_restart,
+        }
+    }
+
     pub fn set_frame(&mut self, frame: i64) {
         match &mut self.ty {
             EntityType::Player (player) => player.frame = frame,
@@ -349,16 +357,17 @@ impl Entity {
     fn render_frame(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
         let entity_def = &entity_defs[self.entity_def_key()];
         RenderEntityFrame {
-            entity_def_key: self.entity_def_key().to_string(),
-            model_name:     entity_def.name.clone(),
-            frame_bps:      self.public_bps_xy(entities, entity_defs, surfaces),
-            render_bps:     self.public_bps_xyz(entities, entity_defs, surfaces),
-            ecb:            self.ecb(),
-            frame:          self.frame() as usize,
-            action:         self.action() as usize,
-            face_right:     self.face_right(),
-            frame_angle:    self.frame_angle(entity_def, surfaces),
-            render_angle:   self.render_angle(entities, entity_defs, surfaces),
+            entity_def_key:  self.entity_def_key().to_string(),
+            model_name:      entity_def.name.clone(),
+            frame_bps:       self.public_bps_xy(entities, entity_defs, surfaces),
+            render_bps:      self.public_bps_xyz(entities, entity_defs, surfaces),
+            ecb:             self.ecb(),
+            frame:           self.frame() as usize,
+            frame_norestart: self.frame_norestart() as usize,
+            action:          self.action() as usize,
+            face_right:      self.face_right(),
+            frame_angle:     self.frame_angle(entity_def, surfaces),
+            render_angle:    self.render_angle(entities, entity_defs, surfaces),
         }
     }
 
@@ -552,16 +561,17 @@ impl DebugEntity {
 }
 
 pub struct RenderEntityFrame {
-    pub entity_def_key: String,
-    pub model_name:     String,
-    pub frame_bps:      (f32, f32),
-    pub render_bps:     (f32, f32, f32),
-    pub ecb:            ECB,
-    pub frame:          usize,
-    pub action:         usize,
-    pub face_right:     bool,
-    pub frame_angle:    f32,
-    pub render_angle:   Quaternion<f32>,
+    pub entity_def_key:  String,
+    pub model_name:      String,
+    pub frame_bps:       (f32, f32),
+    pub render_bps:      (f32, f32, f32),
+    pub ecb:             ECB,
+    pub frame:           usize,
+    pub frame_norestart: usize,
+    pub action:          usize,
+    pub face_right:      bool,
+    pub frame_angle:     f32,
+    pub render_angle:    Quaternion<f32>,
 }
 
 pub struct VectorArrow {

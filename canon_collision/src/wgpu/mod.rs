@@ -61,6 +61,7 @@ pub struct WgpuGraphics {
     pipeline_model3d_static:      RenderPipeline,
     pipeline_model3d_static_lava: RenderPipeline,
     pipeline_model3d_animated:    RenderPipeline,
+    pipeline_model3d_fireball:    RenderPipeline,
     bind_group_layout_generic:    BindGroupLayout,
     bind_group_layout_model3d:    BindGroupLayout,
     sampler:                      Sampler,
@@ -94,7 +95,7 @@ impl WgpuGraphics {
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits {
-                    max_uniform_buffer_binding_size: 32064, // Needed for AnimatedUniform
+                    max_uniform_buffer_binding_size: 32068, // Needed for AnimatedUniform
                     ..wgpu::Limits::default()
                 },
                 shader_validation: true,
@@ -317,6 +318,9 @@ impl WgpuGraphics {
         let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
         let model3d_animated_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_animated_vs)));
 
+        let model3d_fireball_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-fireball-vertex.glsl", kind: vert);
+        let model3d_fireball_vs_module = device.create_shader_module(ShaderModuleSource::SpirV(Cow::Borrowed(model3d_fireball_vs)));
+
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: None,
@@ -450,6 +454,39 @@ impl WgpuGraphics {
             alpha_to_coverage_enabled: false,
         });
 
+        let pipeline_model3d_fireball = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_model3d_layout),
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &model3d_fireball_vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &model3d_standard_fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: rasterization_state_back_face_culling.clone(),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+            color_states: &color_states,
+            depth_stencil_state: depth_stencil_state.clone(),
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16,
+                vertex_buffers: &[wgpu::VertexBufferDescriptor {
+                    stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
+                    step_mode: wgpu::InputStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float4, // position
+                        1 => Float2, // uv
+                        2 => Uint4,  // joints
+                        3 => Float4  // weights
+                    ],
+                }],
+            },
+            sample_count: SAMPLE_COUNT,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
+
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
             address_mode_v: wgpu::AddressMode::Repeat,
@@ -503,6 +540,7 @@ impl WgpuGraphics {
             pipeline_model3d_static,
             pipeline_model3d_static_lava,
             pipeline_model3d_animated,
+            pipeline_model3d_fireball,
             bind_group_layout_generic,
             bind_group_layout_model3d,
             sampler,
@@ -739,66 +777,10 @@ impl WgpuGraphics {
                                 }]
                             })
                         }
-                        DrawType::ModelAnimated { texture, .. } => {
-                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout: &self.bind_group_layout_model3d,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: uniform_resource,
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 2,
-                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                                    },
-                                ]
-                            })
-                        }
-                        DrawType::ModelStatic { texture, .. } => {
-                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout: &self.bind_group_layout_model3d,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: uniform_resource,
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 2,
-                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                                    },
-                                ]
-                            })
-                        }
-                        DrawType::Lava { texture, .. } => {
-                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout: &self.bind_group_layout_model3d,
-                                entries: &[
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: uniform_resource,
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 2,
-                                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                                    },
-                                ]
-                            })
-                        }
+                        DrawType::ModelAnimated { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                        DrawType::Fireball      { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                        DrawType::ModelStatic   { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                        DrawType::Lava          { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
                     };
                     bind_groups.push(bind_group);
                     uniforms_offset += draw.ty.uniform_size_padded() as u64;
@@ -813,6 +795,7 @@ impl WgpuGraphics {
                         DrawType::ModelAnimated {                                  .. } => &self.pipeline_model3d_animated,
                         DrawType::ModelStatic   {                                  .. } => &self.pipeline_model3d_static,
                         DrawType::Lava          {                                  .. } => &self.pipeline_model3d_static_lava,
+                        DrawType::Fireball      {                                  .. } => &self.pipeline_model3d_fireball,
                     };
                     rpass.set_pipeline(pipeline);
                     rpass.set_bind_group(0, &bind_groups[i], &[]);
@@ -827,6 +810,27 @@ impl WgpuGraphics {
             self.queue.submit(Some(encoder.finish()));
         }
         self.wsd = Some(wsd);
+    }
+
+    fn create_bind_group_model3d(&self, uniform: wgpu::BindingResource, texture: &Rc<Texture>) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.bind_group_layout_model3d,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform,
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ]
+        })
     }
 
     fn command_render(&mut self, lines: &[String]) {
@@ -986,6 +990,7 @@ impl WgpuGraphics {
         entity:          &Matrix4<f32>,
         animation_name:  &str,
         animation_frame: f32,
+        animation_frame_norestart: f32,
     ) -> Vec<Draw> {
         let camera = camera.transform();
         let mut draws = vec!();
@@ -1005,23 +1010,30 @@ impl WgpuGraphics {
                                 }
                             }
 
-                            let uniform = AnimatedUniform { transform, joint_transforms };
-                            let ty = DrawType::ModelAnimated { uniform, texture };
+                            let uniform = AnimatedUniform {
+                                transform,
+                                joint_transforms,
+                                frame_count: animation_frame_norestart,
+                            };
+                            let ty = match primitive.shader_type {
+                                ShaderType::Standard | ShaderType::Lava => DrawType::ModelAnimated { uniform, texture },
+                                ShaderType::Fireball => DrawType::Fireball { uniform, texture },
+                            };
                             Draw { ty, buffers }
                         }
                         ModelVertexType::Static => {
                             let transformation = camera * entity * mesh.transform;
                             let ty = match primitive.shader_type {
-                                ShaderType::Standard => {
-                                    let uniform = TransformUniform { transform: transformation.into() };
-                                    DrawType::ModelStatic { uniform, texture }
-                                }
                                 ShaderType::Lava => {
                                     let uniform = TransformUniformCycle {
                                         transform: transformation.into(),
                                         frame_count: animation_frame,
                                     };
                                     DrawType::Lava { uniform, texture }
+                                },
+                                ShaderType::Standard | ShaderType::Fireball => {
+                                    let uniform = TransformUniform { transform: transformation.into() };
+                                    DrawType::ModelStatic { uniform, texture }
                                 }
                             };
                             Draw { ty, buffers }
@@ -1083,7 +1095,7 @@ impl WgpuGraphics {
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
             if let Some(stage) = self.models.get(&render.stage_model_name) {
-                draws.extend(self.render_model3d(&render.camera, &stage, &stage_transformation, "NONE", render.current_frame as f32));
+                draws.extend(self.render_model3d(&render.camera, &stage, &stage_transformation, "NONE", render.current_frame as f32, render.current_frame as f32));
             }
         }
 
@@ -1130,7 +1142,14 @@ impl WgpuGraphics {
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(fighter_model_name) {
                                     let action = entity.render_type.action_index_to_string(action_index);
-                                    draws.extend(self.render_model3d(&render.camera, &fighter, &transformation, &action, entity.frames[0].frame as f32));
+                                    draws.extend(self.render_model3d(
+                                        &render.camera,
+                                        &fighter,
+                                        &transformation,
+                                        &action,
+                                        entity.frames[0].frame as f32,
+                                        entity.frames[0].frame_norestart as f32
+                                    ));
                                 }
                             }
                         }
@@ -1665,7 +1684,8 @@ impl WgpuGraphics {
                 let action: &str = Action::from_u64(fighter.css_action)
                     .map(|x| x.into())
                     .unwrap_or("Idle");
-                draws.extend(self.render_model3d(&camera, &model, &transformation, action, selection.animation_frame as f32));
+                let frame = selection.animation_frame as f32;
+                draws.extend(self.render_model3d(&camera, &model, &transformation, action, frame, frame));
             }
         }
 
@@ -1849,6 +1869,7 @@ struct TransformUniformCycle {
 struct AnimatedUniform {
     transform: [[f32; 4]; 4],
     joint_transforms: JointTransforms,
+    frame_count: f32,
 }
 type JointTransforms = [[[f32; 4]; 4]; 500];
 
@@ -1864,6 +1885,7 @@ enum DrawType {
     Color         { uniform: TransformUniform, debug: bool, dimension3: bool },
     Hitbox        { uniform: HitboxUniform },
     ModelAnimated { uniform: AnimatedUniform,  texture: Rc<Texture> },
+    Fireball      { uniform: AnimatedUniform,  texture: Rc<Texture> },
     ModelStatic   { uniform: TransformUniform, texture: Rc<Texture> },
     Lava          { uniform: TransformUniformCycle, texture: Rc<Texture> },
 }
@@ -1875,6 +1897,7 @@ impl DrawType {
             DrawType::Hitbox        { uniform, .. } => uniform.as_bytes(),
             DrawType::ModelStatic   { uniform, .. } => uniform.as_bytes(),
             DrawType::ModelAnimated { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Fireball      { uniform, .. } => bytemuck::bytes_of(uniform),
             DrawType::Lava          { uniform, .. } => uniform.as_bytes(),
         }
     }
@@ -1884,6 +1907,7 @@ impl DrawType {
             DrawType::Color         { .. } => mem::size_of::<TransformUniform>(),
             DrawType::Hitbox        { .. } => mem::size_of::<HitboxUniform>(),
             DrawType::ModelAnimated { .. } => mem::size_of::<AnimatedUniform>(),
+            DrawType::Fireball      { .. } => mem::size_of::<AnimatedUniform>(),
             DrawType::ModelStatic   { .. } => mem::size_of::<TransformUniform>(),
             DrawType::Lava          { .. } => mem::size_of::<TransformUniformCycle>(),
         }

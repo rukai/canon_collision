@@ -140,7 +140,8 @@ pub enum ModelVertexType {
 #[derive(Clone)]
 pub enum ShaderType {
     Standard,
-    Lava
+    Lava,
+    Fireball,
 }
 
 pub struct Model3D {
@@ -402,7 +403,8 @@ impl Model3D {
                     (positions, uvs, joints, weights) => unimplemented!("Unexpected combination of vertex data - positions: {:?}, uvs: {:?}, joints: {:?}, weights: {:?}", positions.is_some(), uvs.is_some(), joints.is_some(), weights.is_some()),
                 };
                 let shader_type = match node.name() {
-                    Some("Lava") => ShaderType::Lava,
+                    Some("Lava")     => ShaderType::Lava,
+                    Some("Fireball") => ShaderType::Fireball,
                     _ => ShaderType::Standard,
                 };
 

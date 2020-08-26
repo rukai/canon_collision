@@ -1000,6 +1000,27 @@ impl Player {
                     ty: EntityType::Projectile(
                         Projectile {
                             owner_id: Some(self.id),
+                            entity_def_key: "TorielFireball.cbor".to_string(),
+                            action: 0,
+                            frame: 0,
+                            frame_no_restart: 0,
+                            speed: 0.6,
+                            angle: if self.body.face_right { 0.0 } else { PI },
+                            x: x + self.relative_f(10.0),
+                            y: y + 10.0,
+                        }
+                    )
+                });
+            }
+        }
+
+        if let Some(Action::TauntLeft) = Action::from_u64(self.action) {
+            if self.frame == 0 {
+                let (x, y) = self.bps_xy(context);
+                context.new_entities.push(Entity {
+                    ty: EntityType::Projectile(
+                        Projectile {
+                            owner_id: Some(self.id),
                             entity_def_key: "PerfectlyGenericProjectile.cbor".to_string(),
                             action: 0,
                             frame: 0,

@@ -10,6 +10,7 @@ layout(location = 0) out vec2 v_uv;
 layout(set = 0, binding = 0) uniform Data {
     mat4 u_transform;
     mat4 u_joint_transforms[500];
+    float u_frame_count;
 };
 
 void main() {
