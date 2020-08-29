@@ -6,7 +6,7 @@ use crate::rules::{Goal, Rules};
 use crate::entity::item::{Item, ItemAction, MessageItem};
 use crate::entity::projectile::Projectile;
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents};
-use crate::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
+use crate::entity::components::body::{Body, Location, Hitlag, PhysicsResult, HitlagResult};
 
 use canon_collision_lib::entity_def::*;
 use canon_collision_lib::geometry::Rect;

@@ -1,6 +1,7 @@
+pub(crate) mod components;
+pub(crate) mod item;
 pub(crate) mod player;
 pub(crate) mod projectile;
-pub(crate) mod item;
 
 use player::{Player, RenderPlayer, MessagePlayer};
 use projectile::{Projectile, ProjectileAction};

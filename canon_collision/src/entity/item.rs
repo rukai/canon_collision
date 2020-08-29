@@ -1,6 +1,6 @@
 use crate::collision::collision_box::CollisionResult;
 use crate::entity::{Entities, DebugEntity, StepContext, EntityKey};
-use crate::body::{Body, PhysicsResult, Location};
+use crate::entity::components::body::{Body, PhysicsResult, Location};
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
