@@ -1,5 +1,6 @@
 use crate::entity::player::Player;
 use crate::entity::{Entities, EntityKey, EntityType};
+use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::{EntityDef, HurtBox, HitBox, CollisionBox, CollisionBoxRole, PowerShield};
 use canon_collision_lib::stage::Surface;
@@ -28,7 +29,7 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
                         if let EntityType::Player(player_defend) = &entity_defend.ty {
-                            if colbox_shield_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, player_defend, entity_defend_def) {
+                            if colbox_shield_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, player_defend, entity_defend_def, &entity_defend.state) {
                                 result[entity_atk_i].push(CollisionResult::HitShieldAtk {
                                     hitbox: hitbox_atk.clone(),
                                     power_shield: entity_defend_def.power_shield.clone(),
@@ -155,9 +156,9 @@ enum ColBoxCollisionResult {
     None
 }
 
-fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,  player2_xy: (f32, f32), player2: &Player, fighter2: &EntityDef) -> bool {
+fn colbox_shield_collision_check(player1_xy: (f32, f32), colbox1: &CollisionBox,  player2_xy: (f32, f32), player2: &Player, fighter2: &EntityDef, player2_state: &ActionState) -> bool {
     if let &Some(ref shield) = &fighter2.shield {
-        if player2.is_shielding() {
+        if player2.is_shielding(player2_state) {
             let x1 = player1_xy.0 + colbox1.point.0;
             let y1 = player1_xy.1 + colbox1.point.1;
             let r1 = colbox1.radius;

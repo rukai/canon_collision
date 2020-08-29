@@ -3,6 +3,7 @@ use crate::collision::collision_box;
 use crate::collision::item_grab;
 use crate::entity::player::{Player};
 use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
+use crate::entity::components::action_state::ActionState;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
 use crate::replays::Replay;
@@ -100,7 +101,8 @@ impl Game {
                 let fighter = player.fighter.clone();
                 let team = player.team;
                 entities.insert(Entity {
-                    ty: EntityType::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules))
+                    ty: EntityType::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)),
+                    state: ActionState::new(Action::Spawn),
                 });
             }
         }
@@ -250,8 +252,8 @@ impl Game {
             Edit::Entity (entity_i) => {
                 if let Some(entity) = self.entities.get(entity_i) {
                     let entity_def_key  = entity.entity_def_key().as_ref();
-                    let entity_action   = entity.action() as usize;
-                    let entity_frame    = entity.frame() as usize;
+                    let entity_action   = entity.state.action as usize;
+                    let entity_frame    = entity.state.frame as usize;
                     let entity_colboxes = self.selector.colboxes_vec();
 
                     let entity_defs = &mut self.package.entities;
@@ -467,9 +469,9 @@ impl Game {
 
                     let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
                     let fighter = entity_def_key.as_ref();
-                    let action = self.entities[entity_i].action() as usize;
-                    let action_enum = Action::from_u64(self.entities[entity_i].action());
-                    let frame  = self.entities[entity_i].frame() as usize;
+                    let action = self.entities[entity_i].state.action as usize;
+                    let action_enum = Action::from_u64(self.entities[entity_i].state.action);
+                    let frame  = self.entities[entity_i].state.frame as usize;
                     self.debug_entities[entity_i].step(os_input);
 
                     // by adding the same amount of frames that are skipped in the entity logic,
@@ -532,10 +534,10 @@ impl Game {
                                     // This is purely to stay on the same action for usability.
                                     // The entity itself must handle being on a frame that has been deleted in order for replays to work.
                                     for any_entity in &mut self.entities.values_mut() {
-                                        if any_entity.entity_def_key() == fighter && any_entity.action() as usize == action
-                                            && any_entity.frame() as usize == self.package.entities[fighter].actions[action].frames.len()
+                                        if any_entity.entity_def_key() == fighter && any_entity.state.action as usize == action
+                                            && any_entity.state.frame as usize == self.package.entities[fighter].actions[action].frames.len()
                                         {
-                                            any_entity.set_frame(any_entity.frame() - 1);
+                                            any_entity.state.frame -= 1;
                                         }
                                     }
                                     self.update_frame();
@@ -1210,10 +1212,10 @@ impl Game {
             self.entities = collision_entities;
         }
 
-        let players_count = self.players_iter().count();
+        let players_count = self.players_iter_action_state().count();
         if self.time_out() ||
-           (players_count == 1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (players_count >  1 && self.players_iter().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
+           (players_count == 1 && self.players_iter_action_state().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
+           (players_count >  1 && self.players_iter_action_state().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }
@@ -1227,6 +1229,13 @@ impl Game {
         } else {
             false
         }
+    }
+
+    fn players_iter_action_state(&self) -> impl Iterator<Item=&ActionState> {
+        self.entities.values().filter_map(|x| match &x.ty {
+            EntityType::Player(_) => Some(&x.state),
+            _ => None,
+        })
     }
 
     fn players_iter(&self) -> impl Iterator<Item=&Player> {

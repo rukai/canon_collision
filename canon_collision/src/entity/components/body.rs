@@ -1,48 +1,15 @@
 use crate::entity::{EntityKey, Entities, StepContext};
+use crate::entity::components::action_state::{ActionState, Hitlag};
 
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame, HitBox, HurtBox};
 use canon_collision_lib::geometry;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::Surface;
 
-use rand_chacha::ChaChaRng;
-use rand::Rng;
 use treeflection::KeyedContextVec;
 
 use std::f32::consts::PI;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Hitlag {
-    Attack { counter: u64 },
-    Launch { counter: u64, kb_vel: f32, angle: f32, wobble_x: f32 },
-    None
-}
-
-impl Hitlag {
-    pub fn decrement(&mut self) -> bool {
-        let end = match self {
-            &mut Hitlag::Attack { ref mut counter} |
-            &mut Hitlag::Launch { ref mut counter, .. } => {
-                *counter -= 1;
-                *counter <= 1
-            }
-            &mut Hitlag::None => {
-                false
-            }
-        };
-        if end {
-            *self = Hitlag::None
-        }
-        end
-    }
-
-    fn wobble(&mut self, rng: &mut ChaChaRng) {
-        if let &mut Hitlag::Launch { ref mut wobble_x, .. } = self {
-            *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
-        }
-    }
-}
 
 // Describes the player location by offsets from other locations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,13 +29,6 @@ pub enum PhysicsResult {
     OutOfBounds,
 }
 
-pub enum HitlagResult {
-    Hitlag,
-    NoHitlag,
-    LaunchAir { angle: f32 },
-    LaunchGround { angle: f32 },
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Body {
     pub damage:             f32,
@@ -78,10 +38,14 @@ pub struct Body {
     pub kb_y_vel:           f32,
     pub kb_x_dec:           f32,
     pub kb_y_dec:           f32,
-    pub hitlag:             Hitlag,
     pub location:           Location,
     pub face_right:         bool,
     pub frames_since_ledge: u64,
+
+    // Only use for debug display
+    pub frames_since_hit:  u64,
+    pub hit_angle_pre_di:  Option<f32>,
+    pub hit_angle_post_di: Option<f32>,
 }
 
 impl Body {
@@ -94,10 +58,14 @@ impl Body {
             kb_y_vel:           0.0,
             kb_x_dec:           0.0,
             kb_y_dec:           0.0,
-            hitlag:             Hitlag::None,
             frames_since_ledge: 0,
             location,
             face_right,
+
+            // Only use for debug display
+            frames_since_hit:  0,
+            hit_angle_pre_di:  None,
+            hit_angle_post_di: None,
         }
     }
 
@@ -151,7 +119,11 @@ impl Body {
         false
     }
 
-    pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface]) -> (f32, f32) {
+    fn bps_xy(&self, context: &mut StepContext, action_frame: Option<&ActionFrame>, state: &ActionState) -> (f32, f32) {
+        self.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
+    }
+
+    pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
         let bps_xy = match self.location {
             Location::Surface { platform_i, x } => {
                 if let Some(platform) = surfaces.get(platform_i) {
@@ -210,7 +182,7 @@ impl Body {
             }
         };
 
-        match &self.hitlag {
+        match &state.hitlag {
             &Hitlag::Launch { wobble_x, .. } => {
                 (bps_xy.0 + wobble_x, bps_xy.1)
             }
@@ -221,7 +193,7 @@ impl Body {
     }
 
     /// only used for rendering
-    pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface]) -> (f32, f32, f32) {
+    pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface], state: &ActionState) -> (f32, f32, f32) {
         let z = match self.location {
             Location::ItemHeldByPlayer (entity_i) => {
                 if let Some(player) = entities.get(entity_i) {
@@ -235,7 +207,7 @@ impl Body {
             }
             _ => 0.0,
         };
-        let (x, y) = self.public_bps_xy(entities, entity_defs, action_frame, surfaces);
+        let (x, y) = self.public_bps_xy(entities, entity_defs, action_frame, surfaces, state);
         (x, y, z)
     }
 
@@ -248,8 +220,8 @@ impl Body {
         }
     }
 
-    pub fn physics_step(&mut self, context: &mut StepContext, action_frame: &ActionFrame) -> Option<PhysicsResult> {
-        if let Hitlag::None = self.hitlag {
+    pub fn physics_step(&mut self, context: &mut StepContext, state: &ActionState, action_frame: &ActionFrame) -> Option<PhysicsResult> {
+        if let Hitlag::None = state.hitlag {
             if self.kb_x_vel.abs() > 0.0 {
                 let vel_dir = self.kb_x_vel.signum();
                 if self.is_airbourne() {
@@ -303,7 +275,7 @@ impl Body {
                 Location::Surface { platform_i, mut x } => {
                     if let Some(platform) = context.stage.surfaces.get(platform_i) {
                         x += x_vel * platform.floor_angle().unwrap_or_default().cos();
-                        self.floor_move(context, action_frame, platform, platform_i, x)
+                        self.floor_move(context, state, action_frame, platform, platform_i, x)
                     }
                     else {
                         self.location = Location::Airbourne { x: 0.0, y: 0.0 };
@@ -314,16 +286,16 @@ impl Body {
             };
             match result {
                 Some(_) => result,
-                None => self.secondary_checks(context, action_frame)
+                None => self.secondary_checks(context, state, action_frame)
             }
         } else {
             None
         }
     }
 
-    fn secondary_checks(&mut self, context: &mut StepContext, action_frame: &ActionFrame) -> Option<PhysicsResult> {
+    fn secondary_checks(&mut self, context: &mut StepContext, state: &ActionState, action_frame: &ActionFrame) -> Option<PhysicsResult> {
         let blast = &context.stage.blast;
-        let (x, y) = self.public_bps_xy(&context.entities, &context.entity_defs, Some(action_frame), &context.surfaces);
+        let (x, y) = self.bps_xy(context, Some(action_frame), state);
         if x < blast.left() || x > blast.right() || y < blast.bot() || y > blast.top() {
             Some(PhysicsResult::OutOfBounds)
         } else {
@@ -406,25 +378,25 @@ impl Body {
         platform.is_pass_through() && action_frame.pass_through && context.input[0].stick_y <= -0.56
     }
 
-    fn floor_move(&mut self, context: &mut StepContext, action_frame: &ActionFrame, platform: &Surface, platform_i: usize, x: f32) -> Option<PhysicsResult> {
+    fn floor_move(&mut self, context: &mut StepContext, state: &ActionState, action_frame: &ActionFrame, platform: &Surface, platform_i: usize, x: f32) -> Option<PhysicsResult> {
         let connected_floors = context.stage.connected_floors(platform_i);
         if platform.plat_x_in_bounds(x) {
             self.location = Location::Surface { platform_i, x };
-            self.secondary_checks(context, action_frame)
+            self.secondary_checks(context, state, action_frame)
         }
         else if x < 0.0 && connected_floors.left_i.is_some() {
             let new_platform_i = connected_floors.left_i.unwrap();
             let new_platform = &context.stage.surfaces[new_platform_i];
             let world_x = platform.plat_x_to_world_x(x);
             let x = new_platform.world_x_to_plat_x(world_x);
-            self.floor_move(context, action_frame, new_platform, new_platform_i, x)
+            self.floor_move(context, state, action_frame, new_platform, new_platform_i, x)
         }
         else if x > 0.0 && connected_floors.right_i.is_some() {
             let new_platform_i = connected_floors.right_i.unwrap();
             let new_platform = &context.stage.surfaces[new_platform_i];
             let world_x = platform.plat_x_to_world_x(x);
             let x = new_platform.world_x_to_plat_x(world_x);
-            self.floor_move(context, action_frame, new_platform, new_platform_i, x)
+            self.floor_move(context, state, action_frame, new_platform, new_platform_i, x)
         }
         else if !action_frame.ledge_cancel {
             self.location = Location::Surface { platform_i, x: platform.plat_x_clamp(x) };
@@ -481,26 +453,56 @@ impl Body {
         }
     }
 
-    pub fn hitlag_step(&mut self, context: &mut StepContext, action_frame: Option<&ActionFrame>) -> HitlagResult {
-        match self.hitlag.clone() {
-            Hitlag::Attack { .. } => {
-                self.hitlag.decrement();
-                HitlagResult::Hitlag
-            }
-            Hitlag::Launch { kb_vel, angle, .. } => {
-                self.hitlag.wobble(&mut context.rng);
+    pub fn launch(&mut self, context: &mut StepContext, state: &ActionState, action_frame: Option<&ActionFrame>, hitbox: &HitBox, hurtbox: &HurtBox, entity_atk_i: EntityKey, kb_vel_mult: f32) -> f32 {
+        let entity_atk = &context.entities[entity_atk_i];
 
-                if self.hitlag.decrement() {
-                    self.hitlag_defend_end(context, action_frame, kb_vel, angle)
-                } else {
-                    HitlagResult::Hitlag
-                }
-            }
-            Hitlag::None => HitlagResult::NoHitlag
+        let damage_done = hitbox.damage * hurtbox.damage_mult; // TODO: apply staling
+        self.damage += damage_done;
+
+        let damage_launch = 0.05 * (hitbox.damage * (damage_done + self.damage.floor())) + (damage_done + self.damage) * 0.1;
+        let weight = 2.0 - (2.0 * context.entity_def.weight) / (1.0 + context.entity_def.weight);
+        let kbg = hitbox.kbg + hurtbox.kbg_add;
+        let bkb = hitbox.bkb + hurtbox.bkb_add;
+
+        let kb_vel = (bkb + kbg * (damage_launch * weight * 1.4 + 18.0)).min(2500.0) * kb_vel_mult;
+
+        if !self.is_grabbed() || kb_vel > 50.0 {
+            let (x, y) = self.bps_xy(context, action_frame, state);
+            self.location = Location::Airbourne { x, y };
         }
-    }
 
-    fn hitlag_defend_end(&mut self, context: &mut StepContext, action_frame: Option<&ActionFrame>, kb_vel: f32, angle: f32) -> HitlagResult {
+        // handle sakurai angle
+        let angle_deg = if hitbox.angle == 361.0 {
+            if kb_vel < 32.1 {
+                0.0
+            }
+            else {
+                44.0
+            }
+        } else if hitbox.angle == 180.0 - 361.0 {
+            if kb_vel < 32.1 {
+                180.0
+            }
+            else {
+                180.0 - 44.0
+            }
+        } else {
+            hitbox.angle
+        };
+
+        // convert from degrees to radians
+        let angle_rad = angle_deg.to_radians() + if angle_deg < 0.0 { PI * 2.0 } else { 0.0 };
+
+        // handle reverse hits
+        let behind_entity_atk = self.bps_xy(context, action_frame, state).0 < entity_atk.bps_xy(context).0 && entity_atk.face_right() ||
+                                self.bps_xy(context, action_frame, state).0 > entity_atk.bps_xy(context).0 && !entity_atk.face_right();
+        let angle = if hitbox.enable_reverse_hit && behind_entity_atk { PI - angle_rad } else { angle_rad };
+
+        // debug data
+        self.hit_angle_pre_di = Some(angle);
+        self.hit_angle_post_di = None;
+        self.frames_since_hit = 0;
+
         let angle = if (kb_vel >= 80.0 || self.is_airbourne() || (angle != 0.0 && angle != PI)) // can di
             && !(context.input[0].stick_x == 0.0 && context.input[0].stick_y == 0.0) // not deadzone
         {
@@ -517,24 +519,22 @@ impl Body {
         self.kb_y_vel = sin * kb_vel * 0.03;
         self.kb_x_dec = cos * 0.051;
         self.kb_y_dec = sin * 0.051;
+        self.hit_angle_post_di = Some(angle);
 
         if self.kb_y_vel == 0.0 {
             if kb_vel >= 80.0 {
-                let (x, y) = self.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces);
+                let (x, y) = self.bps_xy(context, action_frame, state);
                 self.location = Location::Airbourne { x, y: y + 0.0001 };
-                HitlagResult::LaunchAir { angle }
-            } else {
-                HitlagResult::LaunchGround { angle }
             }
         }
         else if self.kb_y_vel > 0.0 {
-            let (x, y) = self.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces);
+            let (x, y) = self.bps_xy(context, action_frame, state);
             self.location = Location::Airbourne { x, y };
-            HitlagResult::LaunchAir { angle }
         }
-        else {
-            HitlagResult::LaunchGround { angle }
-        }
+        // TODO: determine from angle (current logic falls over when reverse hit is disabled)
+        self.face_right = self.bps_xy(context, action_frame, state).0 < entity_atk.bps_xy(context).0;
+
+        kb_vel
     }
 
     /// 0 < angle < 2pi
@@ -558,8 +558,8 @@ impl Body {
     }
 
     pub fn debug_string(&self, index: EntityKey) -> String {
-        format!("Entity: {:?}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}  hitlag: {:?}",
-            index, self.location, self.x_vel, self.y_vel, self.kb_x_vel, self.kb_y_vel, self.hitlag)
+        format!("Entity: {:?}  (Body)  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
+            index, self.location, self.x_vel, self.y_vel, self.kb_x_vel, self.kb_y_vel)
     }
 }
 

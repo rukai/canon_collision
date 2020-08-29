@@ -990,7 +990,7 @@ impl WgpuGraphics {
         entity:          &Matrix4<f32>,
         animation_name:  &str,
         animation_frame: f32,
-        animation_frame_norestart: f32,
+        animation_frame_no_restart: f32,
     ) -> Vec<Draw> {
         let camera = camera.transform();
         let mut draws = vec!();
@@ -1013,7 +1013,7 @@ impl WgpuGraphics {
                             let uniform = AnimatedUniform {
                                 transform,
                                 joint_transforms,
-                                frame_count: animation_frame_norestart,
+                                frame_count: animation_frame_no_restart,
                             };
                             let ty = match primitive.shader_type {
                                 ShaderType::Standard | ShaderType::Lava => DrawType::ModelAnimated { uniform, texture },
@@ -1148,7 +1148,7 @@ impl WgpuGraphics {
                                         &transformation,
                                         &action,
                                         entity.frames[0].frame as f32,
-                                        entity.frames[0].frame_norestart as f32
+                                        entity.frames[0].frame_no_restart as f32
                                     ));
                                 }
                             }

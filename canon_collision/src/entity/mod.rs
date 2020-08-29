@@ -6,6 +6,8 @@ pub(crate) mod projectile;
 use player::{Player, RenderPlayer, MessagePlayer};
 use projectile::{Projectile, ProjectileAction};
 use item::{Item, ItemAction, MessageItem};
+use components::action_state::{ActionState, Hitlag};
+use components::body::{Body};
 
 use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
@@ -18,7 +20,7 @@ use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
 use cgmath::{Quaternion, Rotation3, Rad};
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use rand_chacha::ChaChaRng;
 use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 use treeflection::KeyedContextVec;
@@ -42,24 +44,25 @@ pub enum EntityType {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub ty: EntityType,
-    // TODO: Already split into struct + enum and ill probs need it anyway so ill leave it as is.
-    // I can probably create another sub struct which I pass into the ty.step for processing.
-    // if none of that works out, lets just squish into a single enum again.
+    pub state: ActionState,
 }
 
 impl Entity {
     pub fn process_message(&mut self, message: Message, context: &mut StepContext) {
-        match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
-            (EntityType::Item (item), MessageContents::Item (message)) => item.process_message(message, context),
-            _ => error!("Message received by entity type that cannot process it"),
-        }
+        let action_result = match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
+            (EntityType::Item (item), MessageContents::Item (message)) => item.process_message(message, context, &self.state),
+            _ => {
+                error!("Message received by entity type that cannot process it");
+                None
+            }
+        };
+        self.process_action_result(action_result);
     }
 
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
-        match &self.ty {
-            EntityType::Player (player) => player.body.is_hogging_ledge(check_platform_i, face_right),
-            EntityType::Item (item) => item.body.is_hogging_ledge(check_platform_i, face_right),
-            _ => false,
+        match self.body() {
+            Some(body) => body.is_hogging_ledge(check_platform_i, face_right),
+            None => false,
         }
     }
 
@@ -82,8 +85,8 @@ impl Entity {
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
         match &self.ty {
-            EntityType::Player     (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
-            EntityType::Item       (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces),
+            EntityType::Player     (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Item       (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Projectile (projectile) => (projectile.x, projectile.y)
         }
     }
@@ -92,59 +95,133 @@ impl Entity {
     pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32, f32) {
         let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
         match &self.ty {
-            EntityType::Player     (player)     => player.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces),
-            EntityType::Item       (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces),
+            EntityType::Player     (player)     => player.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Item       (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Projectile (projectile) => (projectile.x, projectile.y, 0.0)
         }
     }
 
-    pub fn item_grab(&mut self, context: &mut StepContext, hit_key: EntityKey, hit_id: Option<usize>) {
-        match &mut self.ty {
+    // TODO: remove _context from caller
+    pub fn item_grab(&mut self, _context: &mut StepContext, hit_key: EntityKey, hit_id: Option<usize>) {
+        let action_result = match &mut self.ty {
             EntityType::Player     (player) => player.item_grab(),
-            EntityType::Item       (item)   => item.grabbed(context, hit_key, hit_id),
-            EntityType::Projectile (_)      => { }
-        }
+            EntityType::Item       (item)   => item.grabbed(hit_key, hit_id),
+            EntityType::Projectile (_)      => None
+        };
+        self.process_action_result(action_result);
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
-        match &mut self.ty {
-            EntityType::Player     (player) => player.physics_step(context, game_frame, goal),
-            EntityType::Item       (item)   => item.physics_step(context),
-            EntityType::Projectile (_)      => { }
-        }
+        let action_result = match &mut self.ty {
+            EntityType::Player     (player) => player.physics_step(context, &self.state, game_frame, goal),
+            EntityType::Item       (item)   => item.physics_step(context, &self.state),
+            EntityType::Projectile (_)      => None,
+        };
+        self.process_action_result(action_result);
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
-        match &mut self.ty {
-            EntityType::Player     (player)     => player.step_collision(context, col_results),
-            EntityType::Item       (item)       => item.step_collision(context, col_results),
-            EntityType::Projectile (projectile) => projectile.step_collision(context, col_results),
+        let action_result = match &mut self.ty {
+            EntityType::Player     (player)     => player.step_collision(context, &self.state, col_results),
+            EntityType::Item       (item)       => item.step_collision(col_results),
+            EntityType::Projectile (projectile) => projectile.step_collision(col_results),
+        };
+        self.process_action_result(action_result);
+        for col_result in col_results {
+            match col_result {
+                &CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
+                    self.state.hitlist.push(entity_defend_i);
+                    self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
+                }
+                &CollisionResult::HitShieldAtk { entity_defend_i, ref hitbox, .. } => {
+                    self.state.hitlist.push(entity_defend_i);
+                    self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
+                }
+                &CollisionResult::HitDef { ref hitbox, .. } => {
+                    self.state.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, wobble_x: 0.0 };
+                }
+                &CollisionResult::HitShieldDef { ref hitbox, .. } => {
+                    self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
+                }
+                _ => { }
+            }
         }
     }
 
     pub fn action_hitlag_step(&mut self, context: &mut StepContext) {
+        // If the action or frame is out of bounds jump to a valid one.
+        // This is needed because we can continue from any point in a replay and replays may
+        // contain actions or frames that no longer exist.
+        if self.state.action as usize >= context.entity_def.actions.len() {
+            self.state.action = 0;
+        } else {
+            let fighter_frames = &context.entity_def.actions[self.state.action as usize].frames;
+            if self.state.frame as usize >= fighter_frames.len() {
+                self.state.frame = 0;
+            }
+        }
+
+        // The code from this point onwards can assume we are on a valid action and frame
+        if let Some(body) = self.body_mut() {
+            body.frames_since_hit += 1;
+            if body.frames_since_hit > 60 {
+                body.hit_angle_pre_di = None;
+                body.hit_angle_post_di = None;
+            }
+        }
+
+        // TODO: move the match into ActionState.decrement and return bool or something
+        match self.state.hitlag.clone() {
+            Hitlag::Attack { .. } => {
+                self.state.hitlag.decrement();
+            }
+            Hitlag::Launch { .. } => {
+                self.state.hitlag.wobble(&mut context.rng);
+                self.state.hitlag.decrement();
+            }
+            Hitlag::None => {
+                let main_action_result = self.action_step(context);
+                let secondary_action_result = if let Some(main_action_result) = main_action_result {
+                    self.process_action_result(Some(main_action_result));
+                    self.action_step(context)
+                } else {
+                    ActionResult::set_frame(self.state.frame + 1)
+                };
+                self.process_action_result(secondary_action_result);
+            }
+        }
+    }
+
+    fn action_step(&mut self, context: &mut StepContext) -> Option<ActionResult> {
+        let fighter_frame = &context.entity_def.actions[self.state.action as usize].frames[self.state.frame as usize];
+        if fighter_frame.force_hitlist_reset {
+            self.state.hitlist.clear();
+        }
+
         match &mut self.ty {
-            EntityType::Player     (player)     => player.action_hitlag_step(context),
-            EntityType::Item       (item)       => item.action_hitlag_step(context),
-            EntityType::Projectile (projectile) => projectile.action_hitlag_step(context),
+            EntityType::Player     (player)     => player.action_step(context, &self.state),
+            EntityType::Item       (item)       => item.action_step(context, &self.state),
+            EntityType::Projectile (projectile) => projectile.action_step(context, &self.state),
         }
     }
 
     pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         match &self.ty {
-            EntityType::Player (player) => player.grabbing_xy(entities, entity_defs, surfaces),
+            EntityType::Player (player) => player.grabbing_xy(entities, entity_defs, surfaces, &self.state),
             _ => (0.0, 0.0),
         }
     }
 
     /// TODO: Wont need this anymore when we make surfaces into entities as they will be generational
     pub fn platform_deleted(&mut self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
-        match &mut self.ty {
-            EntityType::Player     (player) => player.platform_deleted(entities, entity_defs, surfaces, deleted_platform_i),
-            _ => { }
-        }
+        let action_result = match &mut self.ty {
+            EntityType::Player (player) => player.platform_deleted(entities, entity_defs, surfaces, deleted_platform_i, &self.state),
+            _ => None
+        };
+        self.process_action_result(action_result);
     }
 
+    // TODO: move into ActionState
     pub fn entity_def_key(&self) -> &str {
         match &self.ty {
             EntityType::Player     (player)     => player.entity_def_key.as_ref(),
@@ -170,11 +247,7 @@ impl Entity {
     }
 
     pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
-        match &self.ty {
-            EntityType::Player (player) => player.get_entity_frame(entity_def),
-            EntityType::Item (item) => item.get_entity_frame(entity_def),
-            EntityType::Projectile (projectile) => projectile.get_entity_frame(entity_def),
-        }
+        self.state.get_entity_frame(entity_def)
     }
 
     pub fn relative_frame(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> ActionFrame {
@@ -223,41 +296,9 @@ impl Entity {
         }
     }
 
-    pub fn frame(&self) -> i64 {
-        match &self.ty {
-            EntityType::Player (player) => player.frame,
-            EntityType::Item (item) => item.frame,
-            EntityType::Projectile (projectile) => projectile.frame,
-        }
-    }
-
-    pub fn frame_norestart(&self) -> i64 {
-        match &self.ty {
-            EntityType::Player (player) => player.frame_norestart,
-            EntityType::Item (item) => item.frame_no_restart,
-            EntityType::Projectile (projectile) => projectile.frame_no_restart,
-        }
-    }
-
-    pub fn set_frame(&mut self, frame: i64) {
-        match &mut self.ty {
-            EntityType::Player (player) => player.frame = frame,
-            EntityType::Item (item) => item.frame = frame,
-            EntityType::Projectile (projectile) => projectile.frame = frame,
-        }
-    }
-
-    pub fn action(&self) -> u64 {
-        match &self.ty {
-            EntityType::Player (player) => player.action,
-            EntityType::Item (item) => item.action,
-            EntityType::Projectile (projectile) => projectile.action,
-        }
-    }
-
     pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         match &self.ty {
-            EntityType::Player (player) => player.cam_area(cam_max, entities, entity_defs, surfaces),
+            EntityType::Player (player) => player.cam_area(&self.state, cam_max, entities, entity_defs, surfaces),
             _ => None
         }
     }
@@ -270,18 +311,14 @@ impl Entity {
     }
 
     pub fn hitlist(&self) -> &[EntityKey] {
-        match &self.ty {
-            EntityType::Player (player) => &player.hitlist,
-            EntityType::Item (_) => &[],
-            EntityType::Projectile (_) => &[]
-        }
+        &self.state.hitlist
     }
 
     pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, player_input: Option<&PlayerInput>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         match &self.ty {
-            EntityType::Player     (player)     => player.debug_print(entities, player_input.unwrap(), debug, i),
-            EntityType::Item       (item)       => item.debug_print(entities, debug, i),
-            EntityType::Projectile (projectile) => projectile.debug_print(entities, debug, i),
+            EntityType::Player     (player)     => player.debug_print(entities, player_input.unwrap(), &self.state, debug, i),
+            EntityType::Item       (item)       => item.debug_print(entities, &self.state, debug, i),
+            EntityType::Projectile (projectile) => projectile.debug_print(entities, &self.state, debug, i),
         }
     }
 
@@ -290,6 +327,22 @@ impl Entity {
             EntityType::Player (player) => player.ecb.clone(),
             EntityType::Item (_)  => ECB::default(),
             EntityType::Projectile (_)  => ECB::default(),
+        }
+    }
+
+    pub fn body(&self) -> Option<&Body> {
+        match &self.ty {
+            EntityType::Player (player) => Some(&player.body),
+            EntityType::Item (item)  => Some(&item.body),
+            EntityType::Projectile (_)  => None
+        }
+    }
+
+    pub fn body_mut(&mut self) -> Option<&mut Body> {
+        match &mut self.ty {
+            EntityType::Player (player) => Some(&mut player.body),
+            EntityType::Item (item)  => Some(&mut item.body),
+            EntityType::Projectile (_)  => None
         }
     }
 
@@ -304,8 +357,7 @@ impl Entity {
     pub fn particles(&self) -> Vec<Particle> {
         match &self.ty {
             EntityType::Player (player) => player.particles.clone(),
-            EntityType::Item (_) => vec!(),
-            EntityType::Projectile (_) => vec!(),
+            _ => vec!(),
         }
     }
 
@@ -324,14 +376,14 @@ impl Entity {
         for entities in entity_history[range].iter().rev() {
             if let Some(entity) = entities.get(entity_i) {
                 // handle deleted frames by just skipping it, only encountered when the editor is used.
-                if entity_def.actions[entity.action() as usize].frames.len() > entity.frame() as usize {
+                if entity_def.actions[entity.state.action as usize].frames.len() > entity.state.frame as usize {
                     frames.push(entity.render_frame(entities, entity_defs, surfaces));
                 }
             }
         }
 
         let render_type = match &self.ty {
-            EntityType::Player (player) => RenderEntityType::Player (player.render(entities, entity_defs, surfaces)),
+            EntityType::Player (player) => RenderEntityType::Player (player.render(entities, entity_defs, surfaces, &self.state)),
             EntityType::Projectile (_)  => RenderEntityType::Projectile,
             EntityType::Item (_)        => RenderEntityType::Item,
         };
@@ -358,17 +410,17 @@ impl Entity {
     fn render_frame(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
         let entity_def = &entity_defs[self.entity_def_key()];
         RenderEntityFrame {
-            entity_def_key:  self.entity_def_key().to_string(),
-            model_name:      entity_def.name.clone(),
-            frame_bps:       self.public_bps_xy(entities, entity_defs, surfaces),
-            render_bps:      self.public_bps_xyz(entities, entity_defs, surfaces),
-            ecb:             self.ecb(),
-            frame:           self.frame() as usize,
-            frame_norestart: self.frame_norestart() as usize,
-            action:          self.action() as usize,
-            face_right:      self.face_right(),
-            frame_angle:     self.frame_angle(entity_def, surfaces),
-            render_angle:    self.render_angle(entities, entity_defs, surfaces),
+            entity_def_key:   self.entity_def_key().to_string(),
+            model_name:       entity_def.name.clone(),
+            frame_bps:        self.public_bps_xy(entities, entity_defs, surfaces),
+            render_bps:       self.public_bps_xyz(entities, entity_defs, surfaces),
+            ecb:              self.ecb(),
+            frame:            self.state.frame as usize,
+            frame_no_restart: self.state.frame_no_restart as usize,
+            action:           self.state.action as usize,
+            face_right:       self.face_right(),
+            frame_angle:      self.frame_angle(entity_def, surfaces),
+            render_angle:     self.render_angle(entities, entity_defs, surfaces),
         }
     }
 
@@ -383,6 +435,24 @@ impl Entity {
                 }
             }
             _ => Quaternion::from_angle_z(Rad(self.frame_angle(entity_def, surfaces)))
+        }
+    }
+
+    fn process_action_result(&mut self, action_result: Option<ActionResult>) {
+        match action_result {
+            Some(ActionResult::SetAction (action)) => {
+                if self.state.action != action {
+                    self.state.frame_no_restart = 0;
+                }
+                self.state.frame = 0;
+                self.state.action = action;
+                self.state.hitlist.clear()
+            }
+            Some(ActionResult::SetFrame (frame)) => {
+                self.state.frame = frame;
+                self.state.frame_no_restart += 1;
+            }
+            None => { }
         }
     }
 }
@@ -562,17 +632,17 @@ impl DebugEntity {
 }
 
 pub struct RenderEntityFrame {
-    pub entity_def_key:  String,
-    pub model_name:      String,
-    pub frame_bps:       (f32, f32),
-    pub render_bps:      (f32, f32, f32),
-    pub ecb:             ECB,
-    pub frame:           usize,
-    pub frame_norestart: usize,
-    pub action:          usize,
-    pub face_right:      bool,
-    pub frame_angle:     f32,
-    pub render_angle:    Quaternion<f32>,
+    pub entity_def_key:   String,
+    pub model_name:       String,
+    pub frame_bps:        (f32, f32),
+    pub render_bps:       (f32, f32, f32),
+    pub ecb:              ECB,
+    pub frame:            usize,
+    pub frame_no_restart: usize,
+    pub action:           usize,
+    pub face_right:       bool,
+    pub frame_angle:      f32,
+    pub render_angle:     Quaternion<f32>,
 }
 
 pub struct VectorArrow {
@@ -603,4 +673,20 @@ pub struct Message {
 pub enum MessageContents {
     Player (MessagePlayer),
     Item   (MessageItem),
+}
+
+#[must_use]
+pub enum ActionResult {
+    SetAction (u64),
+    SetFrame  (i64),
+}
+
+impl ActionResult {
+    fn set_action<T: ToPrimitive>(action: T) -> Option<ActionResult> {
+        action.to_u64().map(|x| ActionResult::SetAction (x))
+    }
+
+    fn set_frame(action: i64) -> Option<ActionResult> {
+        Some(ActionResult::SetFrame(action))
+    }
 }

@@ -1,7 +1,8 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{DebugEntity, StepContext, EntityKey};
+use crate::entity::{DebugEntity, StepContext, EntityKey, ActionResult};
+use crate::entity::components::action_state::ActionState;
 
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
+use canon_collision_lib::entity_def::EntityDef;
 
 use treeflection::KeyedContextVec;
 use num_traits::FromPrimitive;
@@ -18,9 +19,6 @@ pub enum ProjectileAction {
 pub struct Projectile {
     pub owner_id: Option<usize>,
     pub entity_def_key: String,
-    pub action: u64,
-    pub frame: i64,
-    pub frame_no_restart: i64,
     pub angle: f32,
     pub speed: f32,
     pub x: f32,
@@ -28,26 +26,8 @@ pub struct Projectile {
 }
 
 impl Projectile {
-    pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
-        if entity_def.actions.len() > self.action as usize {
-            let frames = &entity_def.actions[self.action as usize].frames;
-            if frames.len() > self.frame as usize {
-                return Some(&frames[self.frame as usize]);
-            }
-        }
-        None
-    }
-
-    pub fn action_hitlag_step(&mut self, context: &mut StepContext) {
-        self.frame += 1;
-        self.frame_no_restart += 1;
-        self.frame_step(context);
-    }
-
-    fn frame_step(&mut self, context: &mut StepContext) {
-        let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
-
-        match ProjectileAction::from_u64(self.action) {
+    pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        match ProjectileAction::from_u64(state.action) {
             Some(ProjectileAction::Travel) => {
                 self.x += self.angle.cos() * self.speed;
                 self.y += self.angle.sin() * self.speed;
@@ -55,66 +35,61 @@ impl Projectile {
             _ => { }
         }
 
-        if self.frame > last_action_frame {
-            self.action_expired(context);
-        }
-
         let blast = &context.stage.blast;
         if self.x < blast.left() || self.x > blast.right() || self.y < blast.bot() || self.y > blast.top() {
             context.delete_self = true;
         }
+
+        let action_frames = context.entity_def.actions[state.action as usize].frames.len() as i64;
+        if state.frame + 1 >= action_frames {
+            self.action_expired(context, state)
+        } else {
+            None
+        }
     }
 
-    fn action_expired(&mut self, context: &mut StepContext) {
-        match ProjectileAction::from_u64(self.action) {
+    fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        ActionResult::set_action(match ProjectileAction::from_u64(state.action) {
             None => panic!("Custom defined action expirations have not been implemented"),
 
             // Idle
-            Some(ProjectileAction::Spawn)    => self.set_action(context, ProjectileAction::Travel),
-            Some(ProjectileAction::Travel)   => self.set_action(context, ProjectileAction::Travel),
+            Some(ProjectileAction::Spawn)    => ProjectileAction::Travel,
+            Some(ProjectileAction::Travel)   => ProjectileAction::Travel,
             Some(ProjectileAction::Hit) => {
                 context.delete_self = true;
+                ProjectileAction::Hit
             }
-        }
+        })
     }
 
-    fn set_action(&mut self, context: &mut StepContext, action: ProjectileAction) {
-        let action = action as u64;
-        self.frame = 0;
+    pub fn step_collision(&mut self, col_results: &[CollisionResult]) -> Option<ActionResult> {
+        let mut set_action = None;
 
-        if self.action != action {
-            self.frame_no_restart = 0;
-            self.action = action;
-
-            self.frame_step(context);
-        }
-    }
-
-    pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         for col_result in col_results {
             match col_result {
                 &CollisionResult::Clang { .. } => {
-                    self.set_action(context, ProjectileAction::Hit);
+                    set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 &CollisionResult::HitAtk { .. } => {
-                    self.set_action(context, ProjectileAction::Hit);
+                    set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 &CollisionResult::HitShieldAtk { .. } => {
-                    self.set_action(context, ProjectileAction::Hit);
+                    set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 &CollisionResult::ReflectAtk { .. } => {
                     // TODO
-                    self.set_action(context, ProjectileAction::Hit);
+                    set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 &CollisionResult::AbsorbAtk { .. } => {
-                    self.set_action(context, ProjectileAction::Hit);
+                    set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 _ => { }
             }
         }
+        set_action
     }
 
-    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         let mut lines = vec!();
         let entity = &entities[self.entity_def_key.as_ref()];
         if debug.physics {
@@ -122,12 +97,12 @@ impl Projectile {
                 i, (self.x, self.y), self.angle));
         }
         if debug.action {
-            let action = ProjectileAction::from_u64(self.action).unwrap();
-            let last_action_frame = entity.actions[self.action as usize].frames.len() as u64 - 1;
-            let iasa = entity.actions[self.action as usize].iasa;
+            let action = ProjectileAction::from_u64(state.action).unwrap();
+            let last_action_frame = entity.actions[state.action as usize].frames.len() as u64 - 1;
+            let iasa = entity.actions[state.action as usize].iasa;
 
             lines.push(format!("Entity: {:?}  Projectile  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-                i, action, self.frame, last_action_frame, self.frame_no_restart, iasa));
+                i, action, state.frame, last_action_frame, state.frame_no_restart, iasa));
         }
 
         lines

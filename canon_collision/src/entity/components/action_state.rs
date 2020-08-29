@@ -1,26 +1,30 @@
+use crate::entity::EntityKey;
+
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
-use crate::entity::{EntityKey, StepContext};
-
 use num_traits::{FromPrimitive, ToPrimitive};
-use std::marker::PhantomData;
+use rand_chacha::ChaChaRng;
+use rand::Rng;
 
-pub struct ActionState<T: FromPrimitive + ToPrimitive> {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ActionState {
     pub action:            u64,
-    pub set_action_called: bool,
-    pub new_action:        bool,
-
-    // frame count values:
-    // == -1 doesnt correspond to a frame in the fighter data, used for the action logic triggered directly after action state transition, must never be in this state after action_step()
-    // >=  0  corresponds to a frame in the fighter data, used for the regular action logic step on each game frame
-    pub frame:             i64,
+    pub frame:             i64, // TODO: u64
     pub frame_no_restart:  i64,
-
     pub hitlist:           Vec<EntityKey>,
-    pub _action_type:      PhantomData<T>,
+    pub hitlag:            Hitlag,
 }
 
-impl <T: FromPrimitive + ToPrimitive> ActionState<T> {
+impl ActionState {
+    pub fn new<T: ToPrimitive>(action: T) -> ActionState {
+        ActionState {
+            action:           action.to_u64().unwrap(),
+            frame:            0,
+            frame_no_restart: 0,
+            hitlist:          vec!(),
+            hitlag:           Hitlag::None,
+        }
+    }
     pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
         if entity_def.actions.len() > self.action as usize {
             let frames = &entity_def.actions[self.action as usize].frames;
@@ -31,43 +35,41 @@ impl <T: FromPrimitive + ToPrimitive> ActionState<T> {
         None
     }
 
-    pub fn set_action(&mut self, context: &StepContext, action: T) {
-        let action = action.to_u64().unwrap();
-        self.frame = 0;
-        self.hitlist.clear();
-        self.set_action_called = true;
+    pub fn debug_string<T: FromPrimitive + std::fmt::Debug>(&self, entity_def: &EntityDef, index: EntityKey) -> String {
+        let action = T::from_u64(self.action).unwrap();
+        let last_action_frame = entity_def.actions[self.action as usize].frames.len() as u64 - 1;
+        let iasa = entity_def.actions[self.action as usize].iasa;
 
-        if self.action != action {
-            self.frame = -1;
-            self.frame_no_restart = -1;
-            self.action = action;
-
-            //self.frame_step(context); // TODO: Maybe store this in a variable to use later?
-            let last_action_frame = context.entity_def.actions[self.action as usize].frames.len() as i64 - 1;
-            // TODO: move this assert somewhere earlier, maybe the fighter loading code?
-            assert_ne!(last_action_frame, -1, "A subaction has a length of 0");
-            self.frame = last_action_frame.min(self.frame + 1); // +1 instead of =0 so that frame_step can skip frames if it wants to
-            self.frame_no_restart += 1;
-        }
-    }
-
-    pub fn frame_step(&mut self) {
-        // TODO: lots of other stuff
-
-        if !self.set_action_called { // action_expired() can call set_action()
-            self.frame += 1;
-        }
-        if !self.new_action {
-            self.frame_no_restart += 1;
-        }
-    }
-
-    pub fn get_action(&self) -> Option<T> {
-        T::from_u64(self.action)
+        format!("Entity: {:?}  hitlag: {:?}  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
+            index, self.hitlag, action, self.frame, last_action_frame, self.frame_no_restart, iasa)
     }
 }
 
-enum ActionResult {
-    SetAction(u64),
-    SetFrame(u64),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Hitlag {
+    Attack { counter: u64 },
+    Launch { counter: u64, wobble_x: f32 },
+    None
 }
+
+impl Hitlag {
+    pub fn decrement(&mut self) {
+        match self {
+            &mut Hitlag::Attack { ref mut counter} |
+            &mut Hitlag::Launch { ref mut counter, .. } => {
+                *counter -= 1;
+                if *counter == 0 {
+                    *self = Hitlag::None;
+                }
+            }
+            &mut Hitlag::None => { }
+        }
+    }
+
+    pub fn wobble(&mut self, rng: &mut ChaChaRng) {
+        if let &mut Hitlag::Launch { ref mut wobble_x, .. } = self {
+            *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
+        }
+    }
+}
+
