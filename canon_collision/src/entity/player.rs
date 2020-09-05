@@ -2172,11 +2172,19 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, fighters: &KeyedContextVec<EntityDef>, player_input: &PlayerInput, state: &ActionState, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
-        let fighter = &fighters[state.entity_def_key.as_ref()];
+    pub fn debug_print(&self, entity_defs: &KeyedContextVec<EntityDef>, state: &ActionState, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let mut lines: Vec<String> = vec!();
+        if debug.action {
+            lines.push(state.debug_string::<Action>(entity_defs, index));
+        }
+
         if debug.physics {
             lines.push(self.body.debug_string(index));
+        }
+
+        if debug.frame {
+            lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  tech timer: {:?}  lcancel timer: {}",
+                index, self.shield_hp, self.hitstun, self.tech_timer, self.lcancel_timer));
         }
 
         if debug.input {
@@ -2203,14 +2211,6 @@ impl Player {
                 index, stick_x, stick_y, c_stick_x, c_stick_y, l_trigger, r_trigger));
         }
 
-        if debug.action {
-            lines.push(state.debug_string::<Action>(fighter, index));
-        }
-
-        if debug.frame {
-            lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  tech timer: {:?}  lcancel timer: {}",
-                index, self.shield_hp, self.hitstun, self.tech_timer, self.lcancel_timer));
-        }
         lines
     }
 

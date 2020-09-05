@@ -472,7 +472,56 @@ impl Game {
                     let action = self.entities[entity_i].state.action as usize;
                     let action_enum = Action::from_u64(self.entities[entity_i].state.action);
                     let frame  = self.entities[entity_i].state.frame as usize;
-                    self.debug_entities[entity_i].step(os_input);
+                    {
+                        let debug_entity = &mut self.debug_entities[entity_i];
+                        if os_input.key_pressed(VirtualKeyCode::F1) {
+                            debug_entity.action = !debug_entity.action;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F2) {
+                            debug_entity.physics = !debug_entity.physics;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F3) {
+                            debug_entity.frame = !debug_entity.frame;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F4) {
+                            if os_input.held_shift() {
+                                debug_entity.input_diff = !debug_entity.input_diff;
+                            }
+                            else {
+                                debug_entity.input = !debug_entity.input;
+                            }
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F5) {
+                            debug_entity.stick_vector = !debug_entity.stick_vector;
+                            debug_entity.c_stick_vector = !debug_entity.c_stick_vector;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F6) {
+                            debug_entity.di_vector = !debug_entity.di_vector;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F7) {
+                            debug_entity.hitbox_vectors = !debug_entity.hitbox_vectors;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F8) {
+                            debug_entity.ecb = !debug_entity.ecb;
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F9) {
+                            debug_entity.render.step();
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F10) {
+                            if os_input.held_shift() {
+                                debug_entity.item_grab_area = !debug_entity.item_grab_area;
+                            }
+                            else {
+                                debug_entity.cam_area = !debug_entity.cam_area;
+                            }
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F11) {
+                            *debug_entity = DebugEntity::all();
+                        }
+                        if os_input.key_pressed(VirtualKeyCode::F12) {
+                            *debug_entity = DebugEntity::default();
+                        }
+                    }
 
                     // by adding the same amount of frames that are skipped in the entity logic,
                     // the user continues to see the same frames as they step through the action
@@ -485,7 +534,6 @@ impl Game {
                     } else {
                         1
                     };
-
 
                     // move collisionboxes
                     if self.selector.moving {

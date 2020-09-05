@@ -4,8 +4,8 @@ use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::EntityDef;
 
-use treeflection::KeyedContextVec;
 use num_traits::FromPrimitive;
+use treeflection::KeyedContextVec;
 
 #[repr(u64)]
 #[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
@@ -88,20 +88,14 @@ impl Projectile {
         set_action
     }
 
-    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let mut lines = vec!();
-        let entity = &entities[state.entity_def_key.as_ref()];
+        if debug.action {
+            lines.push(state.debug_string::<ProjectileAction>(entities, index));
+        }
         if debug.physics {
             lines.push(format!("Entity: {:?}  location: {:?}  angle: {:.5}",
-                i, (self.x, self.y), self.angle));
-        }
-        if debug.action {
-            let action = ProjectileAction::from_u64(state.action).unwrap();
-            let last_action_frame = entity.actions[state.action as usize].frames.len() as u64 - 1;
-            let iasa = entity.actions[state.action as usize].iasa;
-
-            lines.push(format!("Entity: {:?}  Projectile  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-                i, action, state.frame, last_action_frame, state.frame_no_restart, iasa));
+                index, (self.x, self.y), self.angle));
         }
 
         lines

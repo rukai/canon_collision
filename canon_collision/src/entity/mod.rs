@@ -24,8 +24,6 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use rand_chacha::ChaChaRng;
 use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 use treeflection::KeyedContextVec;
-use winit::event::VirtualKeyCode;
-use winit_input_helper::WinitInputHelper;
 
 use std::collections::HashSet;
 use std::f32::consts::PI;
@@ -297,7 +295,7 @@ impl Entity {
 
     pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, player_input: Option<&PlayerInput>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         match &self.ty {
-            EntityType::Player     (player)     => player.debug_print(entities, player_input.unwrap(), &self.state, debug, i),
+            EntityType::Player     (player)     => player.debug_print(entities, &self.state, player_input.unwrap(), debug, i),
             EntityType::Item       (item)       => item.debug_print(entities, &self.state, debug, i),
             EntityType::Projectile (projectile) => projectile.debug_print(entities, &self.state, debug, i),
         }
@@ -534,57 +532,6 @@ pub struct DebugEntity {
 }
 
 impl DebugEntity {
-    // TODO: move into game logic, then we can keep all the debug keys together (across entity/player/other)
-    pub fn step(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::F1) {
-            self.physics = !self.physics;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F2) {
-            if os_input.held_shift() {
-                self.input_diff = !self.input_diff;
-            }
-            else {
-                self.input = !self.input;
-            }
-        }
-        if os_input.key_pressed(VirtualKeyCode::F3) {
-            self.action = !self.action;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F4) {
-            self.frame = !self.frame;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F5) {
-            self.stick_vector = !self.stick_vector;
-            self.c_stick_vector = !self.c_stick_vector;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F6) {
-            self.di_vector = !self.di_vector;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F7) {
-            self.hitbox_vectors = !self.hitbox_vectors;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F8) {
-            self.ecb = !self.ecb;
-        }
-        if os_input.key_pressed(VirtualKeyCode::F9) {
-            self.render.step();
-        }
-        if os_input.key_pressed(VirtualKeyCode::F10) {
-            if os_input.held_shift() {
-                self.item_grab_area = !self.item_grab_area;
-            }
-            else {
-                self.cam_area = !self.cam_area;
-            }
-        }
-        if os_input.key_pressed(VirtualKeyCode::F11) {
-            *self = DebugEntity::all();
-        }
-        if os_input.key_pressed(VirtualKeyCode::F12) {
-            *self = DebugEntity::default();
-        }
-    }
-
     pub fn all() -> Self {
         DebugEntity {
             render:         RenderDebugType::NormalAndDebug,

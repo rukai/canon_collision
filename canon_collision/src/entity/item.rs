@@ -142,19 +142,13 @@ impl Item {
         set_action
     }
 
-    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let mut lines = vec!();
-        let entity = &entities[state.entity_def_key.as_ref()];
-        if debug.physics {
-            lines.push(self.body.debug_string(i));
-        }
         if debug.action {
-            let action = ItemAction::from_u64(state.action).unwrap();
-            let last_action_frame = entity.actions[state.action as usize].frames.len() as u64 - 1;
-            let iasa = entity.actions[state.action as usize].iasa;
-
-            lines.push(format!("Entity: {:?}  Item  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-                i, action, state.frame, last_action_frame, state.frame_no_restart, iasa));
+            lines.push(state.debug_string::<ItemAction>(entities, index));
+        }
+        if debug.physics {
+            lines.push(self.body.debug_string(index));
         }
 
         lines

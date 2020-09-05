@@ -3,8 +3,9 @@ use crate::entity::EntityKey;
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
 use num_traits::{FromPrimitive, ToPrimitive};
-use rand_chacha::ChaChaRng;
 use rand::Rng;
+use rand_chacha::ChaChaRng;
+use treeflection::KeyedContextVec;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ActionState {
@@ -37,13 +38,14 @@ impl ActionState {
         None
     }
 
-    pub fn debug_string<T: FromPrimitive + std::fmt::Debug>(&self, entity_def: &EntityDef, index: EntityKey) -> String {
+    pub fn debug_string<T: FromPrimitive + std::fmt::Debug>(&self, entity_defs: &KeyedContextVec<EntityDef>, index: EntityKey) -> String {
         let action = T::from_u64(self.action).unwrap();
+        let entity_def = &entity_defs[self.entity_def_key.as_ref()];
         let last_action_frame = entity_def.actions[self.action as usize].frames.len() as u64 - 1;
         let iasa = entity_def.actions[self.action as usize].iasa;
 
-        format!("Entity: {:?}  hitlag: {:?}  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-            index, self.hitlag, action, self.frame, last_action_frame, self.frame_no_restart, iasa)
+        format!("Entity: {:?}  \"{}\"  hitlag: {:?}  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
+            index, self.entity_def_key, self.hitlag, action, self.frame, last_action_frame, self.frame_no_restart, iasa)
     }
 }
 

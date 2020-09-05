@@ -560,7 +560,7 @@ impl Body {
     }
 
     pub fn debug_string(&self, index: EntityKey) -> String {
-        format!("Entity: {:?}  (Body)  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
+        format!("Entity: {:?}  location: {:?}  x_vel: {:.5}  y_vel: {:.5}  kb_x_vel: {:.5}  kb_y_vel: {:.5}",
             index, self.location, self.x_vel, self.y_vel, self.kb_x_vel, self.kb_y_vel)
     }
 }
