@@ -46,7 +46,6 @@ pub enum MessagePlayer {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Player {
-    pub entity_def_key:     String,
     pub id:                 usize, // unique id among players
     pub team:               usize,
     pub body:               Body,
@@ -79,7 +78,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(entity_def_key: String, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
+    pub fn new(entity_def_key: &str, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
@@ -149,7 +148,6 @@ impl Player {
             ),
             id,
             team,
-            entity_def_key,
 
             // Only use for debug display
             stick:   None,
@@ -158,18 +156,18 @@ impl Player {
     }
 
     pub fn bps_xy(&self, context: &StepContext, state: &ActionState) -> (f32, f32) {
-        let action_frame = state.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
+        let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
         self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
-        let action_frame = state.get_entity_frame(&entity_defs[self.entity_def_key.as_ref()]);
+        let action_frame = state.get_entity_frame(&entity_defs[state.entity_def_key.as_ref()]);
         self.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, state)
     }
 
     pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces, state);
-        if let Some(entity_frame) = state.get_entity_frame(&entity_defs[self.entity_def_key.as_ref()]) {
+        if let Some(entity_frame) = state.get_entity_frame(&entity_defs[state.entity_def_key.as_ref()]) {
             (x + self.relative_f(entity_frame.grabbing_x), y + entity_frame.grabbing_y)
         } else {
             (x, y)
@@ -247,7 +245,7 @@ impl Player {
                         1.0
                     };
 
-                    let action_frame = state.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
+                    let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
                     let kb_vel = self.body.launch(context, state, action_frame, hitbox, hurtbox, entity_atk_i, kb_vel_mult);
 
                     if let Location::Airbourne { .. } = self.body.location {
@@ -884,14 +882,16 @@ impl Player {
                     ty: EntityType::Projectile(
                         Projectile {
                             owner_id: Some(self.id),
-                            entity_def_key: "TorielFireball.cbor".to_string(),
                             speed: 0.6,
                             angle: if self.body.face_right { 0.0 } else { PI },
                             x: x + self.relative_f(10.0),
                             y: y + 10.0,
                         }
                     ),
-                    state: ActionState::new(ProjectileAction::Spawn),
+                    state: ActionState::new(
+                        "TorielFireball.cbor".to_string(),
+                        ProjectileAction::Spawn
+                    ),
                 });
             }
         }
@@ -903,14 +903,16 @@ impl Player {
                     ty: EntityType::Projectile(
                         Projectile {
                             owner_id: Some(self.id),
-                            entity_def_key: "PerfectlyGenericProjectile.cbor".to_string(),
                             speed: 0.6,
                             angle: if self.body.face_right { 0.0 } else { PI },
                             x: x + self.relative_f(10.0),
                             y: y + 10.0,
                         }
                     ),
-                    state: ActionState::new(ProjectileAction::Spawn),
+                    state: ActionState::new(
+                        "PerfectlyGenericProjectile.cbor".to_string(),
+                        ProjectileAction::Spawn
+                    ),
                 });
             }
         }
@@ -924,11 +926,13 @@ impl Player {
                     ty: EntityType::Item(
                         Item {
                             owner_id: None,
-                            entity_def_key: "PerfectlyGenericObject.cbor".to_string(),
                             body: Body::new(Location::Airbourne { x, y }, true),
                         }
                     ),
-                    state: ActionState::new(ItemAction::Fall),
+                    state: ActionState::new(
+                        "PerfectlyGenericObject.cbor".to_string(),
+                        ItemAction::Fall
+                    ),
                 });
             }
         }
@@ -2171,7 +2175,7 @@ impl Player {
     }
 
     pub fn debug_print(&self, fighters: &KeyedContextVec<EntityDef>, player_input: &PlayerInput, state: &ActionState, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
-        let fighter = &fighters[self.entity_def_key.as_ref()];
+        let fighter = &fighters[state.entity_def_key.as_ref()];
         let mut lines: Vec<String> = vec!();
         if debug.physics {
             lines.push(self.body.debug_string(index));
@@ -2212,10 +2216,10 @@ impl Player {
         lines
     }
 
-    pub fn result(&self) -> RawPlayerResult {
+    pub fn result(&self, state: &ActionState) -> RawPlayerResult {
         let mut result = self.result.clone();
         result.final_damage = Some(self.body.damage);
-        result.ended_as_fighter = Some(self.entity_def_key.clone());
+        result.ended_as_fighter = Some(state.entity_def_key.clone());
         result.team = self.team;
         result
     }
@@ -2365,7 +2369,7 @@ impl Player {
     pub fn render(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> RenderPlayer {
         let shield = if self.is_shielding(state) {
             let fighter_color = graphics::get_team_color3(self.team);
-            let fighter = &fighters[self.entity_def_key.as_ref()];
+            let fighter = &fighters[state.entity_def_key.as_ref()];
 
             if let &Some(ref shield) = &fighter.shield {
                 let c = &fighter_color;

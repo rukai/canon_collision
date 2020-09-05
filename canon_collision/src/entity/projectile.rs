@@ -18,7 +18,6 @@ pub enum ProjectileAction {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Projectile {
     pub owner_id: Option<usize>,
-    pub entity_def_key: String,
     pub angle: f32,
     pub speed: f32,
     pub x: f32,
@@ -91,7 +90,7 @@ impl Projectile {
 
     pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         let mut lines = vec!();
-        let entity = &entities[self.entity_def_key.as_ref()];
+        let entity = &entities[state.entity_def_key.as_ref()];
         if debug.physics {
             lines.push(format!("Entity: {:?}  location: {:?}  angle: {:.5}",
                 i, (self.x, self.y), self.angle));

@@ -8,6 +8,7 @@ use rand::Rng;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ActionState {
+    pub entity_def_key:    String,
     pub action:            u64,
     pub frame:             i64, // TODO: u64
     pub frame_no_restart:  i64,
@@ -16,8 +17,9 @@ pub struct ActionState {
 }
 
 impl ActionState {
-    pub fn new<T: ToPrimitive>(action: T) -> ActionState {
+    pub fn new<T: ToPrimitive>(entity_def_key: String, action: T) -> ActionState {
         ActionState {
+            entity_def_key,
             action:           action.to_u64().unwrap(),
             frame:            0,
             frame_no_restart: 0,

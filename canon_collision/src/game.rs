@@ -101,8 +101,8 @@ impl Game {
                 let fighter = player.fighter.clone();
                 let team = player.team;
                 entities.insert(Entity {
-                    ty: EntityType::Player(Player::new(fighter, team, i, &stage, &package, &setup.rules)),
-                    state: ActionState::new(Action::Spawn),
+                    ty: EntityType::Player(Player::new(fighter.as_ref(), team, i, &stage, &package, &setup.rules)),
+                    state: ActionState::new(fighter, Action::Spawn),
                 });
             }
         }
@@ -251,7 +251,7 @@ impl Game {
         match self.edit {
             Edit::Entity (entity_i) => {
                 if let Some(entity) = self.entities.get(entity_i) {
-                    let entity_def_key  = entity.entity_def_key().as_ref();
+                    let entity_def_key  = entity.state.entity_def_key.as_ref();
                     let entity_action   = entity.state.action as usize;
                     let entity_frame    = entity.state.frame as usize;
                     let entity_colboxes = self.selector.colboxes_vec();
@@ -467,7 +467,7 @@ impl Game {
                         self.debug_entities.insert(entity_i, Default::default());
                     }
 
-                    let entity_def_key = self.entities[entity_i].entity_def_key().to_string();
+                    let entity_def_key = self.entities[entity_i].state.entity_def_key.clone();
                     let fighter = entity_def_key.as_ref();
                     let action = self.entities[entity_i].state.action as usize;
                     let action_enum = Action::from_u64(self.entities[entity_i].state.action);
@@ -534,7 +534,7 @@ impl Game {
                                     // This is purely to stay on the same action for usability.
                                     // The entity itself must handle being on a frame that has been deleted in order for replays to work.
                                     for any_entity in &mut self.entities.values_mut() {
-                                        if any_entity.entity_def_key() == fighter && any_entity.state.action as usize == action
+                                        if any_entity.state.entity_def_key == fighter && any_entity.state.action as usize == action
                                             && any_entity.state.frame as usize == self.package.entities[fighter].actions[action].frames.len()
                                         {
                                             any_entity.state.frame -= 1;
@@ -1074,7 +1074,7 @@ impl Game {
                     let mut context = StepContext {
                         entities:     &self.entities,
                         entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.entity_def_key()],
+                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1113,7 +1113,7 @@ impl Game {
                     let mut context = StepContext {
                         entities:     &grab_entities,
                         entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.entity_def_key()],
+                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1149,7 +1149,7 @@ impl Game {
                     let mut context = StepContext {
                         entities:     &physics_entities,
                         entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.entity_def_key()],
+                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
                         stage:        &self.stage,
                         surfaces:     &self.stage.surfaces,
                         rng:          &mut rng,
@@ -1173,7 +1173,7 @@ impl Game {
                 let mut context = StepContext {
                     entities:     &physics_entities,
                     entity_defs:  &self.package.entities,
-                    entity_def:   &self.package.entities[entity.entity_def_key()],
+                    entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
                     stage:        &self.stage,
                     surfaces:     &self.stage.surfaces,
                     rng:          &mut rng,
@@ -1192,10 +1192,10 @@ impl Game {
             self.entities = collision_entities;
         }
 
-        let players_count = self.players_iter_action_state().count();
+        let players_count = self.players_iter().count();
         if self.time_out() ||
-           (players_count == 1 && self.players_iter_action_state().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (players_count >  1 && self.players_iter_action_state().filter(|x| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
+           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
+           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }
@@ -1211,22 +1211,15 @@ impl Game {
         }
     }
 
-    fn players_iter_action_state(&self) -> impl Iterator<Item=&ActionState> {
+    fn players_iter(&self) -> impl Iterator<Item=(&Player, &ActionState)> {
         self.entities.values().filter_map(|x| match &x.ty {
-            EntityType::Player(_) => Some(&x.state),
-            _ => None,
-        })
-    }
-
-    fn players_iter(&self) -> impl Iterator<Item=&Player> {
-        self.entities.values().filter_map(|x| match &x.ty {
-            EntityType::Player(player) => Some(player),
+            EntityType::Player(player) => Some((player, &x.state)),
             _ => None,
         })
     }
 
     pub fn generate_game_results(&self, input: &Input) -> GameState {
-        let raw_player_results: Vec<RawPlayerResult> = self.players_iter().map(|x| x.result()).collect();
+        let raw_player_results: Vec<RawPlayerResult> = self.players_iter().map(|(player, state)| player.result(state)).collect();
         // TODO: Players on the same team score to the same pool and share their place.
         let places: Vec<usize> = match self.rules.goal {
             Goal::LastManStanding => {

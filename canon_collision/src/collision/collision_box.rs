@@ -17,13 +17,13 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
 
     'entity_atk: for (entity_atk_i, entity_atk) in entities.iter() {
         let entity_atk_xy = entity_atk.public_bps_xy(entities, entity_definitions, surfaces);
-        let entity_atk_def = &entity_definitions[entity_atk.entity_def_key()];
+        let entity_atk_def = &entity_definitions[entity_atk.state.entity_def_key.as_ref()];
         let frame_atk = entity_atk.relative_frame(entity_atk_def, surfaces);
         let colboxes_atk = frame_atk.get_hitboxes();
         for (entity_defend_i, entity_defend) in entities.iter() {
             let entity_defend_xy = entity_defend.public_bps_xy(entities, entity_definitions, surfaces);
             if entity_atk_i != entity_defend_i && entity_atk.can_hit(entity_defend) && entity_atk.hitlist().iter().all(|x| *x != entity_defend_i) {
-                let entity_defend_def = &entity_definitions[entity_defend.entity_def_key()];
+                let entity_defend_def = &entity_definitions[entity_defend.state.entity_def_key.as_ref()];
                 let frame_defend = entity_defend.relative_frame(entity_defend_def, surfaces);
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {

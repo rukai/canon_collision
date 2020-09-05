@@ -53,7 +53,7 @@ impl Replay {
                 EntityType::Player (player) => {
                     selected_players.push(
                         PlayerSetup {
-                            fighter: player.entity_def_key.clone(),
+                            fighter: entity.state.entity_def_key.clone(),
                             team:    player.team,
                         }
                     );

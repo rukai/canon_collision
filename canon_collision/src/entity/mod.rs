@@ -83,7 +83,7 @@ impl Entity {
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
-        let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
+        let action_frame = self.get_entity_frame(&entity_defs[self.state.entity_def_key.as_ref()]);
         match &self.ty {
             EntityType::Player     (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Item       (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
@@ -93,7 +93,7 @@ impl Entity {
 
     /// only used for rendering
     pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32, f32) {
-        let action_frame = self.get_entity_frame(&entity_defs[self.entity_def_key()]);
+        let action_frame = self.get_entity_frame(&entity_defs[self.state.entity_def_key.as_ref()]);
         match &self.ty {
             EntityType::Player     (player)     => player.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Item       (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
@@ -211,15 +211,6 @@ impl Entity {
         self.process_action_result(action_result);
     }
 
-    // TODO: move into ActionState
-    pub fn entity_def_key(&self) -> &str {
-        match &self.ty {
-            EntityType::Player     (player)     => player.entity_def_key.as_ref(),
-            EntityType::Item       (item)       => item.entity_def_key.as_ref(),
-            EntityType::Projectile (projectile) => projectile.entity_def_key.as_ref(),
-        }
-    }
-
     pub fn frame_angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
         if let Some(entity_frame) = self.get_entity_frame(entity_def) {
             match &self.ty {
@@ -295,7 +286,7 @@ impl Entity {
 
     pub fn item_grab_box(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces);
-        let entity_def = &entity_defs[self.entity_def_key()];
+        let entity_def = &entity_defs[self.state.entity_def_key.as_ref()];
         let frame = self.relative_frame(entity_def, surfaces);
         frame.item_grab_box.map(|rect| rect.offset(x, y))
     }
@@ -353,7 +344,7 @@ impl Entity {
 
     pub fn render(&self, selected_colboxes: HashSet<usize>, entity_selected: bool, debug: DebugEntity, entity_i: EntityKey, entity_history: &[Entities], entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntity {
         let fighter_color = graphics::get_team_color3(self.team());
-        let entity_def = &entity_defs[self.entity_def_key()];
+        let entity_def = &entity_defs[self.state.entity_def_key.as_ref()];
 
         let vector_arrows = if let EntityType::Player (player) = &self.ty {
             player.vector_arrows(&debug)
@@ -398,9 +389,9 @@ impl Entity {
     }
 
     fn render_frame(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> RenderEntityFrame {
-        let entity_def = &entity_defs[self.entity_def_key()];
+        let entity_def = &entity_defs[self.state.entity_def_key.as_ref()];
         RenderEntityFrame {
-            entity_def_key:   self.entity_def_key().to_string(),
+            entity_def_key:   self.state.entity_def_key.clone(),
             model_name:       entity_def.name.clone(),
             frame_bps:        self.public_bps_xy(entities, entity_defs, surfaces),
             render_bps:       self.public_bps_xyz(entities, entity_defs, surfaces),
@@ -415,7 +406,7 @@ impl Entity {
     }
 
     fn render_angle(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Quaternion<f32> {
-        let entity_def = &entity_defs[self.entity_def_key()];
+        let entity_def = &entity_defs[self.state.entity_def_key.as_ref()];
         match &self.ty {
             EntityType::Item (item) => {
                 if let Some(render_angle) = item.held_render_angle(entities, entity_defs) {

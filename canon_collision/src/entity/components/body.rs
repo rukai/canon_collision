@@ -160,7 +160,7 @@ impl Body {
             }
             Location::ItemHeldByPlayer (entity_i) => {
                 if let Some(player) = entities.get(entity_i) {
-                    if let Some(action_frame) = player.get_entity_frame(&entity_defs[player.entity_def_key()]) {
+                    if let Some(action_frame) = player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()]) {
                         let (x, y) = player.public_bps_xy(entities, entity_defs, surfaces);
                         if let Some(item_hold) = action_frame.item_hold.as_ref() {
                             (
@@ -197,7 +197,7 @@ impl Body {
         let z = match self.location {
             Location::ItemHeldByPlayer (entity_i) => {
                 if let Some(player) = entities.get(entity_i) {
-                    player.get_entity_frame(&entity_defs[player.entity_def_key()])
+                    player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()])
                         .and_then(|action_frame| action_frame.item_hold.as_ref())
                         .map(|item_hold| player.relative_f(item_hold.translation_z))
                         .unwrap_or(0.0)

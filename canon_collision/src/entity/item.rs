@@ -28,7 +28,6 @@ pub enum MessageItem {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Item {
     pub owner_id: Option<usize>,
-    pub entity_def_key: String,
     pub body: Body,
 }
 
@@ -98,7 +97,7 @@ impl Item {
     }
 
     pub fn bps_xy(&self, context: &StepContext, state: &ActionState) -> (f32, f32) {
-        let action_frame = state.get_entity_frame(&context.entity_defs[self.entity_def_key.as_ref()]);
+        let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
         self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
     }
 
@@ -145,7 +144,7 @@ impl Item {
 
     pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
         let mut lines = vec!();
-        let entity = &entities[self.entity_def_key.as_ref()];
+        let entity = &entities[state.entity_def_key.as_ref()];
         if debug.physics {
             lines.push(self.body.debug_string(i));
         }
@@ -165,7 +164,7 @@ impl Item {
         match self.body.location {
             Location::ItemHeldByPlayer (player_i) => {
                 entities.get(player_i)
-                    .and_then(|player| player.get_entity_frame(&entity_defs[player.entity_def_key()]))
+                    .and_then(|player| player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()]))
                     .and_then(|action_frame| action_frame.item_hold.as_ref())
                     .and_then(|item_hold| Some(Quaternion::new(
                         item_hold.quaternion_x,
