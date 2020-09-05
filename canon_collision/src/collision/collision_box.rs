@@ -187,8 +187,8 @@ pub enum CollisionResult {
     HitAtk       { hitbox: HitBox, entity_defend_i: EntityKey, point: (f32, f32) },
     HitShieldAtk { hitbox: HitBox, power_shield: Option<PowerShield>, entity_defend_i: EntityKey },
     HitShieldDef { hitbox: HitBox, power_shield: Option<PowerShield>, entity_atk_i: EntityKey },
-    ReflectDef   (HitBox), // TODO: add further details required for recreating projectile
-    ReflectAtk   (HitBox),
+    ReflectDef   (HitBox),
+    ReflectAtk   { hitbox: HitBox, entity_def_i: EntityKey },
     AbsorbDef    (HitBox),
     AbsorbAtk    (HitBox),
     GrabDef      (EntityKey),

@@ -55,6 +55,7 @@ impl Item {
                 ItemAction::Held => { }
                 ItemAction::Spawn |
                 ItemAction::Idle => {
+                    self.owner_id = None;
                     self.body.apply_friction_strong(&context.entity_def);
                 }
 
@@ -115,7 +116,7 @@ impl Item {
         })
     }
 
-    pub fn step_collision(&mut self, col_results: &[CollisionResult]) -> Option<ActionResult> {
+    pub fn step_collision(&mut self, context: &mut StepContext, state: &ActionState, col_results: &[CollisionResult]) -> Option<ActionResult> {
         let mut set_action = None;
 
         for col_result in col_results {
@@ -124,16 +125,28 @@ impl Item {
                     set_action = ActionResult::set_action(ItemAction::Fall);
                 }
                 &CollisionResult::HitAtk { .. } => {
+                    // TODO: implement better bounce logic (put this logic in the Body)
+                    self.body.x_vel *= -0.5;
+                    self.body.y_vel *= -0.5;
+                    set_action = ActionResult::set_action(ItemAction::Fall);
+                }
+                &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
+                    let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
+                    let kb_vel_mult = 1.0;
+                    self.body.launch(context, state, action_frame, hitbox, hurtbox, entity_atk_i, kb_vel_mult);
                     set_action = ActionResult::set_action(ItemAction::Fall);
                 }
                 &CollisionResult::HitShieldAtk { .. } => {
+                    // TODO: implement better bounce logic (put this logic in the Body)
+                    self.body.x_vel *= -0.5;
+                    self.body.y_vel *= -0.5;
                     set_action = ActionResult::set_action(ItemAction::Fall);
                 }
-                &CollisionResult::ReflectAtk { .. } => {
-                    // TODO
-                    set_action = ActionResult::set_action(ItemAction::Fall);
-                }
-                &CollisionResult::AbsorbAtk { .. } => {
+                &CollisionResult::ReflectAtk { entity_def_i, .. } => {
+                    // TODO: implement better reflect logic, maybe the reflect hitbox should have a `set_angle: Option<f32>`
+                    self.owner_id = context.entities.get(entity_def_i).and_then(|x| x.player_id());
+                    self.body.x_vel *= -1.0;
+                    self.body.y_vel *= -1.0;
                     set_action = ActionResult::set_action(ItemAction::Fall);
                 }
                 _ => { }

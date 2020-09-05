@@ -5,6 +5,7 @@ use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
 use crate::entity::item::{Item, ItemAction, MessageItem};
 use crate::entity::projectile::{Projectile, ProjectileAction};
+use crate::entity::toriel_fireball::{TorielFireball, TorielFireballAction};
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
 use crate::entity::components::body::{Body, Location, PhysicsResult};
 use crate::entity::components::action_state::ActionState;
@@ -877,18 +878,20 @@ impl Player {
             if state.frame == 5 {
                 let (x, y) = self.bps_xy(context, state);
                 context.new_entities.push(Entity {
-                    ty: EntityType::Projectile(
-                        Projectile {
+                    ty: EntityType::TorielFireball(
+                        TorielFireball {
                             owner_id: Some(self.id),
-                            speed: 0.6,
-                            angle: if self.body.face_right { 0.0 } else { PI },
+                            face_right: self.body.face_right,
                             x: x + self.relative_f(10.0),
                             y: y + 10.0,
+                            y_vel: 2.2,
+                            x_sin_counter: 0.0,
+                            x_sin_origin: 0.0,
                         }
                     ),
                     state: ActionState::new(
                         "TorielFireball.cbor".to_string(),
-                        ProjectileAction::Spawn
+                        TorielFireballAction::Spawn
                     ),
                 });
             }
