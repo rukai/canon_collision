@@ -53,22 +53,22 @@ pub enum Hitlag {
 }
 
 impl Hitlag {
-    pub fn decrement(&mut self) {
+    pub fn step(&mut self, rng: &mut ChaChaRng) {
         match self {
-            &mut Hitlag::Attack { ref mut counter} |
-            &mut Hitlag::Launch { ref mut counter, .. } => {
+            &mut Hitlag::Attack { ref mut counter} => {
+                *counter -= 1;
+                if *counter == 0 {
+                    *self = Hitlag::None;
+                }
+            }
+            &mut Hitlag::Launch { ref mut counter, ref mut wobble_x } => {
+                *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
                 *counter -= 1;
                 if *counter == 0 {
                     *self = Hitlag::None;
                 }
             }
             &mut Hitlag::None => { }
-        }
-    }
-
-    pub fn wobble(&mut self, rng: &mut ChaChaRng) {
-        if let &mut Hitlag::Launch { ref mut wobble_x, .. } = self {
-            *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
         }
     }
 }

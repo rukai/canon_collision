@@ -101,8 +101,7 @@ impl Entity {
         }
     }
 
-    // TODO: remove _context from caller
-    pub fn item_grab(&mut self, _context: &mut StepContext, hit_key: EntityKey, hit_id: Option<usize>) {
+    pub fn item_grab(&mut self, hit_key: EntityKey, hit_id: Option<usize>) {
         let action_result = match &mut self.ty {
             EntityType::Player     (player) => player.item_grab(),
             EntityType::Item       (item)   => item.grabbed(hit_key, hit_id),
@@ -170,25 +169,16 @@ impl Entity {
             }
         }
 
-        // TODO: move the match into ActionState.decrement and return bool or something
-        match self.state.hitlag.clone() {
-            Hitlag::Attack { .. } => {
-                self.state.hitlag.decrement();
-            }
-            Hitlag::Launch { .. } => {
-                self.state.hitlag.wobble(&mut context.rng);
-                self.state.hitlag.decrement();
-            }
-            Hitlag::None => {
-                let main_action_result = self.action_step(context);
-                let secondary_action_result = if let Some(main_action_result) = main_action_result {
-                    self.process_action_result(Some(main_action_result));
-                    self.action_step(context)
-                } else {
-                    ActionResult::set_frame(self.state.frame + 1)
-                };
-                self.process_action_result(secondary_action_result);
-            }
+        self.state.hitlag.step(&mut context.rng);
+        if let Hitlag::None = self.state.hitlag {
+            let main_action_result = self.action_step(context);
+            let secondary_action_result = if let Some(main_action_result) = main_action_result {
+                self.process_action_result(Some(main_action_result));
+                self.action_step(context)
+            } else {
+                ActionResult::set_frame(self.state.frame + 1)
+            };
+            self.process_action_result(secondary_action_result);
         }
     }
 
