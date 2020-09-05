@@ -1157,13 +1157,15 @@ impl WgpuGraphics {
 
                     // draw entity ecb
                     if entity.debug.ecb {
-                        // TODO: Set individual corner vertex colours to show which points of the ecb are selected
-                        let buffers  = Buffers::new_ecb(&self.device, &entity);
-                        let dir      = Matrix4::from_nonuniform_scale(if entity.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
-                        let transformation = position * dir;
+                        if let Some(ecb) = &entity.frames[0].ecb {
+                            // TODO: Set individual corner vertex colours to show which points of the ecb are selected
+                            let buffers  = Buffers::new_ecb(&self.device, ecb);
+                            let dir      = Matrix4::from_nonuniform_scale(if entity.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
+                            let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
+                            let transformation = position * dir;
 
-                        draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
+                            draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
+                        }
                     }
 
                     // draw entity debug overlay

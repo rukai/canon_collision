@@ -1,7 +1,7 @@
 use crate::entity::{EntityKey, Entities, StepContext};
 use crate::entity::components::action_state::{ActionState, Hitlag};
 
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame, HitBox, HurtBox};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame, HitBox, HurtBox, ECB};
 use canon_collision_lib::geometry;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
@@ -29,8 +29,9 @@ pub enum PhysicsResult {
     OutOfBounds,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Body {
+    pub ecb:                ECB,
     pub damage:             f32,
     pub x_vel:              f32,
     pub y_vel:              f32,
@@ -51,6 +52,7 @@ pub struct Body {
 impl Body {
     pub fn new(location: Location, face_right: bool) -> Body {
         Body {
+            ecb:                ECB::default(),
             damage:             0.0,
             x_vel:              0.0,
             y_vel:              0.0,

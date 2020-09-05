@@ -303,14 +303,6 @@ impl Entity {
         }
     }
 
-    pub fn ecb(&self) -> ECB {
-        match &self.ty {
-            EntityType::Player (player) => player.ecb.clone(),
-            EntityType::Item (_)  => ECB::default(),
-            EntityType::Projectile (_)  => ECB::default(),
-        }
-    }
-
     pub fn body(&self) -> Option<&Body> {
         match &self.ty {
             EntityType::Player (player) => Some(&player.body),
@@ -395,7 +387,7 @@ impl Entity {
             model_name:       entity_def.name.clone(),
             frame_bps:        self.public_bps_xy(entities, entity_defs, surfaces),
             render_bps:       self.public_bps_xyz(entities, entity_defs, surfaces),
-            ecb:              self.ecb(),
+            ecb:              self.body().map(|x| x.ecb.clone()),
             frame:            self.state.frame as usize,
             frame_no_restart: self.state.frame_no_restart as usize,
             action:           self.state.action as usize,
@@ -617,7 +609,7 @@ pub struct RenderEntityFrame {
     pub model_name:       String,
     pub frame_bps:        (f32, f32),
     pub render_bps:       (f32, f32, f32),
-    pub ecb:              ECB,
+    pub ecb:              Option<ECB>,
     pub frame:            usize,
     pub frame_no_restart: usize,
     pub action:           usize,

@@ -64,7 +64,6 @@ pub struct Player {
     pub tech_timer:         LockTimer,
     pub lcancel_timer:      u64,
     pub land_frame_skip:    u8,
-    pub ecb:                ECB,
     pub hitstun:            f32,
     /// this is only used for end-game statistics so player id is fine
     pub hit_by:             Option<usize>,
@@ -136,7 +135,6 @@ impl Player {
             tech_timer:         LockTimer::Free,
             lcancel_timer:      0,
             land_frame_skip:    0,
-            ecb:                ECB::default(),
             hitstun:            0.0,
             hit_by:             None,
             particles:          vec!(),
@@ -402,11 +400,11 @@ impl Player {
         let fighter_frame = &context.entity_def.actions[state.action as usize].frames[state.frame as usize];
 
         // update ecb
-        let prev_bottom = self.ecb.bottom;
-        self.ecb = fighter_frame.ecb.clone();
+        let prev_bottom = self.body.ecb.bottom;
+        self.body.ecb = fighter_frame.ecb.clone();
         match Action::from_u64(state.action) {
             Some(Action::JumpF) | Some(Action::JumpB) | Some(Action::JumpAerialF) | Some(Action::JumpAerialB) if state.frame < 10
-                => { self.ecb.bottom = prev_bottom }
+                => { self.body.ecb.bottom = prev_bottom }
             _   => { }
         }
 
@@ -2272,7 +2270,7 @@ impl Player {
                 counter:     0,
                 counter_max: 30,
                 x:           x,
-                y:           y + self.ecb.top / 2.0,
+                y:           y + self.body.ecb.top / 2.0,
                 z,
                 angle:       context.rng.gen_range(0.0, 2.0 * PI),
                 p_type:      ParticleType::Spark {

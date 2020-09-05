@@ -1,8 +1,7 @@
-use canon_collision_lib::entity_def::CollisionBox;
+use canon_collision_lib::entity_def::{CollisionBox, ECB};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Surface;
-use crate::entity::RenderEntity;
 use crate::entity::player::RenderShield;
 use crate::game::{SurfaceSelection, RenderRect};
 use crate::graphics;
@@ -310,15 +309,15 @@ impl Buffers {
     }
 
     /// TODO: Set individual corner vertex colours to show which points of the ecb are selected
-    pub fn new_ecb(device: &Device, player: &RenderEntity) -> Rc<Buffers> {
+    pub fn new_ecb(device: &Device, ecb: &ECB) -> Rc<Buffers> {
         let color = [1.0, 1.0, 1.0, 1.0];
-        let mid_y = (player.frames[0].ecb.top + player.frames[0].ecb.bottom) / 2.0;
+        let mid_y = (ecb.top + ecb.bottom) / 2.0;
         let vertices: [ColorVertex; 12] = [
             // ecb
-            colorvertex(0.0,                        player.frames[0].ecb.bottom, color),
-            colorvertex(player.frames[0].ecb.left,  mid_y, color),
-            colorvertex(player.frames[0].ecb.right, mid_y, color),
-            colorvertex(0.0,                        player.frames[0].ecb.top, color),
+            colorvertex(0.0,       ecb.bottom, color),
+            colorvertex(ecb.left,  mid_y,      color),
+            colorvertex(ecb.right, mid_y,      color),
+            colorvertex(0.0,       ecb.top,    color),
 
             // horizontal bps
             colorvertex(-4.0, -0.15, color),
