@@ -5,7 +5,8 @@ mod animation;
 // TODO: Move duplicate code in hurtbox and animation modules into canon_collision_lib
 
 use canon_collision_lib::assets::Assets;
-use canon_collision_lib::entity_def::{Action, ActionDef, ActionFrame, CollisionBoxRole, CollisionBox, ItemHold};
+use canon_collision_lib::entity_def::{ActionDef, ActionFrame, CollisionBoxRole, CollisionBox, ItemHold};
+use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::package::Package;
 use cli::CLIResults;
 use model::{Model3D, Joint, Animation};
@@ -52,13 +53,13 @@ fn main() {
             };
 
             for (i, ref mut action) in (*fighter.actions).iter_mut().enumerate() {
-                let action_key = Action::action_index_to_string(i);
+                let action_key = PlayerAction::action_index_to_string(i);
                 if cli.action_names.len() == 0 || cli.action_names.contains(&action_key) {
                     if let Some(animation) = model.animations.get(&action_key) {
                         regenerate_action(action, &model.root_joint, animation, &cli, &hurtboxes);
                     }
                     else {
-                        println!("Action '{}' does not have a corresponding animation, skipping.", action_key);
+                        println!("PlayerAction '{}' does not have a corresponding animation, skipping.", action_key);
                     }
                 }
             }

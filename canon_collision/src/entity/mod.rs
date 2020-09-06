@@ -5,11 +5,11 @@ pub(crate) mod projectile;
 pub(crate) mod toriel_fireball;
 
 use player::{Player, RenderPlayer, MessagePlayer};
-use projectile::{Projectile, ProjectileAction};
+use projectile::Projectile;
 use toriel_fireball::TorielFireball;
-use item::{Item, ItemAction, MessageItem};
+use item::{Item, MessageItem};
 use components::action_state::{ActionState, Hitlag};
-use components::body::{Body};
+use components::body::Body;
 
 use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
@@ -17,7 +17,10 @@ use crate::particle::Particle;
 use crate::rules::Goal;
 
 use canon_collision_lib::geometry::Rect;
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB, Action};
+use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB};
+use canon_collision_lib::entity_def::projectile::ProjectileAction;
+use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::item::ItemAction;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
@@ -466,7 +469,7 @@ impl RenderEntityType {
     /// TODO: figure out a better spot to put this so we can access from the hurtbox generator.
     pub fn action_index_to_string(&self, action_index: usize) -> String {
         match self {
-            RenderEntityType::Player (_) =>           Action::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
+            RenderEntityType::Player (_) =>     PlayerAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
             RenderEntityType::Projectile => ProjectileAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
             RenderEntityType::Item       =>       ItemAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
         }

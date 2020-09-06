@@ -11,7 +11,8 @@ use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
 use crate::particle::ParticleType;
 use crate::results::PlayerResult;
 use crate::camera::Camera;
-use canon_collision_lib::entity_def::{Action, CollisionBoxRole};
+use canon_collision_lib::entity_def::CollisionBoxRole;
+use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
 
@@ -881,8 +882,8 @@ impl WgpuGraphics {
             if let RenderObject::Entity (entity) = object {
                 location += distance;
                 if let RenderEntityType::Player (player) = &entity.render_type {
-                    match Action::from_u64(entity.frames[0].action as u64) {
-                        Some(Action::Eliminated) => { }
+                    match PlayerAction::from_u64(entity.frames[0].action as u64) {
+                        Some(PlayerAction::Eliminated) => { }
                         _ => {
                             let c = entity.fighter_color.clone();
                             let color = [c[0], c[1], c[2], 1.0];
@@ -1127,8 +1128,8 @@ impl WgpuGraphics {
 
                     // draw entity
                     let action_index = entity.frames[0].action;
-                    match Action::from_u64(action_index as u64) {
-                        Some(Action::Eliminated) => { }
+                    match PlayerAction::from_u64(action_index as u64) {
+                        Some(PlayerAction::Eliminated) => { }
                         _ => {
                             let fighter_model_name = &entity.frames[0].model_name;
                             if entity.debug.render.normal() && entity.visible {
@@ -1289,8 +1290,8 @@ impl WgpuGraphics {
 
                     // Draw spawn plat
                     if let RenderEntityType::Player (_) = entity.render_type {
-                        match Action::from_u64(entity.frames[0].action as u64) {
-                            Some(Action::ReSpawn) | Some(Action::ReSpawnIdle) => {
+                        match PlayerAction::from_u64(entity.frames[0].action as u64) {
+                            Some(PlayerAction::ReSpawn) | Some(PlayerAction::ReSpawnIdle) => {
                                 // TODO: get width from player dimensions
                                 let width = 15.0;
                                 let height = width / 4.0;
@@ -1683,7 +1684,7 @@ impl WgpuGraphics {
             let camera = Camera::new_for_menu(self.aspect_ratio(), self.width as f32, self.height as f32, camera_dimension);
 
             if let Some(model) = self.models.get(&fighter.name) {
-                let action: &str = Action::from_u64(fighter.css_action)
+                let action: &str = PlayerAction::from_u64(fighter.css_action)
                     .map(|x| x.into())
                     .unwrap_or("Idle");
                 let frame = selection.animation_frame as f32;

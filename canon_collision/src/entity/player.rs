@@ -3,14 +3,18 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::item::{Item, ItemAction, MessageItem};
-use crate::entity::projectile::{Projectile, ProjectileAction};
-use crate::entity::toriel_fireball::{TorielFireball, TorielFireballAction};
+use crate::entity::item::{Item, MessageItem};
+use crate::entity::projectile::Projectile;
+use crate::entity::toriel_fireball::TorielFireball;
 use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
 use crate::entity::components::body::{Body, Location, PhysicsResult};
 use crate::entity::components::action_state::ActionState;
 
-use canon_collision_lib::entity_def::*;
+use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox};
+use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::item::ItemAction;
+use canon_collision_lib::entity_def::projectile::ProjectileAction;
+use canon_collision_lib::entity_def::toriel_fireball::TorielFireballAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
@@ -22,6 +26,7 @@ use num_traits::FromPrimitive;
 
 use std::f32;
 use std::f32::consts::PI;
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LockTimer {
@@ -115,7 +120,7 @@ impl Player {
         } else {
             // There are no spawn points, we could attempt to find a floor surface and put the
             // player there, however there might still be no floor, so to keep this rare case simple we
-            // just place the player in midair even though this interacts weirdly with Action::Idle
+            // just place the player in midair even though this interacts weirdly with PlayerAction::Idle
             // which is supposed to be grounded.
             Location::Airbourne { x: 0.0, y: 0.0 }
         };
@@ -174,11 +179,11 @@ impl Player {
     }
 
     pub fn is_shielding(&self, state: &ActionState) -> bool {
-        match Action::from_u64(state.action) {
-            Some(Action::Shield) |
-            Some(Action::ShieldOn) |
-            Some(Action::ShieldOff) |
-            Some(Action::PowerShield)
+        match PlayerAction::from_u64(state.action) {
+            Some(PlayerAction::Shield) |
+            Some(PlayerAction::ShieldOn) |
+            Some(PlayerAction::ShieldOff) |
+            Some(PlayerAction::PowerShield)
               => true,
             _ => false
         }
@@ -222,7 +227,7 @@ impl Player {
             self.body.location = Location::Airbourne { x, y };
             self.fastfalled = false;
 
-            ActionResult::set_action(Action::Fall) // TODO: use miss step state ^.^
+            ActionResult::set_action(PlayerAction::Fall) // TODO: use miss step state ^.^
         } else {
             None
         }
@@ -238,7 +243,7 @@ impl Player {
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
-                    let kb_vel_mult = if let Some(Action::Crouch) = Action::from_u64(state.action) {
+                    let kb_vel_mult = if let Some(PlayerAction::Crouch) = PlayerAction::from_u64(state.action) {
                         0.67
                     } else {
                         1.0
@@ -256,16 +261,16 @@ impl Player {
                     }
 
                     set_action = if kb_vel > 80.0 {
-                        ActionResult::set_action(Action::DamageFly)
+                        ActionResult::set_action(PlayerAction::DamageFly)
                     } else {
-                        ActionResult::set_action(Action::Damage)
+                        ActionResult::set_action(PlayerAction::Damage)
                     };
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
                     let entity_def = &context.entities[entity_defend_i];
                     if let EntityType::Player (player_def) = &entity_def.ty {
                         if let &Some(ref power_shield) = power_shield {
-                            if let (Some(Action::PowerShield), &Some(ref stun)) = (Action::from_u64(state.action), &power_shield.enemy_stun) {
+                            if let (Some(PlayerAction::PowerShield), &Some(ref stun)) = (PlayerAction::from_u64(state.action), &power_shield.enemy_stun) {
                                 if stun.window > entity_def.state.frame as u64 {
                                     self.stun_timer = stun.duration;
                                 }
@@ -281,7 +286,7 @@ impl Player {
                 }
                 &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
                     if let &Some(ref power_shield) = power_shield {
-                        if let (Some(Action::PowerShield), &Some(ref parry)) = (Action::from_u64(state.action), &power_shield.parry) {
+                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) = (PlayerAction::from_u64(state.action), &power_shield.parry) {
                             if parry.window > state.frame as u64 {
                                 self.parry_timer = parry.duration;
                             }
@@ -303,12 +308,12 @@ impl Player {
                     self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                 }
                 &CollisionResult::GrabAtk (_entity_defend_i) => {
-                    set_action = ActionResult::set_action(Action::GrabbingIdle)
+                    set_action = ActionResult::set_action(PlayerAction::GrabbingIdle)
                 }
                 &CollisionResult::GrabDef (entity_atk_i) => {
                     self.body.face_right = !context.entities[entity_atk_i].face_right();
                     self.body.location = Location::GrabbedByPlayer(entity_atk_i);
-                    set_action = ActionResult::set_action(Action::GrabbedIdle)
+                    set_action = ActionResult::set_action(PlayerAction::GrabbedIdle)
                 }
                 _ => { }
             }
@@ -350,7 +355,7 @@ impl Player {
             self.lcancel_timer -= 1;
         }
         else if context.input.l.press || context.input.r.press || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 ||
-            context.input.z.press && !(state.frame == 0 && Action::from_u64(state.action).as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
+            context.input.z.press && !(state.frame == 0 && PlayerAction::from_u64(state.action).as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
         {
             if let &Some(ref lcancel) = &context.entity_def.lcancel {
                 self.lcancel_timer = lcancel.active_window;
@@ -403,8 +408,8 @@ impl Player {
         // update ecb
         let prev_bottom = self.body.ecb.bottom;
         self.body.ecb = fighter_frame.ecb.clone();
-        match Action::from_u64(state.action) {
-            Some(Action::JumpF) | Some(Action::JumpB) | Some(Action::JumpAerialF) | Some(Action::JumpAerialB) if state.frame < 10
+        match PlayerAction::from_u64(state.action) {
+            Some(PlayerAction::JumpF) | Some(PlayerAction::JumpB) | Some(PlayerAction::JumpAerialF) | Some(PlayerAction::JumpAerialB) if state.frame < 10
                 => { self.body.ecb.bottom = prev_bottom }
             _   => { }
         }
@@ -422,76 +427,76 @@ impl Player {
     }
 
     fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(action) = Action::from_u64(state.action) {
+        if let Some(action) = PlayerAction::from_u64(state.action) {
             match action {
-                Action::Spawn => None,
-                Action::ReSpawn => None,
-                Action::ReSpawnIdle => self.spawn_idle(context, state),
+                PlayerAction::Spawn => None,
+                PlayerAction::ReSpawn => None,
+                PlayerAction::ReSpawnIdle => self.spawn_idle(context, state),
 
-                Action::AerialFall | Action::JumpAerialF |
-                Action::Fair       | Action::Bair |
-                Action::Dair       | Action::Uair |
-                Action::Nair       | Action::JumpAerialB |
-                Action::Fall
+                PlayerAction::AerialFall | PlayerAction::JumpAerialF |
+                PlayerAction::Fair       | PlayerAction::Bair |
+                PlayerAction::Dair       | PlayerAction::Uair |
+                PlayerAction::Nair       | PlayerAction::JumpAerialB |
+                PlayerAction::Fall
                 => self.aerial_action(context, state),
 
-                Action::JumpF      | Action::JumpB
+                PlayerAction::JumpF      | PlayerAction::JumpB
                 => self.jump_action(context, state),
 
-                Action::Jab       | Action::Jab2 |
-                Action::Jab3      | Action::Utilt |
-                Action::Ftilt     | Action::DashAttack |
-                Action::Dsmash    | Action::Fsmash |
-                Action::Usmash    | Action::Idle |
-                Action::Grab      | Action::DashGrab |
-                Action::TauntUp   | Action::TauntDown |
-                Action::TauntLeft | Action::TauntRight |
-                Action::CrouchEnd
+                PlayerAction::Jab       | PlayerAction::Jab2 |
+                PlayerAction::Jab3      | PlayerAction::Utilt |
+                PlayerAction::Ftilt     | PlayerAction::DashAttack |
+                PlayerAction::Dsmash    | PlayerAction::Fsmash |
+                PlayerAction::Usmash    | PlayerAction::Idle |
+                PlayerAction::Grab      | PlayerAction::DashGrab |
+                PlayerAction::TauntUp   | PlayerAction::TauntDown |
+                PlayerAction::TauntLeft | PlayerAction::TauntRight |
+                PlayerAction::CrouchEnd
                 => self.ground_idle_action(context, state),
 
-                Action::ItemThrowU | Action::ItemThrowD |
-                Action::ItemThrowF | Action::ItemThrowB
+                PlayerAction::ItemThrowU | PlayerAction::ItemThrowD |
+                PlayerAction::ItemThrowF | PlayerAction::ItemThrowB
                 => self.item_throw_action(context, state),
 
-                Action::ItemThrowAirU | Action::ItemThrowAirD |
-                Action::ItemThrowAirF | Action::ItemThrowAirB
+                PlayerAction::ItemThrowAirU | PlayerAction::ItemThrowAirD |
+                PlayerAction::ItemThrowAirF | PlayerAction::ItemThrowAirB
                 => self.item_throw_air_action(context, state),
 
-                Action::FairLand | Action::BairLand |
-                Action::UairLand | Action::DairLand |
-                Action::NairLand | Action::SpecialLand
+                PlayerAction::FairLand | PlayerAction::BairLand |
+                PlayerAction::UairLand | PlayerAction::DairLand |
+                PlayerAction::NairLand | PlayerAction::SpecialLand
                 => self.attack_land_action(context, state),
 
-                Action::Teeter |
-                Action::TeeterIdle       => self.teeter_action(context, state),
-                Action::Land             => self.land_action(context, state),
-                Action::DamageFly        => self.damage_fly_action(context),
-                Action::DamageFall       => self.damage_fall_action(context, state),
-                Action::Damage           => self.damage_action(context, state),
-                Action::MissedTechIdle   => self.missed_tech_action(context, state),
-                Action::MissedTechStart  => self.missed_tech_start_action(context.entity_def, state),
-                Action::AerialDodge      => self.aerialdodge_action(context, state),
-                Action::SpecialFall      => self.specialfall_action(context),
-                Action::Dtilt            => self.dtilt_action(context, state),
-                Action::CrouchStart      => self.crouch_start_action(context, state),
-                Action::Crouch           => self.crouch_action(context, state),
-                Action::Walk             => self.walk_action(context, state),
-                Action::Dash             => self.dash_action(context, state),
-                Action::Run              => self.run_action(context),
-                Action::RunEnd           => self.run_end_action(context, state),
-                Action::TiltTurn         => self.tilt_turn_action(context, state),
-                Action::SmashTurn        => self.smash_turn_action(context, state),
-                Action::RunTurn          => self.run_turn_action(context, state),
-                Action::LedgeIdle        => self.ledge_idle_action(context, state),
-                Action::ShieldOn         => self.shield_on_action(context, state),
-                Action::PowerShield      => self.shield_action(context, state),
-                Action::Shield           => self.shield_action(context, state),
-                Action::ShieldOff        => self.shield_off_action(context, state),
-                Action::ShieldBreakFall  => self.shield_break_fall_action(context.entity_def),
-                Action::ShieldBreakGetup => self.shield_break_getup_action(),
-                Action::Stun             => self.stun_action(context, state),
-                Action::GrabbingIdle     => self.grabbing_idle_action(context, state),
-                Action::GrabbedIdle      => self.grabbed_idle_action(context, state),
+                PlayerAction::Teeter |
+                PlayerAction::TeeterIdle       => self.teeter_action(context, state),
+                PlayerAction::Land             => self.land_action(context, state),
+                PlayerAction::DamageFly        => self.damage_fly_action(context),
+                PlayerAction::DamageFall       => self.damage_fall_action(context, state),
+                PlayerAction::Damage           => self.damage_action(context, state),
+                PlayerAction::MissedTechIdle   => self.missed_tech_action(context, state),
+                PlayerAction::MissedTechStart  => self.missed_tech_start_action(context.entity_def, state),
+                PlayerAction::AerialDodge      => self.aerialdodge_action(context, state),
+                PlayerAction::SpecialFall      => self.specialfall_action(context),
+                PlayerAction::Dtilt            => self.dtilt_action(context, state),
+                PlayerAction::CrouchStart      => self.crouch_start_action(context, state),
+                PlayerAction::Crouch           => self.crouch_action(context, state),
+                PlayerAction::Walk             => self.walk_action(context, state),
+                PlayerAction::Dash             => self.dash_action(context, state),
+                PlayerAction::Run              => self.run_action(context),
+                PlayerAction::RunEnd           => self.run_end_action(context, state),
+                PlayerAction::TiltTurn         => self.tilt_turn_action(context, state),
+                PlayerAction::SmashTurn        => self.smash_turn_action(context, state),
+                PlayerAction::RunTurn          => self.run_turn_action(context, state),
+                PlayerAction::LedgeIdle        => self.ledge_idle_action(context, state),
+                PlayerAction::ShieldOn         => self.shield_on_action(context, state),
+                PlayerAction::PowerShield      => self.shield_action(context, state),
+                PlayerAction::Shield           => self.shield_action(context, state),
+                PlayerAction::ShieldOff        => self.shield_off_action(context, state),
+                PlayerAction::ShieldBreakFall  => self.shield_break_fall_action(context.entity_def),
+                PlayerAction::ShieldBreakGetup => self.shield_break_getup_action(),
+                PlayerAction::Stun             => self.stun_action(context, state),
+                PlayerAction::GrabbingIdle     => self.grabbing_idle_action(context, state),
+                PlayerAction::GrabbedIdle      => self.grabbed_idle_action(context, state),
                 _ => None
             }
         } else {
@@ -507,14 +512,14 @@ impl Player {
             (self.relative_f(context.input[0].c_stick_x) < -0.2 && self.relative_f(context.input[1].c_stick_x) >= -0.2)
         {
             self.set_airbourne(context, state);
-            ActionResult::set_action(Action::Fall)
+            ActionResult::set_action(PlayerAction::Fall)
         }
         else if context.input.x.press || context.input.y.press || (context.input[0].stick_y > 0.65 && context.input[1].stick_y <= 0.65) {
             if self.body.damage < 100.0 {
-                ActionResult::set_action(Action::LedgeJump)
+                ActionResult::set_action(PlayerAction::LedgeJump)
             }
             else {
-                ActionResult::set_action(Action::LedgeJumpSlow)
+                ActionResult::set_action(PlayerAction::LedgeJumpSlow)
             }
         }
         else if
@@ -522,18 +527,18 @@ impl Player {
             (context.input[0].stick_y > 0.2 && context.input[1].stick_y <= 0.2)
         {
             if self.body.damage < 100.0 {
-                ActionResult::set_action(Action::LedgeGetup)
+                ActionResult::set_action(PlayerAction::LedgeGetup)
             }
             else {
-                ActionResult::set_action(Action::LedgeGetupSlow)
+                ActionResult::set_action(PlayerAction::LedgeGetupSlow)
             }
         }
         else if context.input.a.press || context.input.b.press || (context.input[0].c_stick_y > 0.65 && context.input[1].c_stick_x <= 0.65) {
             if self.body.damage < 100.0 {
-                ActionResult::set_action(Action::LedgeAttack)
+                ActionResult::set_action(PlayerAction::LedgeAttack)
             }
             else {
-                ActionResult::set_action(Action::LedgeAttackSlow)
+                ActionResult::set_action(PlayerAction::LedgeAttackSlow)
             }
         }
         else if
@@ -542,15 +547,15 @@ impl Player {
             (self.relative_f(context.input[0].c_stick_x) > 0.8 && self.relative_f(context.input[1].c_stick_x) <= 0.8)
         {
             if self.body.damage < 100.0 {
-                ActionResult::set_action(Action::LedgeRoll)
+                ActionResult::set_action(PlayerAction::LedgeRoll)
             }
             else {
-                ActionResult::set_action(Action::LedgeRollSlow)
+                ActionResult::set_action(PlayerAction::LedgeRollSlow)
             }
         }
         else if self.ledge_idle_timer > 600 {
             self.set_airbourne(context, state);
-            ActionResult::set_action(Action::DamageFall)
+            ActionResult::set_action(PlayerAction::DamageFall)
         }
         else {
             self.ledge_idle_timer += 1;
@@ -570,24 +575,24 @@ impl Player {
     fn missed_tech_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         self.hitstun -= 1.0;
         if self.relative_f(context.input[0].stick_x) < -0.7 {
-            ActionResult::set_action(Action::MissedTechGetupB)
+            ActionResult::set_action(PlayerAction::MissedTechGetupB)
         }
         else if self.relative_f(context.input[0].stick_x) > 0.7 {
-            ActionResult::set_action(Action::MissedTechGetupF)
+            ActionResult::set_action(PlayerAction::MissedTechGetupF)
         }
         else if self.relative_f(context.input[0].stick_x) > 0.7 {
-            ActionResult::set_action(Action::MissedTechGetupF)
+            ActionResult::set_action(PlayerAction::MissedTechGetupF)
         }
         else if context.input[0].stick_y > 0.7 {
-            ActionResult::set_action(Action::MissedTechGetupN)
+            ActionResult::set_action(PlayerAction::MissedTechGetupN)
         }
         else if context.input.a.press || context.input.b.press {
-            ActionResult::set_action(Action::MissedTechAttack)
+            ActionResult::set_action(PlayerAction::MissedTechAttack)
         }
         else {
             if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
                 if state.frame_no_restart > getup_frame as i64 {
-                    ActionResult::set_action(Action::MissedTechGetupN)
+                    ActionResult::set_action(PlayerAction::MissedTechGetupN)
                 } else {
                     self.apply_friction(context.entity_def, state);
                     None
@@ -603,9 +608,9 @@ impl Player {
         self.hitstun -= 1.0;
         if self.hitstun <= 0.0 {
             if self.body.is_airbourne() {
-                ActionResult::set_action(Action::Fall)
+                ActionResult::set_action(PlayerAction::Fall)
             } else {
-                ActionResult::set_action(Action::Idle)
+                ActionResult::set_action(PlayerAction::Idle)
             }
         } else {
             if self.body.is_airbourne() {
@@ -622,7 +627,7 @@ impl Player {
         self.hitstun -= 1.0;
         self.fall_action(context.entity_def);
         if self.hitstun <= 0.0 {
-            ActionResult::set_action(Action::DamageFall)
+            ActionResult::set_action(PlayerAction::DamageFall)
         } else {
             None
         }
@@ -640,7 +645,7 @@ impl Player {
                     (context.input[0].stick_y >  0.7 && context.input[1].stick_y <  0.7) ||
                     (context.input[0].stick_y < -0.7 && context.input[1].stick_y > -0.7)
                     {
-                        ActionResult::set_action(Action::Fall)
+                        ActionResult::set_action(PlayerAction::Fall)
                     } else {
                         None
                     }
@@ -662,9 +667,9 @@ impl Player {
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
             .or_else(|| if context.input[0].stick_x.abs() > 0.2 || context.input[0].stick_y.abs() > 0.2 {
-                ActionResult::set_action(Action::Fall)
+                ActionResult::set_action(PlayerAction::Fall)
             } else if state.frame_no_restart >= 1000 {
-                ActionResult::set_action(Action::Fall)
+                ActionResult::set_action(PlayerAction::Fall)
             } else {
                 None
             })
@@ -756,7 +761,7 @@ impl Player {
             if context.entity_def.tilt_turn_flip_dir_frame > context.entity_def.tilt_turn_into_dash_iasa { // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
                 self.body.face_right = !self.body.face_right
             }
-            ActionResult::set_action(Action::Dash)
+            ActionResult::set_action(PlayerAction::Dash)
         } else {
             None
         }
@@ -780,7 +785,7 @@ impl Player {
 
     fn check_dash_out_of_smash_turn(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 0 && self.relative_f(context.input[0].stick_x) > 0.79 {
-            ActionResult::set_action(Action::Dash)
+            ActionResult::set_action(PlayerAction::Dash)
         } else {
             None
         }
@@ -836,7 +841,7 @@ impl Player {
                 .or_else(|| self.check_tilt_turn(context))
                 .or_else(||
                     if context.input.stick_y.value > -0.61 {
-                        ActionResult::set_action(Action::CrouchEnd)
+                        ActionResult::set_action(PlayerAction::CrouchEnd)
                     } else {
                         None
                     }
@@ -874,7 +879,7 @@ impl Player {
     }
 
     fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(Action::Jab) = Action::from_u64(state.action) {
+        if let Some(PlayerAction::Jab) = PlayerAction::from_u64(state.action) {
             if state.frame == 5 {
                 let (x, y) = self.bps_xy(context, state);
                 context.new_entities.push(Entity {
@@ -897,7 +902,7 @@ impl Player {
             }
         }
 
-        if let Some(Action::TauntLeft) = Action::from_u64(state.action) {
+        if let Some(PlayerAction::TauntLeft) = PlayerAction::from_u64(state.action) {
             if state.frame == 0 {
                 let (x, y) = self.bps_xy(context, state);
                 context.new_entities.push(Entity {
@@ -918,7 +923,7 @@ impl Player {
             }
         }
 
-        if let Some(Action::TauntRight) = Action::from_u64(state.action) {
+        if let Some(PlayerAction::TauntRight) = PlayerAction::from_u64(state.action) {
             if state.frame == 0 {
                 let (x, y) = self.bps_xy(context, state);
                 let x = x + 15.0;
@@ -968,11 +973,11 @@ impl Player {
     fn item_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 4 {
             if let Some(item) = self.get_held_item(&context.entities) {
-                let message_item = match Action::from_u64(state.action) {
-                    Some(Action::ItemThrowF) | Some(Action::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
-                    Some(Action::ItemThrowB) | Some(Action::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
-                    Some(Action::ItemThrowU) | Some(Action::ItemThrowAirU) => MessageItem::Thrown { x_vel: 0.0,  y_vel: 4.0 },
-                    Some(Action::ItemThrowD) | Some(Action::ItemThrowAirD) => MessageItem::Thrown { x_vel: 0.0,  y_vel: -4.0 },
+                let message_item = match PlayerAction::from_u64(state.action) {
+                    Some(PlayerAction::ItemThrowF) | Some(PlayerAction::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
+                    Some(PlayerAction::ItemThrowB) | Some(PlayerAction::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
+                    Some(PlayerAction::ItemThrowU) | Some(PlayerAction::ItemThrowAirU) => MessageItem::Thrown { x_vel: 0.0,  y_vel: 4.0 },
+                    Some(PlayerAction::ItemThrowD) | Some(PlayerAction::ItemThrowAirD) => MessageItem::Thrown { x_vel: 0.0,  y_vel: -4.0 },
                     _ => MessageItem::Dropped,
                 };
                 context.messages.push(Message {
@@ -1018,7 +1023,7 @@ impl Player {
                 .or_else(|| self.check_tilt_turn(context))
                 .or_else(|| self.check_walk(context))
                 .or_else(|| if self.first_interruptible(&context.entity_def, state) && context.input[0].stick_y < -0.5 {
-                        ActionResult::set_action(Action::Crouch)
+                        ActionResult::set_action(PlayerAction::Crouch)
                     } else {
                         None
                     }
@@ -1053,7 +1058,7 @@ impl Player {
 
     fn walk_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if context.input[0].stick_x == 0.0 {
-            ActionResult::set_action(Action::Idle)
+            ActionResult::set_action(PlayerAction::Idle)
         } else {
             None
         }
@@ -1123,7 +1128,7 @@ impl Player {
         if (state.frame >= run_frame || (run_frame > last_action_frame && self.last_frame(&context.entity_def, state)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
-            ActionResult::set_action(Action::Run)
+            ActionResult::set_action(PlayerAction::Run)
         } else {
             None
         }
@@ -1146,14 +1151,14 @@ impl Player {
             .or_else(|| self.check_shield(context))
             .or_else(||
                 if self.relative_f(context.input.stick_x.value) <= -0.3 {
-                    ActionResult::set_action(Action::RunTurn)
+                    ActionResult::set_action(PlayerAction::RunTurn)
                 } else {
                     None
                 }
             )
             .or_else(||
                 if self.relative_f(context.input.stick_x.value) < 0.62 {
-                    ActionResult::set_action(Action::RunEnd)
+                    ActionResult::set_action(PlayerAction::RunEnd)
                 } else {
                     None
                 }
@@ -1184,7 +1189,7 @@ impl Player {
                 }
             )
             .or_else(|| if self.relative_f(context.input.stick_x.value) <= -0.3 {
-                    ActionResult::set_action(Action::RunTurn)
+                    ActionResult::set_action(PlayerAction::RunTurn)
                 } else {
                     None
                 }
@@ -1215,7 +1220,7 @@ impl Player {
             }
         }
         self.fastfalled = false;
-        ActionResult::set_action(Action::AerialDodge)
+        ActionResult::set_action(PlayerAction::AerialDodge)
     }
 
     fn aerialdodge_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
@@ -1240,9 +1245,9 @@ impl Player {
                 let stun_lock = self.shield_stun_timer > 0;
                 if !stun_lock && context.input[0].l_trigger < 0.165 && context.input[0].r_trigger < 0.165 && !context.input[0].l && !context.input[0].r {
                     if self.parry_timer > 0 {
-                        ActionResult::set_action(Action::Idle)
+                        ActionResult::set_action(PlayerAction::Idle)
                     } else {
-                        ActionResult::set_action(Action::ShieldOff)
+                        ActionResult::set_action(PlayerAction::ShieldOff)
                     }
                 } else {
                     None
@@ -1286,7 +1291,7 @@ impl Player {
                 self.body.kb_y_dec = 0.051;
                 self.body.kb_x_dec = 0.0;
                 self.set_airbourne(context, state);
-                ActionResult::set_action(Action::ShieldBreakFall)
+                ActionResult::set_action(PlayerAction::ShieldBreakFall)
             } else {
                 None
             };
@@ -1325,7 +1330,7 @@ impl Player {
         // TODO: Mashout
 
         if self.stun_timer <= 0 {
-            ActionResult::set_action(Action::Idle)
+            ActionResult::set_action(PlayerAction::Idle)
         } else {
             None
         }
@@ -1335,7 +1340,7 @@ impl Player {
         self.apply_friction(context.entity_def, state);
 
         if state.frame_no_restart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
-            ActionResult::set_action(Action::GrabbingEnd)
+            ActionResult::set_action(PlayerAction::GrabbingEnd)
         } else {
             None
         }
@@ -1353,11 +1358,11 @@ impl Player {
                     let x = context.stage.surfaces[platform_i].world_x_to_plat_x(bps_xy.0);
                     self.body.location = Location::Surface { platform_i, x };
                     self.land(context, state);
-                    ActionResult::set_action(Action::GrabbedEnd)
+                    ActionResult::set_action(PlayerAction::GrabbedEnd)
                 }
                 else {
                     self.set_airbourne(context, state);
-                    ActionResult::set_action(Action::Fall)
+                    ActionResult::set_action(PlayerAction::Fall)
                 }
             } else {
                 None
@@ -1385,13 +1390,13 @@ impl Player {
 
     fn check_crouch(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if context.input[0].stick_y < -0.77 {
-            if let Some(action) = Action::from_u64(state.action) {
+            if let Some(action) = PlayerAction::from_u64(state.action) {
                 match action {
-                    Action::CrouchStart | Action::Crouch | Action::CrouchEnd => {
+                    PlayerAction::CrouchStart | PlayerAction::Crouch | PlayerAction::CrouchEnd => {
                         None // TODO: used to block action change do we want to restore that?
                     }
                     _ => {
-                        ActionResult::set_action(Action::CrouchStart)
+                        ActionResult::set_action(PlayerAction::CrouchStart)
                     }
                 }
             } else {
@@ -1409,7 +1414,7 @@ impl Player {
                 let pass_frame = last_action_frame.min(4);
                 if platform.is_pass_through() && state.frame == pass_frame && (context.input[0].stick_y < -0.77 || context.input[2].stick_y < -0.77) && context.input[6].stick_y > -0.36 {
                     self.set_airbourne(context, state);
-                    return ActionResult::set_action(Action::PassPlatform)
+                    return ActionResult::set_action(PlayerAction::PassPlatform)
                 }
             }
         }
@@ -1435,7 +1440,7 @@ impl Player {
     fn check_dash(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if self.relative_f(context.input[0].stick_x) > 0.79 && self.relative_f(context.input[2].stick_x) < 0.3 {
             self.body.x_vel = self.relative_f(context.entity_def.dash_init_vel);
-            ActionResult::set_action(Action::Dash)
+            ActionResult::set_action(PlayerAction::Dash)
         } else {
             None
         }
@@ -1443,7 +1448,7 @@ impl Player {
 
     fn check_tilt_turn(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if self.relative_f(context.input[0].stick_x) < -0.3 {
-            ActionResult::set_action(Action::TiltTurn)
+            ActionResult::set_action(PlayerAction::TiltTurn)
         } else {
             None
         }
@@ -1453,7 +1458,7 @@ impl Player {
         if self.relative_f(context.input[0].stick_x) < -0.79 && self.relative_f(context.input[2].stick_x) > -0.3 {
             self.body.x_vel *= 0.25;
             self.body.face_right = !self.body.face_right;
-            ActionResult::set_action(Action::SmashTurn)
+            ActionResult::set_action(PlayerAction::SmashTurn)
         } else {
             None
         }
@@ -1463,11 +1468,11 @@ impl Player {
         match self.jump_input(&context.input) {
             JumpResult::Button => {
                 self.jumpsquat_button = true;
-                ActionResult::set_action(Action::JumpSquat)
+                ActionResult::set_action(PlayerAction::JumpSquat)
             }
             JumpResult::Stick => {
                 self.jumpsquat_button = false;
-                ActionResult::set_action(Action::JumpSquat)
+                ActionResult::set_action(PlayerAction::JumpSquat)
             }
             JumpResult::None => None,
         }
@@ -1482,9 +1487,9 @@ impl Player {
             self.fastfalled = false;
 
             if self.relative_f(context.input.stick_x.value) < -0.3 {
-                ActionResult::set_action(Action::JumpAerialB)
+                ActionResult::set_action(PlayerAction::JumpAerialB)
             } else {
-                ActionResult::set_action(Action::JumpAerialF)
+                ActionResult::set_action(PlayerAction::JumpAerialF)
             }
         } else {
             None
@@ -1495,30 +1500,30 @@ impl Player {
         if context.input.a.press || context.input.z.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
                 if context.input.z.press && self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowAirF)
+                    ActionResult::set_action(PlayerAction::ItemThrowAirF)
                 } else {
-                    ActionResult::set_action(Action::Fair)
+                    ActionResult::set_action(PlayerAction::Fair)
                 }
             }
             else if self.relative_f(context.input[0].stick_x) < -0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
                 if context.input.z.press && self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowAirB)
+                    ActionResult::set_action(PlayerAction::ItemThrowAirB)
                 } else {
-                    ActionResult::set_action(Action::Bair)
+                    ActionResult::set_action(PlayerAction::Bair)
                 }
             }
             else if context.input[0].stick_y < -0.3 {
                 if context.input.z.press && self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowAirD)
+                    ActionResult::set_action(PlayerAction::ItemThrowAirD)
                 } else {
-                    ActionResult::set_action(Action::Dair)
+                    ActionResult::set_action(PlayerAction::Dair)
                 }
             }
             else if context.input[0].stick_y > 0.3 {
                 if context.input.z.press && self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowAirU)
+                    ActionResult::set_action(PlayerAction::ItemThrowAirU)
                 } else {
-                    ActionResult::set_action(Action::Uair)
+                    ActionResult::set_action(PlayerAction::Uair)
                 }
             }
             else if context.input.z.press && self.get_held_item(&context.entities).is_some() {
@@ -1530,39 +1535,39 @@ impl Player {
                 }
                 None
             } else {
-                ActionResult::set_action(Action::Nair)
+                ActionResult::set_action(PlayerAction::Nair)
             }
         }
         else if self.relative_f(context.input[0].c_stick_x) >= 0.3 && self.relative_f(context.input[1].c_stick_x) < 0.3 
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
             if self.get_held_item(&context.entities).is_some() {
-                ActionResult::set_action(Action::ItemThrowAirF)
+                ActionResult::set_action(PlayerAction::ItemThrowAirF)
             } else {
-                ActionResult::set_action(Action::Fair)
+                ActionResult::set_action(PlayerAction::Fair)
             }
         }
         else if self.relative_f(context.input[0].c_stick_x) <= -0.3 && self.relative_f(context.input[1].c_stick_x) > -0.3
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
             if self.get_held_item(&context.entities).is_some() {
-                ActionResult::set_action(Action::ItemThrowAirB)
+                ActionResult::set_action(PlayerAction::ItemThrowAirB)
             } else {
-                ActionResult::set_action(Action::Bair)
+                ActionResult::set_action(PlayerAction::Bair)
             }
         }
         else if context.input[0].c_stick_y < -0.3 && context.input[1].c_stick_y > -0.3 {
             if self.get_held_item(&context.entities).is_some() {
-                ActionResult::set_action(Action::ItemThrowAirD)
+                ActionResult::set_action(PlayerAction::ItemThrowAirD)
             } else {
-                ActionResult::set_action(Action::Dair)
+                ActionResult::set_action(PlayerAction::Dair)
             }
         }
         else if context.input[0].c_stick_y >= 0.3 && context.input[1].c_stick_y < 0.3 {
             if self.get_held_item(&context.entities).is_some() {
-                ActionResult::set_action(Action::ItemThrowAirU)
+                ActionResult::set_action(PlayerAction::ItemThrowAirU)
             } else {
-                ActionResult::set_action(Action::Uair)
+                ActionResult::set_action(PlayerAction::Uair)
             }
         }
         else {
@@ -1574,30 +1579,30 @@ impl Player {
         if context.input.a.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() - context.input[0].stick_y.abs() > -0.05 {
                 if self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowF)
+                    ActionResult::set_action(PlayerAction::ItemThrowF)
                 } else {
-                    ActionResult::set_action(Action::Ftilt)
+                    ActionResult::set_action(PlayerAction::Ftilt)
                 }
             }
             else if context.input[0].stick_y < -0.3 {
                 if self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowD)
+                    ActionResult::set_action(PlayerAction::ItemThrowD)
                 } else {
-                    ActionResult::set_action(Action::Dtilt)
+                    ActionResult::set_action(PlayerAction::Dtilt)
                 }
             }
             else if context.input[0].stick_y > 0.3 {
                 if self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowU)
+                    ActionResult::set_action(PlayerAction::ItemThrowU)
                 } else {
-                    ActionResult::set_action(Action::Utilt)
+                    ActionResult::set_action(PlayerAction::Utilt)
                 }
             }
             else {
                 if self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(Action::ItemThrowF)
+                    ActionResult::set_action(PlayerAction::ItemThrowF)
                 } else {
-                    ActionResult::set_action(Action::Jab)
+                    ActionResult::set_action(PlayerAction::Jab)
                 }
             }
         } else {
@@ -1607,7 +1612,7 @@ impl Player {
 
     fn check_dash_attack(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press {
-            ActionResult::set_action(Action::DashAttack)
+            ActionResult::set_action(PlayerAction::DashAttack)
         } else {
             None
         }
@@ -1615,7 +1620,7 @@ impl Player {
 
     fn check_grab_shield(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press || context.input.z.press {
-            ActionResult::set_action(Action::Grab)
+            ActionResult::set_action(PlayerAction::Grab)
         } else {
             None
         }
@@ -1623,7 +1628,7 @@ impl Player {
 
     fn check_grab(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.z.press {
-            ActionResult::set_action(Action::Grab)
+            ActionResult::set_action(PlayerAction::Grab)
         } else {
             None
         }
@@ -1631,7 +1636,7 @@ impl Player {
 
     fn check_dash_grab(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.z.press {
-            ActionResult::set_action(Action::DashGrab)
+            ActionResult::set_action(PlayerAction::DashGrab)
         } else {
             None
         }
@@ -1651,18 +1656,18 @@ impl Player {
            (context.input[0].stick_x >=  0.79 && context.input[2].stick_x < 0.3) ||
            (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > 0.3) {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
-            ActionResult::set_action(Action::Fsmash)
+            ActionResult::set_action(PlayerAction::Fsmash)
         } else if context.input.a.press && context.input[0].stick_y >= 0.66 && context.input[2].stick_y < 0.3 {
-            ActionResult::set_action(Action::Usmash)
+            ActionResult::set_action(PlayerAction::Usmash)
         } else if context.input.a.press && context.input[0].stick_y <= -0.66 && context.input[2].stick_y > 0.3 {
-            ActionResult::set_action(Action::Dsmash)
+            ActionResult::set_action(PlayerAction::Dsmash)
         } else if context.input.a.press && context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
-            ActionResult::set_action(Action::Fsmash)
+            ActionResult::set_action(PlayerAction::Fsmash)
         } else if context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66 {
-            ActionResult::set_action(Action::Usmash)
+            ActionResult::set_action(PlayerAction::Usmash)
         } else if context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66 {
-            ActionResult::set_action(Action::Dsmash)
+            ActionResult::set_action(PlayerAction::Dsmash)
         }
         else {
             None
@@ -1671,13 +1676,13 @@ impl Player {
 
     fn check_taunt(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.up.press {
-            ActionResult::set_action(Action::TauntUp)
+            ActionResult::set_action(PlayerAction::TauntUp)
         } else if context.input.down.press {
-            ActionResult::set_action(Action::TauntDown)
+            ActionResult::set_action(PlayerAction::TauntDown)
         } else if context.input.left.press {
-            ActionResult::set_action(Action::TauntLeft)
+            ActionResult::set_action(PlayerAction::TauntLeft)
         } else if context.input.right.press {
-            ActionResult::set_action(Action::TauntRight)
+            ActionResult::set_action(PlayerAction::TauntRight)
         }
         else {
             None
@@ -1688,23 +1693,23 @@ impl Player {
         match (&context.entity_def.shield, &context.entity_def.power_shield) {
             (&Some(_), &Some(_)) => {
                 if context.input.l.press || context.input.r.press {
-                    ActionResult::set_action(Action::PowerShield)
+                    ActionResult::set_action(PlayerAction::PowerShield)
                 } else if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
-                    ActionResult::set_action(Action::ShieldOn)
+                    ActionResult::set_action(PlayerAction::ShieldOn)
                 } else {
                     None
                 }
             }
             (&None, &Some(_)) => {
                 if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
-                    ActionResult::set_action(Action::PowerShield)
+                    ActionResult::set_action(PlayerAction::PowerShield)
                 } else {
                     None
                 }
             }
             (&Some(_), &None) => {
                 if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
-                    ActionResult::set_action(Action::ShieldOn)
+                    ActionResult::set_action(PlayerAction::ShieldOn)
                 } else {
                     None
                 }
@@ -1726,58 +1731,58 @@ impl Player {
     }
 
     fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        ActionResult::set_action(match Action::from_u64(state.action) {
+        ActionResult::set_action(match PlayerAction::from_u64(state.action) {
             None => panic!("Custom defined action expirations have not been implemented"),
 
             // Idle
-            Some(Action::Spawn)          => Action::Idle,
-            Some(Action::ReSpawn)        => Action::ReSpawnIdle,
-            Some(Action::ReSpawnIdle)    => Action::ReSpawnIdle,
-            Some(Action::Idle)           => Action::Idle,
-            Some(Action::Teeter)         => Action::TeeterIdle,
-            Some(Action::TeeterIdle)     => Action::TeeterIdle,
-            Some(Action::MissedTechIdle) => Action::MissedTechIdle,
+            Some(PlayerAction::Spawn)          => PlayerAction::Idle,
+            Some(PlayerAction::ReSpawn)        => PlayerAction::ReSpawnIdle,
+            Some(PlayerAction::ReSpawnIdle)    => PlayerAction::ReSpawnIdle,
+            Some(PlayerAction::Idle)           => PlayerAction::Idle,
+            Some(PlayerAction::Teeter)         => PlayerAction::TeeterIdle,
+            Some(PlayerAction::TeeterIdle)     => PlayerAction::TeeterIdle,
+            Some(PlayerAction::MissedTechIdle) => PlayerAction::MissedTechIdle,
 
             // crouch
-            Some(Action::CrouchStart) => Action::Crouch,
-            Some(Action::Crouch)      => Action::Crouch,
-            Some(Action::CrouchEnd)   => Action::Idle,
+            Some(PlayerAction::CrouchStart) => PlayerAction::Crouch,
+            Some(PlayerAction::Crouch)      => PlayerAction::Crouch,
+            Some(PlayerAction::CrouchEnd)   => PlayerAction::Idle,
 
             // Movement
-            Some(Action::Fall)           => Action::Fall,
-            Some(Action::AerialFall)     => Action::AerialFall,
-            Some(Action::Land)           => Action::Idle,
-            Some(Action::JumpF)          => Action::Fall,
-            Some(Action::JumpB)          => Action::Fall,
-            Some(Action::JumpAerialF)    => Action::AerialFall,
-            Some(Action::JumpAerialB)    => Action::AerialFall,
-            Some(Action::SmashTurn)      => Action::Idle,
-            Some(Action::RunTurn) =>
+            Some(PlayerAction::Fall)           => PlayerAction::Fall,
+            Some(PlayerAction::AerialFall)     => PlayerAction::AerialFall,
+            Some(PlayerAction::Land)           => PlayerAction::Idle,
+            Some(PlayerAction::JumpF)          => PlayerAction::Fall,
+            Some(PlayerAction::JumpB)          => PlayerAction::Fall,
+            Some(PlayerAction::JumpAerialF)    => PlayerAction::AerialFall,
+            Some(PlayerAction::JumpAerialB)    => PlayerAction::AerialFall,
+            Some(PlayerAction::SmashTurn)      => PlayerAction::Idle,
+            Some(PlayerAction::RunTurn) =>
             if self.relative_f(context.input[0].stick_x) > 0.6 {
-                Action::Run
+                PlayerAction::Run
             } else {
-                Action::Idle
+                PlayerAction::Idle
             }
-            Some(Action::TiltTurn)       => Action::Idle,
-            Some(Action::Dash)           => Action::Idle,
-            Some(Action::Run)            => Action::Run,
-            Some(Action::RunEnd)         => Action::Idle,
-            Some(Action::Walk)           => Action::Walk,
-            Some(Action::PassPlatform)   => Action::AerialFall,
-            Some(Action::Damage)         => Action::Damage,
-            Some(Action::DamageFly)      => Action::DamageFly,
-            Some(Action::DamageFall)     => Action::DamageFall,
-            Some(Action::LedgeGetup)     => self.set_action_idle_from_ledge(context, state),
-            Some(Action::LedgeGetupSlow) => self.set_action_idle_from_ledge(context, state),
-            Some(Action::LedgeJump)      => self.set_action_fall_from_ledge_jump(context, state),
-            Some(Action::LedgeJumpSlow)  => self.set_action_fall_from_ledge_jump(context, state),
-            Some(Action::LedgeIdle)      => Action::LedgeIdle,
-            Some(Action::LedgeIdleChain) => Action::LedgeIdleChain,
-            Some(Action::LedgeGrab) => {
+            Some(PlayerAction::TiltTurn)       => PlayerAction::Idle,
+            Some(PlayerAction::Dash)           => PlayerAction::Idle,
+            Some(PlayerAction::Run)            => PlayerAction::Run,
+            Some(PlayerAction::RunEnd)         => PlayerAction::Idle,
+            Some(PlayerAction::Walk)           => PlayerAction::Walk,
+            Some(PlayerAction::PassPlatform)   => PlayerAction::AerialFall,
+            Some(PlayerAction::Damage)         => PlayerAction::Damage,
+            Some(PlayerAction::DamageFly)      => PlayerAction::DamageFly,
+            Some(PlayerAction::DamageFall)     => PlayerAction::DamageFall,
+            Some(PlayerAction::LedgeGetup)     => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::LedgeGetupSlow) => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::LedgeJump)      => self.set_action_fall_from_ledge_jump(context, state),
+            Some(PlayerAction::LedgeJumpSlow)  => self.set_action_fall_from_ledge_jump(context, state),
+            Some(PlayerAction::LedgeIdle)      => PlayerAction::LedgeIdle,
+            Some(PlayerAction::LedgeIdleChain) => PlayerAction::LedgeIdleChain,
+            Some(PlayerAction::LedgeGrab) => {
                 self.ledge_idle_timer = 0;
-                Action::LedgeIdle
+                PlayerAction::LedgeIdle
             }
-            Some(Action::JumpSquat) => {
+            Some(PlayerAction::JumpSquat) => {
                 self.set_airbourne(context, state);
                 if let &mut Location::Airbourne { ref mut y, .. } = &mut self.body.location {
                     *y += 0.0001;
@@ -1803,125 +1808,125 @@ impl Player {
                 }
 
                 if self.relative_f(context.input[2].stick_x) >= -0.3 {
-                    Action::JumpF
+                    PlayerAction::JumpF
                 }
                 else {
-                    Action::JumpB
+                    PlayerAction::JumpB
                 }
             }
 
             // Defense
-            Some(Action::PowerShield)      => if context.entity_def.shield.is_some() { Action::Shield } else { Action::Idle },
-            Some(Action::ShieldOn)         => Action::Shield,
-            Some(Action::Shield)           => Action::Shield,
-            Some(Action::ShieldOff)        => Action::Idle,
-            Some(Action::RollF)            => Action::Idle,
-            Some(Action::RollB)            => Action::Idle,
-            Some(Action::SpotDodge)        => Action::Idle,
-            Some(Action::AerialDodge)      => Action::SpecialFall,
-            Some(Action::SpecialFall)      => Action::SpecialFall,
-            Some(Action::SpecialLand)      => Action::Idle,
-            Some(Action::TechF)            => Action::Idle,
-            Some(Action::TechN)            => Action::Idle,
-            Some(Action::TechB)            => Action::Idle,
-            Some(Action::MissedTechGetupF) => Action::Idle,
-            Some(Action::MissedTechGetupN) => Action::Idle,
-            Some(Action::MissedTechGetupB) => Action::Idle,
-            Some(Action::Rebound)          => Action::Idle,
-            Some(Action::LedgeRoll)        => self.set_action_idle_from_ledge(context, state),
-            Some(Action::LedgeRollSlow)    => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::PowerShield)      => if context.entity_def.shield.is_some() { PlayerAction::Shield } else { PlayerAction::Idle },
+            Some(PlayerAction::ShieldOn)         => PlayerAction::Shield,
+            Some(PlayerAction::Shield)           => PlayerAction::Shield,
+            Some(PlayerAction::ShieldOff)        => PlayerAction::Idle,
+            Some(PlayerAction::RollF)            => PlayerAction::Idle,
+            Some(PlayerAction::RollB)            => PlayerAction::Idle,
+            Some(PlayerAction::SpotDodge)        => PlayerAction::Idle,
+            Some(PlayerAction::AerialDodge)      => PlayerAction::SpecialFall,
+            Some(PlayerAction::SpecialFall)      => PlayerAction::SpecialFall,
+            Some(PlayerAction::SpecialLand)      => PlayerAction::Idle,
+            Some(PlayerAction::TechF)            => PlayerAction::Idle,
+            Some(PlayerAction::TechN)            => PlayerAction::Idle,
+            Some(PlayerAction::TechB)            => PlayerAction::Idle,
+            Some(PlayerAction::MissedTechGetupF) => PlayerAction::Idle,
+            Some(PlayerAction::MissedTechGetupN) => PlayerAction::Idle,
+            Some(PlayerAction::MissedTechGetupB) => PlayerAction::Idle,
+            Some(PlayerAction::Rebound)          => PlayerAction::Idle,
+            Some(PlayerAction::LedgeRoll)        => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::LedgeRollSlow)    => self.set_action_idle_from_ledge(context, state),
 
             // Vulnerable
-            Some(Action::MissedTechStart)  => Action::MissedTechIdle,
-            Some(Action::ShieldBreakFall)  => Action::ShieldBreakFall,
-            Some(Action::Stun)             => Action::Stun,
-            Some(Action::ShieldBreakGetup) => {
+            Some(PlayerAction::MissedTechStart)  => PlayerAction::MissedTechIdle,
+            Some(PlayerAction::ShieldBreakFall)  => PlayerAction::ShieldBreakFall,
+            Some(PlayerAction::Stun)             => PlayerAction::Stun,
+            Some(PlayerAction::ShieldBreakGetup) => {
                 self.stun_timer = 490;
-                Action::Stun
+                PlayerAction::Stun
             }
 
             // Attack
-            Some(Action::Jab)              => Action::Idle,
-            Some(Action::Jab2)             => Action::Idle,
-            Some(Action::Jab3)             => Action::Idle,
-            Some(Action::Utilt)            => Action::Idle,
-            Some(Action::Dtilt)            => Action::Crouch,
-            Some(Action::Ftilt)            => Action::Idle,
-            Some(Action::DashAttack)       => Action::Idle,
-            Some(Action::Usmash)           => Action::Idle,
-            Some(Action::Dsmash)           => Action::Idle,
-            Some(Action::Fsmash)           => Action::Idle,
-            Some(Action::MissedTechAttack) => Action::Idle,
-            Some(Action::LedgeAttack)      => self.set_action_idle_from_ledge(context, state),
-            Some(Action::LedgeAttackSlow)  => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::Jab)              => PlayerAction::Idle,
+            Some(PlayerAction::Jab2)             => PlayerAction::Idle,
+            Some(PlayerAction::Jab3)             => PlayerAction::Idle,
+            Some(PlayerAction::Utilt)            => PlayerAction::Idle,
+            Some(PlayerAction::Dtilt)            => PlayerAction::Crouch,
+            Some(PlayerAction::Ftilt)            => PlayerAction::Idle,
+            Some(PlayerAction::DashAttack)       => PlayerAction::Idle,
+            Some(PlayerAction::Usmash)           => PlayerAction::Idle,
+            Some(PlayerAction::Dsmash)           => PlayerAction::Idle,
+            Some(PlayerAction::Fsmash)           => PlayerAction::Idle,
+            Some(PlayerAction::MissedTechAttack) => PlayerAction::Idle,
+            Some(PlayerAction::LedgeAttack)      => self.set_action_idle_from_ledge(context, state),
+            Some(PlayerAction::LedgeAttackSlow)  => self.set_action_idle_from_ledge(context, state),
 
             // Grab
-            Some(Action::Grab)           => Action::Idle,
-            Some(Action::DashGrab)       => Action::Idle,
-            Some(Action::GrabbingIdle)   => Action::GrabbingIdle,
-            Some(Action::GrabbingEnd)    => Action::Idle,
-            Some(Action::GrabbedIdleAir) => Action::GrabbedIdleAir,
-            Some(Action::GrabbedIdle)    => Action::GrabbedIdle,
-            Some(Action::GrabbedEnd)     => Action::Idle,
+            Some(PlayerAction::Grab)           => PlayerAction::Idle,
+            Some(PlayerAction::DashGrab)       => PlayerAction::Idle,
+            Some(PlayerAction::GrabbingIdle)   => PlayerAction::GrabbingIdle,
+            Some(PlayerAction::GrabbingEnd)    => PlayerAction::Idle,
+            Some(PlayerAction::GrabbedIdleAir) => PlayerAction::GrabbedIdleAir,
+            Some(PlayerAction::GrabbedIdle)    => PlayerAction::GrabbedIdle,
+            Some(PlayerAction::GrabbedEnd)     => PlayerAction::Idle,
 
             // Throws
-            Some(Action::Uthrow) => Action::Idle,
-            Some(Action::Dthrow) => Action::Idle,
-            Some(Action::Fthrow) => Action::Idle,
-            Some(Action::Bthrow) => Action::Idle,
+            Some(PlayerAction::Uthrow) => PlayerAction::Idle,
+            Some(PlayerAction::Dthrow) => PlayerAction::Idle,
+            Some(PlayerAction::Fthrow) => PlayerAction::Idle,
+            Some(PlayerAction::Bthrow) => PlayerAction::Idle,
 
             // Items
-            Some(Action::ItemGrab)      => Action::Idle,
-            Some(Action::ItemEat)       => Action::Idle,
-            Some(Action::ItemThrowU)    => Action::Idle,
-            Some(Action::ItemThrowD)    => Action::Idle,
-            Some(Action::ItemThrowF)    => Action::Idle,
-            Some(Action::ItemThrowB)    => Action::Idle,
-            Some(Action::ItemThrowAirU) => Action::Fall,
-            Some(Action::ItemThrowAirD) => Action::Fall,
-            Some(Action::ItemThrowAirF) => Action::Fall,
-            Some(Action::ItemThrowAirB) => Action::Fall,
+            Some(PlayerAction::ItemGrab)      => PlayerAction::Idle,
+            Some(PlayerAction::ItemEat)       => PlayerAction::Idle,
+            Some(PlayerAction::ItemThrowU)    => PlayerAction::Idle,
+            Some(PlayerAction::ItemThrowD)    => PlayerAction::Idle,
+            Some(PlayerAction::ItemThrowF)    => PlayerAction::Idle,
+            Some(PlayerAction::ItemThrowB)    => PlayerAction::Idle,
+            Some(PlayerAction::ItemThrowAirU) => PlayerAction::Fall,
+            Some(PlayerAction::ItemThrowAirD) => PlayerAction::Fall,
+            Some(PlayerAction::ItemThrowAirF) => PlayerAction::Fall,
+            Some(PlayerAction::ItemThrowAirB) => PlayerAction::Fall,
 
             // Aerials
-            Some(Action::Uair)     => Action::Fall,
-            Some(Action::Dair)     => Action::Fall,
-            Some(Action::Fair)     => Action::Fall,
-            Some(Action::Bair)     => Action::Fall,
-            Some(Action::Nair)     => Action::Fall,
-            Some(Action::UairLand) => Action::Idle,
-            Some(Action::DairLand) => Action::Idle,
-            Some(Action::FairLand) => Action::Idle,
-            Some(Action::BairLand) => Action::Idle,
-            Some(Action::NairLand) => Action::Idle,
+            Some(PlayerAction::Uair)     => PlayerAction::Fall,
+            Some(PlayerAction::Dair)     => PlayerAction::Fall,
+            Some(PlayerAction::Fair)     => PlayerAction::Fall,
+            Some(PlayerAction::Bair)     => PlayerAction::Fall,
+            Some(PlayerAction::Nair)     => PlayerAction::Fall,
+            Some(PlayerAction::UairLand) => PlayerAction::Idle,
+            Some(PlayerAction::DairLand) => PlayerAction::Idle,
+            Some(PlayerAction::FairLand) => PlayerAction::Idle,
+            Some(PlayerAction::BairLand) => PlayerAction::Idle,
+            Some(PlayerAction::NairLand) => PlayerAction::Idle,
 
             // Taunts
-            Some(Action::TauntUp)    => Action::Idle,
-            Some(Action::TauntDown)  => Action::Idle,
-            Some(Action::TauntLeft)  => Action::Idle,
-            Some(Action::TauntRight) => Action::Idle,
+            Some(PlayerAction::TauntUp)    => PlayerAction::Idle,
+            Some(PlayerAction::TauntDown)  => PlayerAction::Idle,
+            Some(PlayerAction::TauntLeft)  => PlayerAction::Idle,
+            Some(PlayerAction::TauntRight) => PlayerAction::Idle,
 
-            Some(Action::Eliminated)         => Action::Eliminated,
-            Some(Action::DummyFramePreStart) => Action::Spawn,
+            Some(PlayerAction::Eliminated)         => PlayerAction::Eliminated,
+            Some(PlayerAction::DummyFramePreStart) => PlayerAction::Spawn,
         })
     }
 
-    pub fn set_action_idle_from_ledge(&mut self, context: &mut StepContext, state: &ActionState) -> Action {
+    pub fn set_action_idle_from_ledge(&mut self, context: &mut StepContext, state: &ActionState) -> PlayerAction {
         if let Location::GrabbedLedge { platform_i, .. } = self.body.location {
             let platform = &context.surfaces[platform_i];
             let (world_x, _) = self.bps_xy(context, state);
             let x = platform.world_x_to_plat_x_clamp(world_x);
 
             self.body.location = Location::Surface { platform_i, x };
-            Action::Idle
+            PlayerAction::Idle
         }
         else {
             panic!("Location must be on ledge to call this function.")
         }
     }
 
-    pub fn set_action_fall_from_ledge_jump(&mut self, context: &mut StepContext, state: &ActionState) -> Action {
+    pub fn set_action_fall_from_ledge_jump(&mut self, context: &mut StepContext, state: &ActionState) -> PlayerAction {
         self.set_airbourne(context, state);
-        Action::Fall
+        PlayerAction::Fall
     }
 
     pub fn relative_f(&self, input: f32) -> f32 {
@@ -1977,8 +1982,8 @@ impl Player {
 
     pub fn item_grab(&mut self) -> Option<ActionResult> {
         // TODO: make the context available here so we can call this:
-        //match Action::from_u64(self.action) {
-        //    Some(Action::Jab) => ActionResult::set_action(Action::ItemGrab),
+        //match PlayerAction::from_u64(self.action) {
+        //    Some(PlayerAction::Jab) => ActionResult::set_action(PlayerAction::ItemGrab),
         //    _ => {}
         //}
         None
@@ -1993,20 +1998,20 @@ impl Player {
         match self.body.physics_step(context, state, fighter_frame) {
             Some(PhysicsResult::Fall) => {
                 self.fastfalled = false;
-                ActionResult::set_action(Action::Fall)
+                ActionResult::set_action(PlayerAction::Fall)
             }
             Some(PhysicsResult::Land) => {
                 self.hitstun = 0.0;
                 self.land(context, state)
             }
             Some(PhysicsResult::Teeter) => {
-                ActionResult::set_action(Action::Teeter)
+                ActionResult::set_action(PlayerAction::Teeter)
             }
             Some(PhysicsResult::LedgeGrab) => {
                 self.fastfalled = false;
                 self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
                 self.hit_by = None;
-                ActionResult::set_action(Action::LedgeGrab)
+                ActionResult::set_action(PlayerAction::LedgeGrab)
             }
             Some(PhysicsResult::OutOfBounds) => {
                 self.die(context, game_frame, goal)
@@ -2016,13 +2021,13 @@ impl Player {
     }
 
     fn apply_friction(&mut self, entity: &EntityDef, state: &ActionState) {
-        match Action::from_u64(state.action) {
-            Some(Action::Idle) |
-            Some(Action::Dash) |
-            Some(Action::Shield) |
-            Some(Action::ShieldOn) |
-            Some(Action::ShieldOff) |
-            Some(Action::Damage)
+        match PlayerAction::from_u64(state.action) {
+            Some(PlayerAction::Idle) |
+            Some(PlayerAction::Dash) |
+            Some(PlayerAction::Shield) |
+            Some(PlayerAction::ShieldOn) |
+            Some(PlayerAction::ShieldOff) |
+            Some(PlayerAction::Damage)
               => { self.body.apply_friction_weak(entity) }
             _ => { self.body.apply_friction_strong(entity) }
         }
@@ -2030,8 +2035,8 @@ impl Player {
 
     /// Returns the Rect surrounding the player that the camera must include
     pub fn cam_area(&self, state: &ActionState, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
-        match Action::from_u64(state.action) {
-            Some(Action::Eliminated) => None,
+        match PlayerAction::from_u64(state.action) {
+            Some(PlayerAction::Eliminated) => None,
             _ => {
                 let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces, state);
                 let mut left  = x;
@@ -2081,44 +2086,44 @@ impl Player {
     }
 
     fn land(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let action = Action::from_u64(state.action);
+        let action = PlayerAction::from_u64(state.action);
 
         self.land_frame_skip = match action {
             Some(_) if action.as_ref().map_or(false, |x| x.is_air_attack()) && self.lcancel_timer > 0 => 1,
-            Some(Action::AerialDodge) => 2,
-            Some(Action::SpecialFall) => 2,
+            Some(PlayerAction::AerialDodge) => 2,
+            Some(PlayerAction::SpecialFall) => 2,
             _ => 0
         };
 
-        self.aerial_dodge_frame = if let Some(Action::AerialDodge) = action { Some(state.frame as u64 ) } else { None };
+        self.aerial_dodge_frame = if let Some(PlayerAction::AerialDodge) = action { Some(state.frame as u64 ) } else { None };
 
         self.fastfalled = false;
         self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
         self.hit_by = None;
 
         ActionResult::set_action(match action {
-            Some(Action::Uair)            => Action::UairLand,
-            Some(Action::Dair)            => Action::DairLand,
-            Some(Action::Fair)            => Action::FairLand,
-            Some(Action::Bair)            => Action::BairLand,
-            Some(Action::Nair)            => Action::NairLand,
-            Some(Action::ShieldBreakFall) => Action::ShieldBreakGetup,
-            Some(Action::DamageFly) | Some(Action::DamageFall) => {
+            Some(PlayerAction::Uair)            => PlayerAction::UairLand,
+            Some(PlayerAction::Dair)            => PlayerAction::DairLand,
+            Some(PlayerAction::Fair)            => PlayerAction::FairLand,
+            Some(PlayerAction::Bair)            => PlayerAction::BairLand,
+            Some(PlayerAction::Nair)            => PlayerAction::NairLand,
+            Some(PlayerAction::ShieldBreakFall) => PlayerAction::ShieldBreakGetup,
+            Some(PlayerAction::DamageFly) | Some(PlayerAction::DamageFall) => {
                 if self.tech_timer.is_active() {
                     if self.relative_f(context.input[0].stick_x) > 0.5 {
-                        Action::TechF
+                        PlayerAction::TechF
                     } else if self.relative_f(context.input[0].stick_x) < -0.5 {
-                        Action::TechB
+                        PlayerAction::TechB
                     } else {
-                        Action::TechN
+                        PlayerAction::TechN
                     }
                 } else {
-                    Action::MissedTechStart
+                    PlayerAction::MissedTechStart
                 }
             }
-            Some(Action::SpecialFall) | Some(Action::AerialDodge) | None => Action::SpecialLand,
-            Some(_) if self.body.y_vel >= -1.0 => Action::Idle, // no impact land
-            Some(_) => Action::Land
+            Some(PlayerAction::SpecialFall) | Some(PlayerAction::AerialDodge) | None => PlayerAction::SpecialLand,
+            Some(_) if self.body.y_vel >= -1.0 => PlayerAction::Idle, // no impact land
+            Some(_) => PlayerAction::Land
         })
     }
 
@@ -2128,7 +2133,7 @@ impl Player {
            (walk_init_vel < 0.0 && self.body.x_vel > walk_init_vel) {
             self.body.x_vel += walk_init_vel;
         }
-        ActionResult::set_action(Action::Walk)
+        ActionResult::set_action(PlayerAction::Walk)
     }
 
     fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) -> Option<ActionResult> {
@@ -2161,16 +2166,16 @@ impl Player {
                     self.stocks = Some(stocks);
 
                     if stocks == 0 {
-                        ActionResult::set_action(Action::Eliminated)
+                        ActionResult::set_action(PlayerAction::Eliminated)
                     } else {
-                        ActionResult::set_action(Action::ReSpawn)
+                        ActionResult::set_action(PlayerAction::ReSpawn)
                     }
                 } else {
                     None
                 }
             }
             Goal::KillDeathScore => {
-                ActionResult::set_action(Action::ReSpawn)
+                ActionResult::set_action(PlayerAction::ReSpawn)
             }
         }
     }
@@ -2178,7 +2183,7 @@ impl Player {
     pub fn debug_print(&self, entity_defs: &KeyedContextVec<EntityDef>, state: &ActionState, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let mut lines: Vec<String> = vec!();
         if debug.action {
-            lines.push(state.debug_string::<Action>(entity_defs, index));
+            lines.push(state.debug_string::<PlayerAction>(entity_defs, index));
         }
 
         if debug.physics {
@@ -2299,7 +2304,7 @@ impl Player {
         };
 
         let (x, y) = self.bps_xy(context, state);
-        let action = Action::from_u64(state.action);
+        let action = PlayerAction::from_u64(state.action);
 
         let color = if
             action.map_or(false, |x| x.is_attack_land()) && self.land_frame_skip == 0 || // missed LCancel

@@ -4,21 +4,11 @@ use crate::entity::components::body::{Body, PhysicsResult, Location};
 use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::EntityDef;
+use canon_collision_lib::entity_def::item::ItemAction;
 
 use cgmath::Quaternion;
 use num_traits::FromPrimitive;
 use treeflection::KeyedContextVec;
-
-#[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
-pub enum ItemAction {
-    Spawn,
-    Idle,
-    Fall,
-    Held,
-    Thrown,
-    Dropped,
-}
 
 pub enum MessageItem {
     Thrown { x_vel: f32, y_vel: f32 },

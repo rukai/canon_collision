@@ -13,7 +13,8 @@ use crate::rules::{Rules, Goal};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::entity_def::{ActionFrame, CollisionBox, Action};
+use canon_collision_lib::entity_def::{ActionFrame, CollisionBox};
+use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
@@ -102,7 +103,7 @@ impl Game {
                 let team = player.team;
                 entities.insert(Entity {
                     ty: EntityType::Player(Player::new(fighter.as_ref(), team, i, &stage, &package, &setup.rules)),
-                    state: ActionState::new(fighter, Action::Spawn),
+                    state: ActionState::new(fighter, PlayerAction::Spawn),
                 });
             }
         }
@@ -470,7 +471,7 @@ impl Game {
                     let entity_def_key = self.entities[entity_i].state.entity_def_key.clone();
                     let fighter = entity_def_key.as_ref();
                     let action = self.entities[entity_i].state.action as usize;
-                    let action_enum = Action::from_u64(self.entities[entity_i].state.action);
+                    let action_enum = PlayerAction::from_u64(self.entities[entity_i].state.action);
                     let frame  = self.entities[entity_i].state.frame as usize;
                     {
                         let debug_entity = &mut self.debug_entities[entity_i];
@@ -1242,8 +1243,8 @@ impl Game {
 
         let players_count = self.players_iter().count();
         if self.time_out() ||
-           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != Action::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != Action::Eliminated.to_u64().unwrap()).count() == 1)
+           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != PlayerAction::Eliminated.to_u64().unwrap()).count() == 0) ||
+           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != PlayerAction::Eliminated.to_u64().unwrap()).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }

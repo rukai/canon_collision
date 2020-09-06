@@ -3,7 +3,9 @@ use strum::IntoEnumIterator;
 
 use canon_collision_lib::package::Package;
 use canon_collision_lib::files::{engine_version, load_cbor, save_struct_cbor};
-use canon_collision_lib::entity_def::{EntityDef, Action};
+use canon_collision_lib::entity_def::EntityDef;
+use canon_collision_lib::entity_def::player::PlayerAction;
+
 
 use std::path::Path;
 use std::fs;
@@ -23,7 +25,7 @@ fn main() {
     }
 
     if std::env::args().any(|x| x.to_lowercase() == "action_indexes") {
-        for action in Action::iter() {
+        for action in PlayerAction::iter() {
             println!("{:?} {}", &action, action.clone() as usize);
         }
         return;

@@ -1,6 +1,13 @@
-use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
+pub mod item;
+pub mod player;
+pub mod projectile;
+pub mod toriel_fireball;
+
+use player::PlayerAction;
+
 use strum::IntoEnumIterator;
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::ToPrimitive;
+use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
 
 use crate::files::engine_version;
 use crate::geometry::Rect;
@@ -12,28 +19,28 @@ impl Default for EntityDef {
             iasa:   0,
         };
         let mut actions: ContextVec<ActionDef> = ContextVec::new();
-        for action in Action::iter() {
+        for action in PlayerAction::iter() {
             let mut action_def_new = action_def.clone();
             action_def_new.frames[0].pass_through = match action {
-                Action::Damage     | Action::DamageFly |
-                Action::DamageFall | Action::AerialDodge |
-                Action::Uair       | Action::Dair |
-                Action::Fair       | Action::Bair |
-                Action::Nair => false,
+                PlayerAction::Damage     | PlayerAction::DamageFly |
+                PlayerAction::DamageFall | PlayerAction::AerialDodge |
+                PlayerAction::Uair       | PlayerAction::Dair |
+                PlayerAction::Fair       | PlayerAction::Bair |
+                PlayerAction::Nair => false,
                 _ => true
             };
             action_def_new.frames[0].ledge_cancel = match action {
-                Action::Teeter | Action::TeeterIdle |
-                Action::RollB  | Action::RollF |
-                Action::TechB  | Action::TechF |
-                Action::MissedTechGetupB | Action::MissedTechGetupF |
-                Action::SpotDodge
+                PlayerAction::Teeter | PlayerAction::TeeterIdle |
+                PlayerAction::RollB  | PlayerAction::RollF |
+                PlayerAction::TechB  | PlayerAction::TechF |
+                PlayerAction::MissedTechGetupB | PlayerAction::MissedTechGetupF |
+                PlayerAction::SpotDodge
                   => false,
                 _ => true
             };
             action_def_new.frames[0].use_platform_angle = match action {
-                Action::Dsmash | Action::Fsmash |
-                Action::Dtilt  | Action::MissedTechIdle
+                PlayerAction::Dsmash | PlayerAction::Fsmash |
+                PlayerAction::Dtilt  | PlayerAction::MissedTechIdle
                   => true,
                 _ => false
             };
@@ -45,7 +52,7 @@ impl Default for EntityDef {
 
             // css render
             name:       "Base Entity".to_string(),
-            css_action: Action::Idle.to_u64().unwrap(),
+            css_action: PlayerAction::Idle.to_u64().unwrap(),
             css_scale:  1.0,
 
             ty: EntityDefType::Generic,
@@ -359,193 +366,6 @@ impl Default for ECB {
             left:   -4.0,
             right:  4.0,
             bottom: 0.0,
-        }
-    }
-}
-
-#[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize, Node)]
-pub enum Action {
-    // Idle
-    Spawn,
-    ReSpawn,
-    ReSpawnIdle,
-    Idle,
-    Crouch,
-    LedgeIdle,
-    Teeter,
-    TeeterIdle,
-    MissedTechIdle,
-
-    // Movement
-    Fall,
-    AerialFall,
-    Land,
-    JumpSquat,
-    JumpF,
-    JumpB,
-    JumpAerialF,
-    JumpAerialB,
-    TiltTurn,
-    RunTurn,
-    SmashTurn,
-    Dash,
-    Run,
-    RunEnd,
-    Walk,
-    PassPlatform,
-    Damage,
-    DamageFly,
-    DamageFall,
-    LedgeGrab,
-    LedgeJump,
-    LedgeJumpSlow,
-    LedgeGetup,
-    LedgeGetupSlow,
-    LedgeIdleChain, // LedgeIdle when another fighter is holding onto this fighter
-
-    // Defense
-    PowerShield,
-    ShieldOn,
-    Shield,
-    ShieldOff,
-    RollF,
-    RollB,
-    SpotDodge,
-    AerialDodge,
-    SpecialFall,
-    SpecialLand,
-    TechF,
-    TechN,
-    TechB,
-    MissedTechGetupF,
-    MissedTechGetupN,
-    MissedTechGetupB,
-    Rebound, // State after clang
-    LedgeRoll,
-    LedgeRollSlow,
-
-    // Vulnerable
-    ShieldBreakFall,
-    ShieldBreakGetup,
-    Stun,
-    MissedTechStart,
-
-    // Attacks
-    Jab,
-    Jab2,
-    Jab3,
-    Utilt,
-    Dtilt,
-    Ftilt,
-    DashAttack,
-    Usmash,
-    Dsmash,
-    Fsmash,
-
-    // Grabs
-    Grab,
-    DashGrab,
-    GrabbingIdle,
-    GrabbingEnd,
-    GrabbedIdleAir,
-    GrabbedIdle,
-    GrabbedEnd,
-
-    // Throws
-    Uthrow,
-    Dthrow,
-    Fthrow,
-    Bthrow,
-
-    // Items
-    ItemGrab,
-    ItemEat,
-    ItemThrowU,
-    ItemThrowD,
-    ItemThrowF,
-    ItemThrowB,
-    ItemThrowAirU,
-    ItemThrowAirD,
-    ItemThrowAirF,
-    ItemThrowAirB,
-
-    // Getup attacks
-    LedgeAttack,
-    LedgeAttackSlow,
-    MissedTechAttack,
-
-    // Aerials
-    Uair,
-    Dair,
-    Fair,
-    Bair,
-    Nair,
-    UairLand,
-    DairLand,
-    FairLand,
-    BairLand,
-    NairLand,
-
-    // Taunts
-    TauntUp,
-    TauntDown,
-    TauntLeft,
-    TauntRight,
-
-    // Crouch
-    CrouchStart,
-    CrouchEnd,
-
-    Eliminated,
-    DummyFramePreStart,
-}
-
-impl Default for Action {
-    fn default() -> Action {
-        Action::Spawn
-    }
-}
-
-impl Action {
-    pub fn is_air_attack(&self) -> bool {
-        match self {
-            &Action::Fair | &Action::Bair |
-            &Action::Uair | &Action::Dair |
-            &Action::Nair
-              => true,
-            _ => false
-        }
-    }
-
-    pub fn is_attack_land(&self) -> bool {
-        match self {
-            &Action::FairLand | &Action::BairLand |
-            &Action::UairLand | &Action::DairLand |
-            &Action::NairLand
-              => true,
-            _ => false
-        }
-    }
-
-    pub fn is_land(&self) -> bool {
-        match self {
-            &Action::FairLand | &Action::BairLand |
-            &Action::UairLand | &Action::DairLand |
-            &Action::NairLand | &Action::SpecialLand |
-            &Action::Land
-              => true,
-            _ => false
-        }
-    }
-
-    pub fn action_index_to_string(action_index: usize) -> String {
-        match Action::from_u64(action_index as u64) {
-            Some(action) => {
-                let action: &str = action.into();
-                action.to_string()
-            }
-            None => format!("{}", action_index),
         }
     }
 }

@@ -3,17 +3,10 @@ use crate::entity::{DebugEntity, StepContext, EntityKey, ActionResult};
 use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::EntityDef;
+use canon_collision_lib::entity_def::toriel_fireball::TorielFireballAction;
 
 use num_traits::FromPrimitive;
 use treeflection::KeyedContextVec;
-
-#[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
-pub enum TorielFireballAction {
-    Spawn,
-    Travel,
-    Hit,
-}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TorielFireball {
