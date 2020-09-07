@@ -824,12 +824,16 @@ impl Game {
                     if os_input.key_pressed(VirtualKeyCode::S) {
                         let mut join = false;
                         let mut points: Vec<(f32, f32)> = vec!();
+                        fn f32_equal(a: f32, b: f32) -> bool {
+                            (a - b).abs() < 0.0000001
+                        }
+
                         for selection in self.selector.surfaces.iter() {
                             match selection {
                                 &SurfaceSelection::P1 (i) => {
                                     let surface = &self.stage.surfaces[i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
-                                        if surface.x1 != prev_x || surface.y1 != prev_y {
+                                        if !f32_equal(surface.x1, prev_x) || !f32_equal(surface.y1, prev_y) {
                                             join = true;
                                         }
                                     }
@@ -838,7 +842,7 @@ impl Game {
                                 &SurfaceSelection::P2 (i) => {
                                     let surface = &self.stage.surfaces[i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
-                                        if surface.x2 != prev_x || surface.y2 != prev_y {
+                                        if !f32_equal(surface.x2, prev_x) || !f32_equal(surface.y2, prev_y) {
                                             join = true;
                                         }
                                     }

@@ -6,7 +6,7 @@ fn main() {
 
     let version = if let Ok(output) = cmd.output() {
         if output.status.success() {
-            String::from_utf8(output.stdout).unwrap_or(String::from("NO GIT"))
+            String::from_utf8(output.stdout).unwrap_or_else(|_| "NO GIT".into())
         } else {
             String::from("NO GIT")
         }

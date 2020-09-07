@@ -1258,11 +1258,6 @@ impl WgpuGraphics {
                                 let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
                                 let transformation = position * rotate * size;
                                 let color = [c[0], c[1], c[2], 1.0];
-                                if c[0] == 1.0 && c[1] == 1.0 && c[2] == 1.0 {
-                                    // TODO: wireframe
-                                } else {
-                                    // TODO: not wireframe
-                                };
                                 let triangle_buffers = Buffers::new_triangle(&self.device, color);
                                 draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
                             }

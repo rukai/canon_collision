@@ -224,6 +224,10 @@ impl Buffers {
                 continue;
             }
 
+            fn f32_equal(a: f32, b: f32) -> bool {
+                (a - b).abs() < 0.0000001
+            }
+
             let mut loop_elements: Vec<usize> = vec!(i);
             let mut found_loop = false;
             let mut prev_surface = surface;
@@ -232,19 +236,19 @@ impl Buffers {
                     for (j, check_surface) in surfaces.iter().enumerate() {
                         if  i != j && !loop_elements.contains(&j) && !used.contains(&j) &&
                             (
-                                check_surface.x1 == prev_surface.x1 && check_surface.y1 == prev_surface.y1 ||
-                                check_surface.x1 == prev_surface.x2 && check_surface.y1 == prev_surface.y2 ||
-                                check_surface.x2 == prev_surface.x1 && check_surface.y2 == prev_surface.y1 ||
-                                check_surface.x2 == prev_surface.x2 && check_surface.y2 == prev_surface.y2
+                                f32_equal(check_surface.x1, prev_surface.x1) && f32_equal(check_surface.y1, prev_surface.y1) ||
+                                f32_equal(check_surface.x1, prev_surface.x2) && f32_equal(check_surface.y1, prev_surface.y2) ||
+                                f32_equal(check_surface.x2, prev_surface.x1) && f32_equal(check_surface.y2, prev_surface.y1) ||
+                                f32_equal(check_surface.x2, prev_surface.x2) && f32_equal(check_surface.y2, prev_surface.y2)
                             )
                         {
                             loop_elements.push(j);
                             if  loop_elements.len() > 2 &&
                                 (
-                                    check_surface.x1 == surface.x1 && check_surface.y1 == surface.y1 ||
-                                    check_surface.x1 == surface.x2 && check_surface.y1 == surface.y2 ||
-                                    check_surface.x2 == surface.x1 && check_surface.y2 == surface.y1 ||
-                                    check_surface.x2 == surface.x2 && check_surface.y2 == surface.y2
+                                    f32_equal(check_surface.x1, surface.x1) && f32_equal(check_surface.y1, surface.y1) ||
+                                    f32_equal(check_surface.x1, surface.x2) && f32_equal(check_surface.y1, surface.y2) ||
+                                    f32_equal(check_surface.x2, surface.x1) && f32_equal(check_surface.y2, surface.y1) ||
+                                    f32_equal(check_surface.x2, surface.x2) && f32_equal(check_surface.y2, surface.y2)
                                 )
                             {
                                 found_loop = true;
@@ -267,15 +271,15 @@ impl Buffers {
 
                 let first_surface = &surfaces[first_surface_i];
                 let second_surface = &surfaces[loop_elements[1]];
-                let start_p1 = first_surface.x1 == second_surface.x1 && first_surface.y1 == second_surface.y1 ||
-                               first_surface.x1 == second_surface.x2 && first_surface.y1 == second_surface.y2;
+                let start_p1 = f32_equal(first_surface.x1, second_surface.x1) && f32_equal(first_surface.y1, second_surface.y1) ||
+                               f32_equal(first_surface.x1, second_surface.x2) && f32_equal(first_surface.y1, second_surface.y2);
                 let mut prev_x = if start_p1 { first_surface.x1 } else { first_surface.x2 };
                 let mut prev_y = if start_p1 { first_surface.y1 } else { first_surface.y2 };
                 builder.move_to(point(prev_x, prev_y));
 
                 for j in loop_elements_iter {
                     let surface = &surfaces[j];
-                    if surface.x1 == prev_x && surface.y1 == prev_y {
+                    if f32_equal(surface.x1, prev_x) && f32_equal(surface.y1, prev_y) {
                         prev_x = surface.x2;
                         prev_y = surface.y2;
                     }

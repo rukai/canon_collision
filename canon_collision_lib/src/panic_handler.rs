@@ -32,7 +32,7 @@ pub fn setup(build_version: &'static str, crate_name: &'static str) {
     //
     // I have considered immediately quitting Canon Collision if it cant locate the panic handler i.e. the user has moved
     // the exe to a different folder. However that would break the above case.
-    let pfs_dev_not_true = env::var("CC_DEV").map(|x| x.to_lowercase() != String::from("true")).unwrap_or(true);
+    let pfs_dev_not_true = env::var("CC_DEV").map(|x| x.to_lowercase() != "true").unwrap_or(true);
     let handler_exists = path_to_handler().map(|x| x.exists()).unwrap_or(false);
     if pfs_dev_not_true && handler_exists {
         panic::set_hook(Box::new(move |panic_info: &PanicInfo| {

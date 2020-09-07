@@ -845,7 +845,7 @@ impl MenuTicker {
 
         else {
             self.ticks_remaining -= 1;
-            if self.ticks_remaining <= 0 {
+            if self.ticks_remaining == 0 {
                 self.ticks_remaining = tick_durations[self.tick_duration_i];
                 if self.tick_duration_i < tick_durations.len() - 1 {
                     self.tick_duration_i += 1;

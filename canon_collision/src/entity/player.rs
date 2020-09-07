@@ -580,9 +580,6 @@ impl Player {
         else if self.relative_f(context.input[0].stick_x) > 0.7 {
             ActionResult::set_action(PlayerAction::MissedTechGetupF)
         }
-        else if self.relative_f(context.input[0].stick_x) > 0.7 {
-            ActionResult::set_action(PlayerAction::MissedTechGetupF)
-        }
         else if context.input[0].stick_y > 0.7 {
             ActionResult::set_action(PlayerAction::MissedTechGetupN)
         }
@@ -666,9 +663,7 @@ impl Player {
             .or_else(|| self.check_special(context))
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
-            .or_else(|| if context.input[0].stick_x.abs() > 0.2 || context.input[0].stick_y.abs() > 0.2 {
-                ActionResult::set_action(PlayerAction::Fall)
-            } else if state.frame_no_restart >= 1000 {
+            .or_else(|| if context.input[0].stick_x.abs() > 0.2 || context.input[0].stick_y.abs() > 0.2 || state.frame_no_restart >= 1000 {
                 ActionResult::set_action(PlayerAction::Fall)
             } else {
                 None
@@ -1329,7 +1324,7 @@ impl Player {
 
         // TODO: Mashout
 
-        if self.stun_timer <= 0 {
+        if self.stun_timer == 0 {
             ActionResult::set_action(PlayerAction::Idle)
         } else {
             None
@@ -1657,16 +1652,21 @@ impl Player {
            (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > 0.3) {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
-        } else if context.input.a.press && context.input[0].stick_y >= 0.66 && context.input[2].stick_y < 0.3 {
+        }
+        else if context.input.a.press && context.input[0].stick_y >= 0.66 && context.input[2].stick_y < 0.3 {
             ActionResult::set_action(PlayerAction::Usmash)
-        } else if context.input.a.press && context.input[0].stick_y <= -0.66 && context.input[2].stick_y > 0.3 {
+        }
+        else if context.input.a.press && context.input[0].stick_y <= -0.66 && context.input[2].stick_y > 0.3 {
             ActionResult::set_action(PlayerAction::Dsmash)
-        } else if context.input.a.press && context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
+        }
+        else if context.input.a.press && context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
-        } else if context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66 {
+        }
+        else if context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66 {
             ActionResult::set_action(PlayerAction::Usmash)
-        } else if context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66 {
+        }
+        else if context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66 {
             ActionResult::set_action(PlayerAction::Dsmash)
         }
         else {
@@ -1677,11 +1677,14 @@ impl Player {
     fn check_taunt(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.up.press {
             ActionResult::set_action(PlayerAction::TauntUp)
-        } else if context.input.down.press {
+        }
+        else if context.input.down.press {
             ActionResult::set_action(PlayerAction::TauntDown)
-        } else if context.input.left.press {
+        }
+        else if context.input.left.press {
             ActionResult::set_action(PlayerAction::TauntLeft)
-        } else if context.input.right.press {
+        }
+        else if context.input.right.press {
             ActionResult::set_action(PlayerAction::TauntRight)
         }
         else {
@@ -1694,9 +1697,11 @@ impl Player {
             (&Some(_), &Some(_)) => {
                 if context.input.l.press || context.input.r.press {
                     ActionResult::set_action(PlayerAction::PowerShield)
-                } else if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
+                }
+                else if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
                     ActionResult::set_action(PlayerAction::ShieldOn)
-                } else {
+                }
+                else {
                     None
                 }
             }

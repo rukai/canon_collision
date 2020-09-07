@@ -13,7 +13,7 @@ pub fn get_replay_names() -> Vec<String> {
         for file in files {
             if let Ok(file) = file {
                 let file_name = file.file_name().into_string().unwrap();
-                if let Some(split_point) = file_name.rfind(".") {
+                if let Some(split_point) = file_name.rfind('.') {
                     let (name, ext) = file_name.split_at(split_point);
                     if ext.to_lowercase() == ".zip" {
                         result.push(name.to_string());
@@ -56,7 +56,7 @@ fn get_replays_dir_path() -> PathBuf {
 
 pub fn get_replay_path(name: &str) -> PathBuf {
     let mut replay_path = get_replays_dir_path();
-    replay_path.push(format!("{}", name));
+    replay_path.push(name.to_string());
     replay_path
 }
 

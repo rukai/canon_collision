@@ -15,7 +15,7 @@ fn main_main() -> i32 {
 
     match TcpStream::connect("127.0.0.1:1613") {
         Ok(mut stream) => {
-            stream.write(out.as_bytes()).unwrap();
+            stream.write_all(out.as_bytes()).unwrap();
 
             let mut result = String::new();
             if let Ok(_) = stream.read_to_string(&mut result) {

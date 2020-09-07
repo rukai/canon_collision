@@ -133,10 +133,10 @@ impl Stage {
                     let (check_l_x, check_l_y) = check_plat.left_ledge();
                     let (check_r_x, check_r_y) = check_plat.right_ledge();
 
-                    if l_x == check_r_x && l_y == check_r_y {
+                    if f32_equal(l_x, check_r_x) && f32_equal(l_y, check_r_y) {
                         left_i = Some(check_i);
                     }
-                    if r_x == check_l_x && r_y == check_l_y {
+                    if f32_equal(r_x, check_l_x) && f32_equal(r_y, check_l_y) {
                         right_i = Some(check_i);
                     }
                 }
@@ -148,6 +148,10 @@ impl Stage {
             right_i,
         }
     }
+}
+
+fn f32_equal(a: f32, b: f32) -> bool {
+    (a - b).abs() < 0.0000001
 }
 
 pub struct FloorInfo {
@@ -215,7 +219,7 @@ impl Surface {
     }
 
     pub fn is_pass_through(&self) -> bool {
-        if let &Some(ref floor) = &self.floor {
+        if let Some(ref floor) = &self.floor {
             floor.pass_through
         } else {
             false
