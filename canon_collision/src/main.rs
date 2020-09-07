@@ -2,6 +2,7 @@
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
+#[macro_use] extern crate bytemuck;
 #[macro_use] extern crate treeflection_derive;
 
 pub(crate) mod ai;

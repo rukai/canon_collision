@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
 
+use bytemuck::{Pod, Zeroable};
 use cgmath::{Matrix4, Quaternion, SquareMatrix, Vector3};
 use gltf::Gltf;
 use gltf::animation::util::ReadOutputs;
@@ -20,7 +21,6 @@ use gltf::scene::{Node, Transform};
 use png_decoder::color::ColorType as PNGColorType;
 use png_decoder::png;
 use wgpu::{Device, Texture, Queue};
-use zerocopy::AsBytes;
 
 pub struct Models {
     assets:           Assets,
@@ -117,7 +117,7 @@ impl Models {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, AsBytes)]
+#[derive(Default, Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ModelVertexAnimated {
     pub position: [f32; 4],
     pub uv:       [f32; 2],
@@ -126,7 +126,7 @@ pub struct ModelVertexAnimated {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, AsBytes)]
+#[derive(Default, Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ModelVertexStatic {
     pub position: [f32; 4],
     pub uv:       [f32; 2],
@@ -373,7 +373,7 @@ impl Model3D {
                 let weights = reader.read_weights(0);
                 let (buffers, vertex_type) = match (positions, uvs, joints, weights) {
                     (Some(positions), Some(uvs), Some(joints), Some(weights)) => {
-                        let vertices: Vec<_> = positions
+                        let vertices: Vec<ModelVertexAnimated> = positions
                             .zip(uvs.into_f32())
                             .zip(joints.into_u16())
                             .zip(weights.into_f32())
@@ -385,7 +385,7 @@ impl Model3D {
                             })
                             .collect();
 
-                        let buffers = Buffers::new(device, vertices.as_bytes(), &index);
+                        let buffers = Buffers::new(device, &vertices, &index);
                         (buffers, ModelVertexType::Animated)
                     }
                     (Some(positions), Some(uvs), None, None) => {
@@ -397,7 +397,7 @@ impl Model3D {
                             })
                             .collect();
 
-                        let buffers = Buffers::new(device, vertices.as_bytes(), &index);
+                        let buffers = Buffers::new(device, &vertices, &index);
                         (buffers, ModelVertexType::Static)
                     }
                     (positions, uvs, joints, weights) => unimplemented!("Unexpected combination of vertex data - positions: {:?}, uvs: {:?}, joints: {:?}, weights: {:?}", positions.is_some(), uvs.is_some(), joints.is_some(), weights.is_some()),

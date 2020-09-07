@@ -23,18 +23,17 @@ use std::{mem, f32};
 use std::borrow::Cow;
 use std::num::NonZeroU8;
 
+use bytemuck::{Pod, Zeroable};
 use cgmath::Rad;
 use cgmath::prelude::*;
 use cgmath::{Matrix4, Vector3};
 use num_traits::{FromPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderModuleSource};
 use wgpu::util::DeviceExt;
-use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
+use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderModuleSource};
 use wgpu_glyph::ab_glyph::FontArc;
-use zerocopy::AsBytes;
-use bytemuck::{Pod, Zeroable};
+use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
 
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
@@ -1846,7 +1845,7 @@ impl WindowSizeDependent {
     }
 }
 
-#[derive(Clone, Copy, AsBytes)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct HitboxUniform {
     edge_color: [f32; 4],
@@ -1854,13 +1853,13 @@ struct HitboxUniform {
     transform:  [[f32; 4]; 4],
 }
 
-#[derive(Clone, Copy, AsBytes)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct TransformUniform {
     transform: [[f32; 4]; 4],
 }
 
-#[derive(Clone, Copy, AsBytes)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct TransformUniformCycle {
     transform:   [[f32; 4]; 4],
@@ -1896,12 +1895,12 @@ enum DrawType {
 impl DrawType {
     fn uniform_bytes(&self) -> &[u8] {
         match &self {
-            DrawType::Color         { uniform, .. } => uniform.as_bytes(),
-            DrawType::Hitbox        { uniform, .. } => uniform.as_bytes(),
-            DrawType::ModelStatic   { uniform, .. } => uniform.as_bytes(),
+            DrawType::Color         { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Hitbox        { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::ModelStatic   { uniform, .. } => bytemuck::bytes_of(uniform),
             DrawType::ModelAnimated { uniform, .. } => bytemuck::bytes_of(uniform),
             DrawType::Fireball      { uniform, .. } => bytemuck::bytes_of(uniform),
-            DrawType::Lava          { uniform, .. } => uniform.as_bytes(),
+            DrawType::Lava          { uniform, .. } => bytemuck::bytes_of(uniform),
         }
     }
 

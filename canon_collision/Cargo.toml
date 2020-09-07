@@ -35,16 +35,7 @@ gltf = "0.15"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
 cgmath = { version = "0.17" }
 futures = "0.3"
-
-# TODO: zerocopy and bytemuck do the same thing but:
-# *  zerocopy is a private google project and it fails on large array sizes
-# *  bytemuck requires unsafe
-#
-# The plan is to write a safe #[derive(Pod)] for bytemuck then convert everything to bytemuck.
-# Or maybe just wait for someone else to write one :)
-zerocopy = "0.3"
-bytemuck = "1"
-
+bytemuck = { version = "1", features = ["derive"] }
 vk-shader-macros = { version = "0.2", optional = true }
 #wgpu_glyph = { version = "0.10", optional = true }
 wgpu_glyph = { git = "https://github.com/hecrj/wgpu_glyph", rev = "a2ca593147b416ef99fa573198edb692dfaee07e", optional = true }

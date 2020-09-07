@@ -6,19 +6,19 @@ use crate::entity::player::RenderShield;
 use crate::game::{SurfaceSelection, RenderRect};
 use crate::graphics;
 
-use wgpu::{Device, Buffer};
+use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
+use wgpu::{Device, Buffer};
 use lyon::path::Path;
 use lyon::math::{Point, point};
 use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
-use zerocopy::AsBytes;
 
 use std::collections::HashSet;
 use std::f32::consts;
 use std::rc::Rc;
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, AsBytes)]
+#[derive(Default, Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Vertex {
     pub position: [f32; 2],
     pub edge: f32,
@@ -26,7 +26,7 @@ pub struct Vertex {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy, AsBytes)]
+#[derive(Default, Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ColorVertex {
     pub position:  [f32; 4],
     pub color:     [f32; 4],
@@ -56,15 +56,15 @@ pub struct Buffers {
 }
 
 impl Buffers {
-    pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Rc<Buffers> where T: AsBytes {
+    pub fn new<T>(device: &Device, vertices: &[T], indices: &[u16]) -> Rc<Buffers> where T: Pod {
         let vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: &vertices.as_bytes(),
+            contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsage::VERTEX
         });
         let index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: &indices.as_bytes(),
+            contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsage::INDEX
         });
         let index_count = indices.len() as u32;
