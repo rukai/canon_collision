@@ -988,7 +988,6 @@ impl Player {
         let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as i64 - 1;
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
-        // TODO NAO: max out just before last frame. just before last frame returns None
         // TODO: maybe I could better handle this by moving action_expired into its own step
         // Currently I have to carefully avoid using set_frame to avoid going over the last frame and skipping action_expired
         self.land_action(context, state)

@@ -181,11 +181,13 @@ impl Entity {
         self.state.hitlag.step(&mut context.rng);
         if let Hitlag::None = self.state.hitlag {
             let main_action_result = self.action_step(context);
-            let secondary_action_result = if let Some(main_action_result) = main_action_result {
-                self.process_action_result(Some(main_action_result));
-                self.action_step(context)
-            } else {
-                ActionResult::set_frame(self.state.frame + 1)
+            let secondary_action_result = match main_action_result {
+                Some(ActionResult::SetAction(_)) => {
+                    self.process_action_result(main_action_result);
+                    self.action_step(context)
+                }
+                Some(ActionResult::SetFrame(_)) => main_action_result,
+                None => ActionResult::set_frame(self.state.frame + 1)
             };
             self.process_action_result(secondary_action_result);
         }
