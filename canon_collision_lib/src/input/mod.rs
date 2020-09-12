@@ -6,7 +6,7 @@ mod filter;
 
 use maps::ControllerMaps;
 use state::{ControllerInput, PlayerInput, Button, Stick, Trigger, Deadzone};
-use gcadapter::GCAdapter;
+use gcadapter::{GCAdapter, GCAdapterReceiver};
 use generic::GenericController;
 
 use gilrs_core::{Gilrs, Event};
@@ -15,7 +15,7 @@ use rusb::Context;
 use crate::network::{Netplay, NetplayState};
 
 enum InputSource {
-    GCAdapter (GCAdapter),
+    GCAdapter (GCAdapterReceiver),
     GenericController (GenericController),
 }
 
@@ -26,7 +26,7 @@ pub struct Input {
     current_inputs:  Vec<ControllerInput>, // inputs for this frame
     prev_start:      bool,
     input_sources:   Vec<InputSource>,
-    _rusb_context:    Context,
+    _rusb_context:   Context,
     gilrs:           Gilrs,
     controller_maps: ControllerMaps,
     pub events:      Vec<Event>,
@@ -61,10 +61,11 @@ impl Input {
     /// Call this once every frame
     pub fn step(&mut self, tas_inputs: &[ControllerInput], ai_inputs: &[ControllerInput], netplay: &mut Netplay, reset_deadzones: bool) {
         // clear deadzones so they will be set at next read
+        // TODO: uh why is this even like this, surely just implement deadzone reset on controller plugin (maybe it was for netplay???)
         if reset_deadzones {
             for source in &mut self.input_sources {
                 match source {
-                    &mut InputSource::GCAdapter (ref mut adapter) => { adapter.deadzones = Deadzone::empty4() }
+                    &mut InputSource::GCAdapter (_) => { } // TODO: send message to thread or delete all manual reset_deadzone logic adapter.deadzones = Deadzone::empty4()
                     &mut InputSource::GenericController (ref mut controller) => { controller.deadzone  = Deadzone::empty() }
                 }
             }
@@ -90,8 +91,16 @@ impl Input {
         let mut inputs: Vec<ControllerInput> = Vec::new();
         for source in &mut self.input_sources {
             match source {
-                &mut InputSource::GCAdapter (ref mut adapter) => adapter.read(&mut inputs),
-                &mut InputSource::GenericController (ref mut controller) => {
+                InputSource::GCAdapter (ref receiver) => {
+                    let mut last_inputs = None;
+                    for received_inputs in receiver.try_iter() {
+                        last_inputs = Some(received_inputs);
+                    }
+                    if let Some(last_inputs) = last_inputs {
+                        inputs.extend_from_slice(&last_inputs);
+                    }
+                }
+                InputSource::GenericController (ref mut controller) => {
                     let events = self.events.iter().filter(|x| x.id == controller.index).map(|x| &x.event).cloned().collect();
                     let gamepad = &self.gilrs.gamepad(controller.index).unwrap(); // Old gamepads stick around forever so its fine to unwrap.
                     let maps = &self.controller_maps.maps;

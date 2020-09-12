@@ -49,7 +49,7 @@ impl ControllerInput {
 }
 
 /// Internal input storage
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize, Node)]
 pub struct ControllerInput {
     pub plugged_in: bool,
 

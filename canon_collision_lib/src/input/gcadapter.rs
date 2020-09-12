@@ -1,8 +1,30 @@
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
+
 use rusb::{Context, UsbContext, DeviceHandle, Error};
 
 use super::state::{ControllerInput, Deadzone};
 use super::filter;
+
+pub type GCAdapterReceiver = Receiver<[ControllerInput; 4]>;
+
+pub fn run_in_thread(adapter: GCAdapter) -> Receiver<[ControllerInput; 4]> {
+    let (input_tx, input_rx) = mpsc::channel();
+    thread::spawn(move || {
+        run(adapter, input_tx);
+    });
+    input_rx
+}
+
+fn run(mut adapter: GCAdapter, input_tx: Sender<[ControllerInput; 4]>) {
+    loop {
+        if input_tx.send(adapter.read()).is_err() {
+            return;
+        }
+    }
+}
 
 pub struct GCAdapter {
     pub handle: DeviceHandle<Context>,
@@ -10,7 +32,7 @@ pub struct GCAdapter {
 }
 
 impl GCAdapter {
-    pub fn get_adapters(context: &mut Context) -> Vec<GCAdapter> {
+    pub fn get_adapters(context: &mut Context) -> Vec<GCAdapterReceiver> {
         let mut adapter_handles: Vec<DeviceHandle<Context>> = Vec::new();
         let devices = context.devices();
         for device in devices.unwrap().iter() {
@@ -43,7 +65,7 @@ impl GCAdapter {
 
         adapter_handles
             .into_iter()
-            .map(|handle| GCAdapter { handle, deadzones: Deadzone::empty4() })
+            .map(|handle| run_in_thread(GCAdapter { handle, deadzones: Deadzone::empty4() }))
             .collect()
     }
 
@@ -77,7 +99,8 @@ impl GCAdapter {
     }
 
     /// Add 4 GC adapter controllers to inputs
-    pub fn read(&mut self, inputs: &mut Vec<ControllerInput>) {
+    pub fn read(&mut self) -> [ControllerInput; 4] {
+        let mut inputs = [ControllerInput::default(); 4];
         let mut data: [u8; 37] = [0; 37];
         if let Ok(_) = self.handle.read_interrupt(0x81, &mut data, Duration::new(1, 0)) {
             for port in 0..4 {
@@ -114,7 +137,7 @@ impl GCAdapter {
                 let l_trigger = filter::trigger_filter(raw_l_trigger.saturating_sub(deadzone.l_trigger));
                 let r_trigger = filter::trigger_filter(raw_r_trigger.saturating_sub(deadzone.r_trigger));
 
-                inputs.push(ControllerInput {
+                inputs[port] = ControllerInput {
                     up:    data[9*port+2] & 0b10000000 != 0,
                     down:  data[9*port+2] & 0b01000000 != 0,
                     right: data[9*port+2] & 0b00100000 != 0,
@@ -134,14 +157,10 @@ impl GCAdapter {
                     l_trigger,
                     r_trigger,
                     plugged_in,
-                });
+                };
             }
         }
-        else {
-            inputs.push(ControllerInput::empty());
-            inputs.push(ControllerInput::empty());
-            inputs.push(ControllerInput::empty());
-            inputs.push(ControllerInput::empty());
-        }
+
+        inputs
     }
 }
