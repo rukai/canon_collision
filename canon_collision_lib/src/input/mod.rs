@@ -6,7 +6,7 @@ mod filter;
 
 use maps::ControllerMaps;
 use state::{ControllerInput, PlayerInput, Button, Stick, Trigger, Deadzone};
-use gcadapter::{GCAdapter, GCAdapterReceiver};
+use gcadapter::GCAdapter;
 use generic::GenericController;
 
 use gilrs_core::{Gilrs, Event};
@@ -15,7 +15,7 @@ use rusb::Context;
 use crate::network::{Netplay, NetplayState};
 
 enum InputSource {
-    GCAdapter (GCAdapterReceiver),
+    GCAdapter (GCAdapter),
     GenericController (GenericController),
 }
 
@@ -91,14 +91,8 @@ impl Input {
         let mut inputs: Vec<ControllerInput> = Vec::new();
         for source in &mut self.input_sources {
             match source {
-                InputSource::GCAdapter (ref receiver) => {
-                    let mut last_inputs = None;
-                    for received_inputs in receiver.try_iter() {
-                        last_inputs = Some(received_inputs);
-                    }
-                    if let Some(last_inputs) = last_inputs {
-                        inputs.extend_from_slice(&last_inputs);
-                    }
+                InputSource::GCAdapter (ref mut adapter) => {
+                    inputs.extend_from_slice(adapter.get_inputs());
                 }
                 InputSource::GenericController (ref mut controller) => {
                     let events = self.events.iter().filter(|x| x.id == controller.index).map(|x| &x.event).cloned().collect();

@@ -1,4 +1,4 @@
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::Receiver;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -8,31 +8,13 @@ use rusb::{Context, UsbContext, DeviceHandle, Error};
 use super::state::{ControllerInput, Deadzone};
 use super::filter;
 
-pub type GCAdapterReceiver = Receiver<[ControllerInput; 4]>;
-
-pub fn run_in_thread(adapter: GCAdapter) -> Receiver<[ControllerInput; 4]> {
-    let (input_tx, input_rx) = mpsc::channel();
-    thread::spawn(move || {
-        run(adapter, input_tx);
-    });
-    input_rx
-}
-
-fn run(mut adapter: GCAdapter, input_tx: Sender<[ControllerInput; 4]>) {
-    loop {
-        if input_tx.send(adapter.read()).is_err() {
-            return;
-        }
-    }
-}
-
 pub struct GCAdapter {
-    pub handle: DeviceHandle<Context>,
-    pub deadzones: [Deadzone; 4]
+    receiver: Receiver<[ControllerInput; 4]>,
+    previous_inputs: [ControllerInput; 4],
 }
 
 impl GCAdapter {
-    pub fn get_adapters(context: &mut Context) -> Vec<GCAdapterReceiver> {
+    pub fn get_adapters(context: &mut Context) -> Vec<GCAdapter> {
         let mut adapter_handles: Vec<DeviceHandle<Context>> = Vec::new();
         let devices = context.devices();
         for device in devices.unwrap().iter() {
@@ -55,9 +37,7 @@ impl GCAdapter {
                                 Err(e) => println!("GC adapter: Failed to claim interface: {}", e)
                             }
                         }
-                        Err(e) => {
-                            GCAdapter::handle_open_error(e);
-                        }
+                        Err(e) => GCAdapter::handle_open_error(e),
                     }
                 }
             }
@@ -65,8 +45,27 @@ impl GCAdapter {
 
         adapter_handles
             .into_iter()
-            .map(|handle| run_in_thread(GCAdapter { handle, deadzones: Deadzone::empty4() }))
+            .map(|handle|
+                GCAdapter {
+                    receiver: run_in_thread(GCAdapterBackend { handle, deadzones: Deadzone::empty4() }),
+                    previous_inputs: Default::default(),
+                }
+            )
             .collect()
+    }
+
+    pub fn get_inputs(&mut self) -> &[ControllerInput; 4] {
+        let mut last_inputs = None;
+        for received_inputs in self.receiver.try_iter() {
+            last_inputs = Some(received_inputs);
+        }
+        if let Some(last_inputs) = last_inputs {
+            self.previous_inputs = last_inputs;
+        } else {
+            warn!("GC Adapter input did not arrive in time");
+        }
+
+        &self.previous_inputs
     }
 
     fn handle_open_error(e: Error) {
@@ -97,9 +96,28 @@ impl GCAdapter {
             _ => { println!("GC adapter: Failed to open handle: {:?}", e); }
         }
     }
+}
 
+fn run_in_thread(mut backend: GCAdapterBackend) -> Receiver<[ControllerInput; 4]> {
+    let (input_tx, input_rx) = mpsc::channel();
+    thread::spawn(move || {
+        loop {
+            if input_tx.send(backend.read()).is_err() {
+                return;
+            }
+        }
+    });
+    input_rx
+}
+
+struct GCAdapterBackend {
+    pub handle: DeviceHandle<Context>,
+    pub deadzones: [Deadzone; 4]
+}
+
+impl GCAdapterBackend {
     /// Add 4 GC adapter controllers to inputs
-    pub fn read(&mut self) -> [ControllerInput; 4] {
+    fn read(&mut self) -> [ControllerInput; 4] {
         let mut inputs = [ControllerInput::default(); 4];
         let mut data: [u8; 37] = [0; 37];
         if let Ok(_) = self.handle.read_interrupt(0x81, &mut data, Duration::new(1, 0)) {
