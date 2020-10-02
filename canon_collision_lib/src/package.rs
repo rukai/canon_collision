@@ -116,8 +116,9 @@ impl Package {
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
 
                 let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
-                let fighter = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-                self.entities.push(key, fighter);
+                let mut entity: EntityDef = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
+                entity.cleanup();
+                self.entities.push(key, entity);
             }
         }
 

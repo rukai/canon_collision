@@ -3083,9 +3083,9 @@ dependencies = [
 
 [[package]]
 name = "treeflection"
-version = "0.1.34"
+version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0431a5114ad8c332379eb0661afebcc220fabbcc378d2aff668c44cda90cfe61"
+checksum = "a7dfaa9734a9d10fc9d49340961a36622f1feca27e3284cc92c8e4cb47f5e7f1"
 dependencies = [
  "itertools",
  "serde",

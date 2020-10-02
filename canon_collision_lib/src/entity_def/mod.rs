@@ -3,11 +3,16 @@ pub mod player;
 pub mod projectile;
 pub mod toriel_fireball;
 
-//use strum::IntoEnumIterator;
+use strum::IntoEnumIterator;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec, ContextVec};
 
 use crate::files::engine_version;
 use crate::geometry::Rect;
+
+use player::PlayerAction;
+use projectile::ProjectileAction;
+use item::ItemAction;
+use toriel_fireball::TorielFireballAction;
 
 impl Default for EntityDef {
     fn default() -> EntityDef {
@@ -20,7 +25,7 @@ impl Default for EntityDef {
             css_action: 0,
             css_scale:  1.0,
 
-            ty: EntityDefType::Generic,
+            ty: EntityDefType::default(),
 
             // in game attributes
             // TODO: move into EntityDefType::Fighter
@@ -131,17 +136,47 @@ impl EntityDef {
             None
         }
     }
+
+    pub fn cleanup(&mut self) {
+        for action_name in self.ty.get_action_names() {
+            let action_name = action_name.to_string();
+            if !self.actions.contains_key(&action_name) {
+                self.actions.push(action_name, ActionDef::default());
+            }
+        }
+
+        let expected_action_names: Vec<_> = self.ty.get_action_names().collect();
+        let check_action_names: Vec<_> = self.actions.key_iter().cloned().collect();
+        for action_name in check_action_names {
+            if !expected_action_names.contains(&action_name.as_str()) {
+                self.actions.remove_by_key(action_name.as_str());
+            }
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub enum EntityDefType {
     Fighter (Fighter),
-    Generic
+    Item,
+    Projectile,
+    TorielFireball,
+}
+
+impl EntityDefType {
+    pub fn get_action_names(&self) -> Box<dyn Iterator<Item=&'static str>> {
+        match self {
+            EntityDefType::Fighter (_)    => Box::new(PlayerAction::iter().map(|x| x.into())),
+            EntityDefType::Item           => Box::new(ItemAction::iter().map(|x| x.into())),
+            EntityDefType::Projectile     => Box::new(ProjectileAction::iter().map(|x| x.into())),
+            EntityDefType::TorielFireball => Box::new(TorielFireballAction::iter().map(|x| x.into())),
+        }
+    }
 }
 
 impl Default for EntityDefType {
     fn default() -> Self {
-        EntityDefType::Generic
+        EntityDefType::Projectile
     }
 }
 
