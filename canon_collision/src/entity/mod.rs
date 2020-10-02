@@ -18,14 +18,10 @@ use crate::rules::Goal;
 
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB};
-use canon_collision_lib::entity_def::projectile::ProjectileAction;
-use canon_collision_lib::entity_def::player::PlayerAction;
-use canon_collision_lib::entity_def::item::ItemAction;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::stage::{Stage, Surface};
 
 use cgmath::{Quaternion, Rotation3, Rad};
-use num_traits::{FromPrimitive, ToPrimitive};
 use rand_chacha::ChaChaRng;
 use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 use treeflection::KeyedContextVec;
@@ -160,10 +156,10 @@ impl Entity {
         // If the action or frame is out of bounds jump to a valid one.
         // This is needed because we can continue from any point in a replay and replays may
         // contain actions or frames that no longer exist.
-        if self.state.action as usize >= context.entity_def.actions.len() {
-            self.state.action = 0;
+        if !context.entity_def.actions.contains_key(&self.state.action) {
+            self.state.action = context.entity_def.actions.index_to_key(0).expect("Entity def has no actions");
         } else {
-            let fighter_frames = &context.entity_def.actions[self.state.action as usize].frames;
+            let fighter_frames = &context.entity_def.actions[self.state.action.as_ref()].frames;
             if self.state.frame as usize >= fighter_frames.len() {
                 self.state.frame = 0;
             }
@@ -194,7 +190,7 @@ impl Entity {
     }
 
     fn action_step(&mut self, context: &mut StepContext) -> Option<ActionResult> {
-        let fighter_frame = &context.entity_def.actions[self.state.action as usize].frames[self.state.frame as usize];
+        let fighter_frame = &context.entity_def.actions[self.state.action.as_ref()].frames[self.state.frame as usize];
         if fighter_frame.force_hitlist_reset {
             self.state.hitlist.clear();
         }
@@ -310,12 +306,24 @@ impl Entity {
     }
 
     pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, player_input: Option<&PlayerInput>, debug: &DebugEntity, i: EntityKey) -> Vec<String> {
-        match &self.ty {
-            EntityType::Player     (player)     => player.debug_print(entities, &self.state, player_input.unwrap(), debug, i),
-            EntityType::Item       (item)       => item.debug_print(entities, &self.state, debug, i),
-            EntityType::Projectile (projectile) => projectile.debug_print(entities, &self.state, debug, i),
-            EntityType::TorielFireball (projectile) => projectile.debug_print(entities, &self.state, debug, i),
+        let mut lines = vec!();
+        if debug.action {
+            lines.push(self.state.debug_string(entities, i));
         }
+
+        if debug.physics {
+            if let Some(body) = self.body() {
+                lines.push(body.debug_string(i));
+            }
+        }
+
+        match &self.ty {
+            EntityType::Player     (player)     => lines.extend_from_slice(&player.debug_print(player_input.unwrap(), debug, i)),
+            EntityType::Projectile (projectile) => lines.extend_from_slice(&projectile.debug_print(debug, i)),
+            _ => { }
+        }
+
+        lines
     }
 
     pub fn body(&self) -> Option<&Body> {
@@ -365,7 +373,7 @@ impl Entity {
         for entities in entity_history[range].iter().rev() {
             if let Some(entity) = entities.get(entity_i) {
                 // handle deleted frames by just skipping it, only encountered when the editor is used.
-                if entity_def.actions[entity.state.action as usize].frames.len() > entity.state.frame as usize {
+                if entity_def.actions[entity.state.action.as_ref()].frames.len() > entity.state.frame as usize {
                     frames.push(entity.render_frame(entities, entity_defs, surfaces));
                 }
             }
@@ -407,7 +415,7 @@ impl Entity {
             ecb:              self.body().map(|x| x.ecb.clone()),
             frame:            self.state.frame as usize,
             frame_no_restart: self.state.frame_no_restart as usize,
-            action:           self.state.action as usize,
+            action:           self.state.action.clone(),
             face_right:       self.face_right(),
             frame_angle:      self.frame_angle(entity_def, surfaces),
             render_angle:     self.render_angle(entities, entity_defs, surfaces),
@@ -465,19 +473,6 @@ pub enum RenderEntityType {
     Player (RenderPlayer),
     Projectile,
     Item,
-}
-
-impl RenderEntityType {
-    /// TODO: figure out a better spot to put this so we can access from the hurtbox generator.
-    pub fn action_index_to_string(&self, action_index: usize) -> String {
-        match self {
-            RenderEntityType::Player (_) =>     PlayerAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
-            RenderEntityType::Projectile => ProjectileAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
-            RenderEntityType::Item       =>       ItemAction::from_u64(action_index as u64).map(|x| -> &str { x.into() }),
-        }
-        .map(|x| x.to_string())
-        .unwrap_or(format!("{}", action_index))
-    }
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize)]
@@ -578,7 +573,7 @@ pub struct RenderEntityFrame {
     pub ecb:              Option<ECB>,
     pub frame:            usize,
     pub frame_no_restart: usize,
-    pub action:           usize,
+    pub action:           String,
     pub face_right:       bool,
     pub frame_angle:      f32,
     pub render_angle:     Quaternion<f32>,
@@ -616,13 +611,13 @@ pub enum MessageContents {
 
 #[must_use]
 pub enum ActionResult {
-    SetAction (u64),
+    SetAction (String),
     SetFrame  (i64),
 }
 
 impl ActionResult {
-    fn set_action<T: ToPrimitive>(action: T) -> Option<ActionResult> {
-        action.to_u64().map(|x| ActionResult::SetAction (x))
+    fn set_action<T: Into<&'static str>>(action: T) -> Option<ActionResult> {
+        Some(ActionResult::SetAction (action.into().to_string()))
     }
 
     fn set_frame(action: i64) -> Option<ActionResult> {

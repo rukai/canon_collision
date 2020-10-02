@@ -90,7 +90,7 @@ impl Buffers {
         *index_count += triangles + 1;
     }
 
-    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize, selected: &HashSet<usize>) -> Rc<Buffers> {
+    pub fn new_fighter_frame_colboxes(device: &Device, package: &Package, fighter: &str, action: &str, frame: usize, selected: &HashSet<usize>) -> Rc<Buffers> {
         let mut vertices: Vec<Vertex> = vec!();
         let mut indices: Vec<u16> = vec!();
         let mut index_count = 0;
@@ -105,7 +105,7 @@ impl Buffers {
         Buffers::new(device, &vertices, &indices)
     }
 
-    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: usize, frame: usize) -> Option<Rc<Buffers>> {
+    pub fn new_fighter_frame(device: &Device, package: &Package, fighter: &str, action: &str, frame: usize) -> Option<Rc<Buffers>> {
         let frames = &package.entities[fighter].actions[action].frames;
         if let Some(frame) = frames.get(frame) {
             let mut vertices: Vec<Vertex> = vec!();

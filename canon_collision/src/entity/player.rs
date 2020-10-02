@@ -22,11 +22,9 @@ use canon_collision_lib::stage::{Stage, Surface};
 
 use treeflection::KeyedContextVec;
 use rand::Rng;
-use num_traits::FromPrimitive;
 
 use std::f32;
 use std::f32::consts::PI;
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LockTimer {
@@ -179,7 +177,7 @@ impl Player {
     }
 
     pub fn is_shielding(&self, state: &ActionState) -> bool {
-        match PlayerAction::from_u64(state.action) {
+        match state.get_action() {
             Some(PlayerAction::Shield) |
             Some(PlayerAction::ShieldOn) |
             Some(PlayerAction::ShieldOff) |
@@ -196,15 +194,15 @@ impl Player {
     }
 
     fn interruptible(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame >= fighter.actions[state.action as usize].iasa
+        state.frame >= fighter.actions[state.action.as_ref()].iasa
     }
 
     fn first_interruptible(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame == fighter.actions[state.action as usize].iasa
+        state.frame == fighter.actions[state.action.as_ref()].iasa
     }
 
     fn last_frame(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame == fighter.actions[state.action as usize].frames.len() as i64 - 1
+        state.frame == fighter.actions[state.action.as_ref()].frames.len() as i64 - 1
     }
 
     pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize, state: &ActionState) -> Option<ActionResult> {
@@ -243,7 +241,7 @@ impl Player {
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
-                    let kb_vel_mult = if let Some(PlayerAction::Crouch) = PlayerAction::from_u64(state.action) {
+                    let kb_vel_mult = if let Some(PlayerAction::Crouch) = state.get_action() {
                         0.67
                     } else {
                         1.0
@@ -270,7 +268,7 @@ impl Player {
                     let entity_def = &context.entities[entity_defend_i];
                     if let EntityType::Player (player_def) = &entity_def.ty {
                         if let &Some(ref power_shield) = power_shield {
-                            if let (Some(PlayerAction::PowerShield), &Some(ref stun)) = (PlayerAction::from_u64(state.action), &power_shield.enemy_stun) {
+                            if let (Some(PlayerAction::PowerShield), &Some(ref stun)) = (state.get_action(), &power_shield.enemy_stun) {
                                 if stun.window > entity_def.state.frame as u64 {
                                     self.stun_timer = stun.duration;
                                 }
@@ -286,7 +284,7 @@ impl Player {
                 }
                 &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
                     if let &Some(ref power_shield) = power_shield {
-                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) = (PlayerAction::from_u64(state.action), &power_shield.parry) {
+                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) = (state.get_action(), &power_shield.parry) {
                             if parry.window > state.frame as u64 {
                                 self.parry_timer = parry.duration;
                             }
@@ -355,7 +353,7 @@ impl Player {
             self.lcancel_timer -= 1;
         }
         else if context.input.l.press || context.input.r.press || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 ||
-            context.input.z.press && !(state.frame == 0 && PlayerAction::from_u64(state.action).as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
+            context.input.z.press && !(state.frame == 0 && state.get_action::<PlayerAction>().as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
         {
             if let &Some(ref lcancel) = &context.entity_def.lcancel {
                 self.lcancel_timer = lcancel.active_window;
@@ -403,12 +401,12 @@ impl Player {
             self.c_stick = Some((context.input[0].c_stick_x, context.input[0].c_stick_y));
         }
 
-        let fighter_frame = &context.entity_def.actions[state.action as usize].frames[state.frame as usize];
+        let fighter_frame = &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
 
         // update ecb
         let prev_bottom = self.body.ecb.bottom;
         self.body.ecb = fighter_frame.ecb.clone();
-        match PlayerAction::from_u64(state.action) {
+        match state.get_action() {
             Some(PlayerAction::JumpF) | Some(PlayerAction::JumpB) | Some(PlayerAction::JumpAerialF) | Some(PlayerAction::JumpAerialB) if state.frame < 10
                 => { self.body.ecb.bottom = prev_bottom }
             _   => { }
@@ -416,7 +414,7 @@ impl Player {
 
         self.frame_step(context, state)
             .or_else(|| {
-                let action_frames = context.entity_def.actions[state.action as usize].frames.len() as i64;
+                let action_frames = context.entity_def.actions[state.action.as_ref()].frames.len() as i64;
                 if state.frame + 1 >= action_frames {
                     // Because frames can be added/removed in the in game editor, we need to be ready to handle the frame index going out of bounds for any action automatically.
                     self.action_expired(context, state)
@@ -427,7 +425,7 @@ impl Player {
     }
 
     fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(action) = PlayerAction::from_u64(state.action) {
+        if let Some(action) = state.get_action() {
             match action {
                 PlayerAction::Spawn => None,
                 PlayerAction::ReSpawn => None,
@@ -729,7 +727,7 @@ impl Player {
     }
 
     fn tilt_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as u64 - 1;
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
             (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def, state)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
@@ -787,7 +785,7 @@ impl Player {
     }
 
     fn run_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as u64 - 1;
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
             (context.entity_def.run_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def, state)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
@@ -874,7 +872,7 @@ impl Player {
     }
 
     fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(PlayerAction::Jab) = PlayerAction::from_u64(state.action) {
+        if let Some(PlayerAction::Jab) = state.get_action() {
             if state.frame == 5 {
                 let (x, y) = self.bps_xy(context, state);
                 context.new_entities.push(Entity {
@@ -897,7 +895,7 @@ impl Player {
             }
         }
 
-        if let Some(PlayerAction::TauntLeft) = PlayerAction::from_u64(state.action) {
+        if let Some(PlayerAction::TauntLeft) = state.get_action() {
             if state.frame == 0 {
                 let (x, y) = self.bps_xy(context, state);
                 context.new_entities.push(Entity {
@@ -918,7 +916,7 @@ impl Player {
             }
         }
 
-        if let Some(PlayerAction::TauntRight) = PlayerAction::from_u64(state.action) {
+        if let Some(PlayerAction::TauntRight) = state.get_action() {
             if state.frame == 0 {
                 let (x, y) = self.bps_xy(context, state);
                 let x = x + 15.0;
@@ -968,7 +966,7 @@ impl Player {
     fn item_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 4 {
             if let Some(item) = self.get_held_item(&context.entities) {
-                let message_item = match PlayerAction::from_u64(state.action) {
+                let message_item = match state.get_action() {
                     Some(PlayerAction::ItemThrowF) | Some(PlayerAction::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
                     Some(PlayerAction::ItemThrowB) | Some(PlayerAction::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
                     Some(PlayerAction::ItemThrowU) | Some(PlayerAction::ItemThrowAirU) => MessageItem::Thrown { x_vel: 0.0,  y_vel: 4.0 },
@@ -985,7 +983,7 @@ impl Player {
     }
 
     fn attack_land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as i64 - 1;
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
         // TODO: maybe I could better handle this by moving action_expired into its own step
@@ -1118,7 +1116,7 @@ impl Player {
         }
 
         let run_frame = 13; // TODO: Variable per character
-        let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as i64 - 1;
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
         if (state.frame >= run_frame || (run_frame > last_action_frame && self.last_frame(&context.entity_def, state)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
@@ -1384,7 +1382,7 @@ impl Player {
 
     fn check_crouch(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if context.input[0].stick_y < -0.77 {
-            if let Some(action) = PlayerAction::from_u64(state.action) {
+            if let Some(action) = state.get_action() {
                 match action {
                     PlayerAction::CrouchStart | PlayerAction::Crouch | PlayerAction::CrouchEnd => {
                         None // TODO: used to block action change do we want to restore that?
@@ -1404,7 +1402,7 @@ impl Player {
     fn check_pass_platform(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if let Location::Surface { platform_i, .. } = self.body.location {
             if let Some(platform) = context.surfaces.get(platform_i) {
-                let last_action_frame = context.entity_def.actions[state.action as usize].frames.len() as i64 - 1;
+                let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
                 let pass_frame = last_action_frame.min(4);
                 if platform.is_pass_through() && state.frame == pass_frame && (context.input[0].stick_y < -0.77 || context.input[2].stick_y < -0.77) && context.input[6].stick_y > -0.36 {
                     self.set_airbourne(context, state);
@@ -1735,7 +1733,7 @@ impl Player {
     }
 
     fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        ActionResult::set_action(match PlayerAction::from_u64(state.action) {
+        ActionResult::set_action(match state.get_action() {
             None => panic!("Custom defined action expirations have not been implemented"),
 
             // Idle
@@ -1998,7 +1996,7 @@ impl Player {
      */
 
     pub fn physics_step(&mut self, context: &mut StepContext, state: &ActionState, game_frame: usize, goal: Goal) -> Option<ActionResult> {
-        let fighter_frame = &context.entity_def.actions[state.action as usize].frames[state.frame as usize];
+        let fighter_frame = &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
         match self.body.physics_step(context, state, fighter_frame) {
             Some(PhysicsResult::Fall) => {
                 self.fastfalled = false;
@@ -2025,7 +2023,7 @@ impl Player {
     }
 
     fn apply_friction(&mut self, entity: &EntityDef, state: &ActionState) {
-        match PlayerAction::from_u64(state.action) {
+        match state.get_action() {
             Some(PlayerAction::Idle) |
             Some(PlayerAction::Dash) |
             Some(PlayerAction::Shield) |
@@ -2039,7 +2037,7 @@ impl Player {
 
     /// Returns the Rect surrounding the player that the camera must include
     pub fn cam_area(&self, state: &ActionState, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
-        match PlayerAction::from_u64(state.action) {
+        match state.get_action() {
             Some(PlayerAction::Eliminated) => None,
             _ => {
                 let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces, state);
@@ -2090,7 +2088,7 @@ impl Player {
     }
 
     fn land(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let action = PlayerAction::from_u64(state.action);
+        let action = state.get_action::<PlayerAction>();
 
         self.land_frame_skip = match action {
             Some(_) if action.as_ref().map_or(false, |x| x.is_air_attack()) && self.lcancel_timer > 0 => 1,
@@ -2184,15 +2182,8 @@ impl Player {
         }
     }
 
-    pub fn debug_print(&self, entity_defs: &KeyedContextVec<EntityDef>, state: &ActionState, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
+    pub fn debug_print(&self, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
         let mut lines: Vec<String> = vec!();
-        if debug.action {
-            lines.push(state.debug_string::<PlayerAction>(entity_defs, index));
-        }
-
-        if debug.physics {
-            lines.push(self.body.debug_string(index));
-        }
 
         if debug.frame {
             lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  tech timer: {:?}  lcancel timer: {}",
@@ -2308,7 +2299,7 @@ impl Player {
         };
 
         let (x, y) = self.bps_xy(context, state);
-        let action = PlayerAction::from_u64(state.action);
+        let action = state.get_action::<PlayerAction>();
 
         let color = if
             action.map_or(false, |x| x.is_attack_land()) && self.land_frame_skip == 0 || // missed LCancel

@@ -6,7 +6,6 @@ use canon_collision_lib::files::{engine_version, load_cbor, save_struct_cbor};
 use canon_collision_lib::entity_def::EntityDef;
 use canon_collision_lib::entity_def::player::PlayerAction;
 
-
 use std::path::Path;
 use std::fs;
 use std::collections::BTreeMap;
@@ -82,6 +81,7 @@ fn new_object(entries: Vec<(&str, Value)>) -> Value {
 }
 
 fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
+    let file_name = path.file_name().unwrap().to_str().unwrap();
     let mut entity = load_cbor(path).unwrap();
     let entity_engine_version = get_engine_version(&entity);
     if entity_engine_version > engine_version() {
@@ -93,6 +93,7 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     else if entity_engine_version < engine_version() {
         for upgrade_from in entity_engine_version..engine_version() {
             match upgrade_from {
+                18 => { upgrade_entity18(&mut entity, file_name) }
                 17 => { upgrade_entity17(&mut entity) }
                 16 => { upgrade_entity16(&mut entity) }
                 15 => { upgrade_entity15(&mut entity) }
@@ -113,6 +114,184 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     }
 
     println!("Upgraded entity from version {} to version {}.", entity_engine_version, engine_version());
+}
+
+fn upgrade_entity18(entity: &mut Value, file_name: &str) {
+    let item_action_names = [
+        "Spawn",
+        "Idle",
+        "Fall",
+        "Held",
+        "Thrown",
+        "Dropped",
+    ];
+
+    let projectile_action_names = [
+        "Spawn",
+        "Travel",
+        "Hit",
+    ];
+
+    let fighter_action_names = [
+        "Spawn",
+        "ReSpawn",
+        "ReSpawnIdle",
+        "Idle",
+        "Crouch",
+        "LedgeIdle",
+        "Teeter",
+        "TeeterIdle",
+        "MissedTechIdle",
+
+        // Movement
+        "Fall",
+        "AerialFall",
+        "Land",
+        "JumpSquat",
+        "JumpF",
+        "JumpB",
+        "JumpAerialF",
+        "JumpAerialB",
+        "TiltTurn",
+        "RunTurn",
+        "SmashTurn",
+        "Dash",
+        "Run",
+        "RunEnd",
+        "Walk",
+        "PassPlatform",
+        "Damage",
+        "DamageFly",
+        "DamageFall",
+        "LedgeGrab",
+        "LedgeJump",
+        "LedgeJumpSlow",
+        "LedgeGetup",
+        "LedgeGetupSlow",
+        "LedgeIdleChain",
+
+        // Defense
+        "PowerShield",
+        "ShieldOn",
+        "Shield",
+        "ShieldOff",
+        "RollF",
+        "RollB",
+        "SpotDodge",
+        "AerialDodge",
+        "SpecialFall",
+        "SpecialLand",
+        "TechF",
+        "TechN",
+        "TechB",
+        "MissedTechGetupF",
+        "MissedTechGetupN",
+        "MissedTechGetupB",
+        "Rebound",
+        "LedgeRoll",
+        "LedgeRollSlow",
+
+        // Vulnerable
+        "ShieldBreakFall",
+        "ShieldBreakGetup",
+        "Stun",
+        "MissedTechStart",
+
+        // Attack",
+        "Jab",
+        "Jab2",
+        "Jab3",
+        "Utilt",
+        "Dtilt",
+        "Ftilt",
+        "DashAttack",
+        "Usmash",
+        "Dsmash",
+        "Fsmash",
+
+        // Grabs
+        "Grab",
+        "DashGrab",
+        "GrabbingIdle",
+        "GrabbingEnd",
+        "GrabbedIdleAir",
+        "GrabbedIdle",
+        "GrabbedEnd",
+
+        // Throws
+        "Uthrow",
+        "Dthrow",
+        "Fthrow",
+        "Bthrow",
+
+        // Items
+        "ItemGrab",
+        "ItemEat",
+        "ItemThrowU",
+        "ItemThrowD",
+        "ItemThrowF",
+        "ItemThrowB",
+        "ItemThrowAirU",
+        "ItemThrowAirD",
+        "ItemThrowAirF",
+        "ItemThrowAirB",
+
+        // Getup attacks
+        "LedgeAttack",
+        "LedgeAttackSlow",
+        "MissedTechAttack",
+
+        // Aerials
+        "Uair",
+        "Dair",
+        "Fair",
+        "Bair",
+        "Nair",
+        "UairLand",
+        "DairLand",
+        "FairLand",
+        "BairLand",
+        "NairLand",
+
+        // Taunts
+        "TauntUp",
+        "TauntDown",
+        "TauntLeft",
+        "TauntRight",
+
+        // Crouch
+        "CrouchStart",
+        "CrouchEnd",
+
+        "Eliminated",
+        "DummyFramePreStart",
+    ];
+
+    let action_names = match file_name {
+        "PerfectlyGenericProjectile.cbor" => projectile_action_names.as_ref(),
+        "PerfectlyGenericObject.cbor" => item_action_names.as_ref(),
+        "TorielFireball.cbor" => projectile_action_names.as_ref(),
+        _ => fighter_action_names.as_ref(),
+    };
+
+    if let Some (actions) = get_vec(entity, "actions") {
+        let mut new_actions = BTreeMap::new();
+        new_actions.insert(
+            Value::Text("keys".into()),
+            Value::Array(action_names.iter().map(|x| Value::Text(x.to_string())).collect())
+        );
+        new_actions.insert(
+            Value::Text("vector".into()),
+            Value::Array(actions[0..action_names.len()].to_vec()),
+        );
+
+        if let Value::Map(entity) = entity {
+            entity.insert(
+                Value::Text("actions".into()),
+                Value::Map(new_actions)
+            );
+        }
+    }
 }
 
 fn upgrade_entity17(entity: &mut Value) {

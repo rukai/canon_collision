@@ -6,7 +6,6 @@ mod animation;
 
 use canon_collision_lib::assets::Assets;
 use canon_collision_lib::entity_def::{ActionDef, ActionFrame, CollisionBoxRole, CollisionBox, ItemHold};
-use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::package::Package;
 use cli::CLIResults;
 use model::{Model3D, Joint, Animation};
@@ -52,8 +51,9 @@ fn main() {
                 return;
             };
 
-            for (i, ref mut action) in (*fighter.actions).iter_mut().enumerate() {
-                let action_key = PlayerAction::action_index_to_string(i);
+            let action_keys = fighter.actions.keys();
+            for action_key in action_keys {
+                let action = &mut fighter.actions[action_key.as_ref()];
                 if cli.action_names.len() == 0 || cli.action_names.contains(&action_key) {
                     if let Some(animation) = model.animations.get(&action_key) {
                         regenerate_action(action, &model.root_joint, animation, &cli, &hurtboxes);

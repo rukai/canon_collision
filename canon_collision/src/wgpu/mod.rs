@@ -22,12 +22,12 @@ use std::time::{Duration, Instant};
 use std::{mem, f32};
 use std::borrow::Cow;
 use std::num::NonZeroU8;
+use std::str::FromStr;
 
 use bytemuck::{Pod, Zeroable};
 use cgmath::Rad;
 use cgmath::prelude::*;
 use cgmath::{Matrix4, Vector3};
-use num_traits::{FromPrimitive};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::util::DeviceExt;
@@ -611,12 +611,12 @@ impl WgpuGraphics {
                 }
                 PackageUpdate::DeleteFighterFrame { fighter, action, frame_index } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.entities[fighter.as_ref()].actions[action].frames.remove(frame_index);
+                        package.entities[fighter.as_ref()].actions[action.as_ref()].frames.remove(frame_index);
                     }
                 }
                 PackageUpdate::InsertFighterFrame { fighter, action, frame_index, frame } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.entities[fighter.as_ref()].actions[action].frames.insert(frame_index, frame);
+                        package.entities[fighter.as_ref()].actions[action.as_ref()].frames.insert(frame_index, frame);
                     }
                 }
                 PackageUpdate::DeleteStage { index, .. } => {
@@ -881,8 +881,8 @@ impl WgpuGraphics {
             if let RenderObject::Entity (entity) = object {
                 location += distance;
                 if let RenderEntityType::Player (player) = &entity.render_type {
-                    match PlayerAction::from_u64(entity.frames[0].action as u64) {
-                        Some(PlayerAction::Eliminated) => { }
+                    match PlayerAction::from_str(&entity.frames[0].action) {
+                        Ok(PlayerAction::Eliminated) => { }
                         _ => {
                             let c = entity.fighter_color.clone();
                             let color = [c[0], c[1], c[2], 1.0];
@@ -1126,9 +1126,9 @@ impl WgpuGraphics {
                     let transformation = entity_matrix(&entity.frames[0]);
 
                     // draw entity
-                    let action_index = entity.frames[0].action;
-                    match PlayerAction::from_u64(action_index as u64) {
-                        Some(PlayerAction::Eliminated) => { }
+                    let action = &entity.frames[0].action;
+                    match PlayerAction::from_str(action) {
+                        Ok(PlayerAction::Eliminated) => { }
                         _ => {
                             let fighter_model_name = &entity.frames[0].model_name;
                             if entity.debug.render.normal() && entity.visible {
@@ -1141,7 +1141,6 @@ impl WgpuGraphics {
                                 ));
                                 let transformation = position * rotate * dir;
                                 if let Some(fighter) = self.models.get(fighter_model_name) {
-                                    let action = entity.render_type.action_index_to_string(action_index);
                                     draws.extend(self.render_model3d(
                                         &render.camera,
                                         &fighter,
@@ -1172,7 +1171,7 @@ impl WgpuGraphics {
                     if entity.debug.render.debug() {
                         if entity.debug.render.onion_skin() {
                             if let Some(frame) = entity.frames.get(2) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, &frame.action, frame.frame) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.4, 0.4, 0.4, 0.4];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
@@ -1180,7 +1179,7 @@ impl WgpuGraphics {
                             }
 
                             if let Some(frame) = entity.frames.get(1) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &frame.entity_def_key, &frame.action, frame.frame) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.80, 0.80, 0.80, 0.9];
                                     draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
@@ -1189,7 +1188,7 @@ impl WgpuGraphics {
                         }
 
                         // draw entity
-                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, entity.frames[0].action, entity.frames[0].frame) {
+                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, &entity.frames[0].action, entity.frames[0].frame) {
                             let color = [0.9, 0.9, 0.9, 1.0];
                             let edge_color = if entity.entity_selected {
                                 [0.0, 1.0, 0.0, 1.0]
@@ -1207,7 +1206,7 @@ impl WgpuGraphics {
                     // draw selected colboxes
                     if entity.selected_colboxes.len() > 0 {
                         let color = [0.0, 1.0, 0.0, 1.0];
-                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
+                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, &self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, &entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
                         draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, color, color));
                     }
 
@@ -1284,8 +1283,8 @@ impl WgpuGraphics {
 
                     // Draw spawn plat
                     if let RenderEntityType::Player (_) = entity.render_type {
-                        match PlayerAction::from_u64(entity.frames[0].action as u64) {
-                            Some(PlayerAction::ReSpawn) | Some(PlayerAction::ReSpawnIdle) => {
+                        match PlayerAction::from_str(&entity.frames[0].action) {
+                            Ok(PlayerAction::ReSpawn) | Ok(PlayerAction::ReSpawnIdle) => {
                                 // TODO: get width from player dimensions
                                 let width = 15.0;
                                 let height = width / 4.0;
@@ -1678,9 +1677,11 @@ impl WgpuGraphics {
             let camera = Camera::new_for_menu(self.aspect_ratio(), self.width as f32, self.height as f32, camera_dimension);
 
             if let Some(model) = self.models.get(&fighter.name) {
-                let action: &str = PlayerAction::from_u64(fighter.css_action)
-                    .map(|x| x.into())
-                    .unwrap_or("Idle");
+                // TODO
+                //let action: &str = PlayerAction::from_u64(fighter.css_action)
+                //    .map(|x| x.into())
+                //    .unwrap_or("Idle");
+                let action = "Idle";
                 let frame = selection.animation_frame as f32;
                 draws.extend(self.render_model3d(&camera, &model, &transformation, action, frame, frame));
             }

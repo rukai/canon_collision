@@ -26,10 +26,10 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
 use std::time::Duration;
+use std::str::FromStr;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use chrono::Local;
-use num_traits::{FromPrimitive, ToPrimitive};
 use rand_chacha::ChaChaRng;
 use rand_chacha::rand_core::SeedableRng;
 use treeflection::{Node, NodeRunner, NodeToken};
@@ -253,32 +253,27 @@ impl Game {
             Edit::Entity (entity_i) => {
                 if let Some(entity) = self.entities.get(entity_i) {
                     let entity_def_key  = entity.state.entity_def_key.as_ref();
-                    let entity_action   = entity.state.action as usize;
+                    let entity_action   = entity.state.action.as_ref();
                     let entity_frame    = entity.state.frame as usize;
                     let entity_colboxes = self.selector.colboxes_vec();
 
                     let entity_defs = &mut self.package.entities;
                     if let Some(fighter_index) = entity_defs.key_to_index(entity_def_key) {
                         entity_defs.set_context(fighter_index);
-                    }
-                    else {
-                        return;
-                    }
 
-                    let actions = &mut entity_defs[entity_def_key].actions;
-                    if entity_action >= actions.len() {
-                        return;
-                    }
-                    actions.set_context(entity_action);
+                        let actions = &mut entity_defs[entity_def_key].actions;
+                        if let Some(action_index) = actions.key_to_index(entity_action) {
+                            actions.set_context(action_index);
 
-                    let frames = &mut actions[entity_action].frames;
-                    if entity_frame >= frames.len() {
-                        return;
-                    }
-                    frames.set_context(entity_frame);
+                            let frames = &mut actions[action_index].frames;
+                            if entity_frame < frames.len() {
+                                frames.set_context(entity_frame);
 
-                    let colboxes = &mut frames[entity_frame].colboxes;
-                    colboxes.set_context_vec(entity_colboxes);
+                                let colboxes = &mut frames[entity_frame].colboxes;
+                                colboxes.set_context_vec(entity_colboxes);
+                            }
+                        }
+                    }
                 }
             }
             Edit::Stage => {
@@ -469,9 +464,10 @@ impl Game {
                     }
 
                     let entity_def_key = self.entities[entity_i].state.entity_def_key.clone();
-                    let fighter = entity_def_key.as_ref();
-                    let action = self.entities[entity_i].state.action as usize;
-                    let action_enum = PlayerAction::from_u64(self.entities[entity_i].state.action);
+                    let entity_def_key = entity_def_key.as_ref();
+                    let action_key = self.entities[entity_i].state.action.clone();
+                    let action_key = action_key.as_ref();
+                    let action_enum = PlayerAction::from_str(self.entities[entity_i].state.action.as_ref());
                     let frame  = self.entities[entity_i].state.frame as usize;
                     {
                         let debug_entity = &mut self.debug_entities[entity_i];
@@ -540,11 +536,11 @@ impl Game {
                     if self.selector.moving {
                         // undo the operations used to render the entity
                         let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                        let angle = -self.entities[entity_i].frame_angle(&self.package.entities[fighter], &self.stage.surfaces); // rotate by the inverse of the angle
+                        let angle = -self.entities[entity_i].frame_angle(&self.package.entities[entity_def_key], &self.stage.surfaces); // rotate by the inverse of the angle
                         let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                         let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
                         let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
-                        self.package.move_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, distance);
+                        self.package.move_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, distance);
 
                         // end move
                         if os_input.mouse_pressed(0) {
@@ -554,22 +550,22 @@ impl Game {
                     else {
                         // copy frame
                         if os_input.key_pressed(VirtualKeyCode::V) {
-                            let frame = self.package.entities[fighter].actions[action].frames[frame].clone();
+                            let frame = self.package.entities[entity_def_key].actions[action_key].frames[frame].clone();
                             self.copied_frame = Some(frame);
                         }
                         // paste over current frame
                         if os_input.key_pressed(VirtualKeyCode::B) {
                             let action_frame = self.copied_frame.clone();
                             if let Some(action_frame) = action_frame {
-                                self.package.insert_fighter_frame(fighter, action, frame, action_frame);
-                                self.package.delete_fighter_frame(fighter, action, frame+1);
+                                self.package.insert_fighter_frame(entity_def_key, action_key, frame, action_frame);
+                                self.package.delete_fighter_frame(entity_def_key, action_key, frame+1);
                             }
                         }
 
                         // new frame
                         if os_input.key_pressed(VirtualKeyCode::M) {
                             for i in 0..repeat_frames {
-                                self.package.new_fighter_frame(fighter, action, frame + i as usize);
+                                self.package.new_fighter_frame(entity_def_key, action_key, frame + i as usize);
                             }
                             // We want to step just the entities current frame to simplify the animation work flow
                             // However we need to do a proper full step so that the history doesn't get mucked up.
@@ -578,13 +574,13 @@ impl Game {
                         // delete frame
                         if os_input.key_pressed(VirtualKeyCode::N) {
                             let i = 0; //for i in 0..repeat_frames { // TODO: Panic
-                                if self.package.delete_fighter_frame(fighter, action, frame - i as usize) {
+                                if self.package.delete_fighter_frame(entity_def_key, action_key, frame - i as usize) {
                                     // Correct any entities that are now on a nonexistent frame due to the frame deletion.
                                     // This is purely to stay on the same action for usability.
                                     // The entity itself must handle being on a frame that has been deleted in order for replays to work.
                                     for any_entity in &mut self.entities.values_mut() {
-                                        if any_entity.state.entity_def_key == fighter && any_entity.state.action as usize == action
-                                            && any_entity.state.frame as usize == self.package.entities[fighter].actions[action].frames.len()
+                                        if any_entity.state.entity_def_key == entity_def_key && any_entity.state.action == action_key
+                                            && any_entity.state.frame as usize == self.package.entities[entity_def_key].actions[action_key].frames.len()
                                         {
                                             any_entity.state.frame -= 1;
                                         }
@@ -606,7 +602,7 @@ impl Game {
                         }
                         // delete collisionbox
                         if os_input.key_pressed(VirtualKeyCode::D) {
-                            self.package.delete_fighter_colboxes(fighter, action, frame, &self.selector.colboxes);
+                            self.package.delete_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes);
                             self.update_frame();
                         }
                         // add collisionbox
@@ -619,7 +615,7 @@ impl Game {
                                     let point = (entity.relative_f(m_x - p_x), m_y - p_y);
                                     let new_colbox = CollisionBox::new(point);
 
-                                    self.package.append_fighter_colbox(fighter, action, frame, new_colbox)
+                                    self.package.append_fighter_colbox(entity_def_key, action_key, frame, new_colbox)
                                 };
                                 self.update_frame();
                                 self.selector.colboxes.insert(selected);
@@ -627,25 +623,25 @@ impl Game {
                         }
                         // resize collisionbox
                         if os_input.key_pressed(VirtualKeyCode::LBracket) {
-                            self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, -0.1);
+                            self.package.resize_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, -0.1);
                         }
                         if os_input.key_pressed(VirtualKeyCode::RBracket) {
-                            self.package.resize_fighter_colboxes(fighter, action, frame, &self.selector.colboxes, 0.1);
+                            self.package.resize_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, 0.1);
                         }
                         if os_input.key_pressed(VirtualKeyCode::Comma) {
                             if os_input.held_shift() {
-                                self.package.fighter_colboxes_order_set_first(fighter, action, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_set_first(entity_def_key, action_key, frame, &self.selector.colboxes)
                             }
                             else {
-                                self.package.fighter_colboxes_order_decrease(fighter, action, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_decrease(entity_def_key, action_key, frame, &self.selector.colboxes)
                             }
                         }
                         if os_input.key_pressed(VirtualKeyCode::Period) {
                             if os_input.held_shift() {
-                                self.package.fighter_colboxes_order_set_last(fighter, action, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_set_last(entity_def_key, action_key, frame, &self.selector.colboxes)
                             }
                             else {
-                                self.package.fighter_colboxes_order_increase(fighter, action, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_increase(entity_def_key, action_key, frame, &self.selector.colboxes)
                             }
                         }
                         // set hitbox angle
@@ -656,14 +652,14 @@ impl Game {
 
                                 let x = entity.relative_f(m_x - p_x);
                                 let y = m_y - p_y;
-                                self.package.point_hitbox_angles_to(fighter, action, frame, &self.selector.colboxes, x, y);
+                                self.package.point_hitbox_angles_to(entity_def_key, action_key, frame, &self.selector.colboxes, x, y);
                             }
                         }
 
                         // handle single selection
                         if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
                             let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[fighter], &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[entity_def_key], &self.stage.surfaces);
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
@@ -693,7 +689,7 @@ impl Game {
                         // handle multiple selection
                         if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
                             let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[fighter], &self.stage.surfaces);
+                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[entity_def_key], &self.stage.surfaces);
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
@@ -1246,9 +1242,10 @@ impl Game {
         }
 
         let players_count = self.players_iter().count();
+        let eliminated: &str = PlayerAction::Eliminated.into();
         if self.time_out() ||
-           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != PlayerAction::Eliminated.to_u64().unwrap()).count() == 0) ||
-           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != PlayerAction::Eliminated.to_u64().unwrap()).count() == 1)
+           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != eliminated).count() == 0) ||
+           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != eliminated).count() == 1)
         {
             self.state = self.generate_game_results(input);
         }

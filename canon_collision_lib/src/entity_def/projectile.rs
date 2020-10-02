@@ -1,5 +1,5 @@
 #[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize)]
 pub enum ProjectileAction {
     Spawn,
     Travel,

@@ -3,56 +3,21 @@ pub mod player;
 pub mod projectile;
 pub mod toriel_fireball;
 
-use player::PlayerAction;
-
-use strum::IntoEnumIterator;
-use num_traits::ToPrimitive;
-use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
+//use strum::IntoEnumIterator;
+use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec, ContextVec};
 
 use crate::files::engine_version;
 use crate::geometry::Rect;
 
 impl Default for EntityDef {
     fn default() -> EntityDef {
-        let action_def = ActionDef {
-            frames: ContextVec::from_vec(vec!(ActionFrame::default())),
-            iasa:   0,
-        };
-        let mut actions: ContextVec<ActionDef> = ContextVec::new();
-        for action in PlayerAction::iter() {
-            let mut action_def_new = action_def.clone();
-            action_def_new.frames[0].pass_through = match action {
-                PlayerAction::Damage     | PlayerAction::DamageFly |
-                PlayerAction::DamageFall | PlayerAction::AerialDodge |
-                PlayerAction::Uair       | PlayerAction::Dair |
-                PlayerAction::Fair       | PlayerAction::Bair |
-                PlayerAction::Nair => false,
-                _ => true
-            };
-            action_def_new.frames[0].ledge_cancel = match action {
-                PlayerAction::Teeter | PlayerAction::TeeterIdle |
-                PlayerAction::RollB  | PlayerAction::RollF |
-                PlayerAction::TechB  | PlayerAction::TechF |
-                PlayerAction::MissedTechGetupB | PlayerAction::MissedTechGetupF |
-                PlayerAction::SpotDodge
-                  => false,
-                _ => true
-            };
-            action_def_new.frames[0].use_platform_angle = match action {
-                PlayerAction::Dsmash | PlayerAction::Fsmash |
-                PlayerAction::Dtilt  | PlayerAction::MissedTechIdle
-                  => true,
-                _ => false
-            };
-            actions.push(action_def_new);
-        }
-
         EntityDef {
             engine_version: engine_version(),
 
             // css render
             name:       "Base Entity".to_string(),
-            css_action: PlayerAction::Idle.to_u64().unwrap(),
+            //css_action: PlayerAction::Idle.to_u64().unwrap(),
+            css_action: 0,
             css_scale:  1.0,
 
             ty: EntityDefType::Generic,
@@ -98,7 +63,7 @@ impl Default for EntityDef {
             run_turn_flip_dir_frame:  30,
             tilt_turn_flip_dir_frame: 5,
             tilt_turn_into_dash_iasa: 5,
-            actions:                  actions,
+            actions:                  KeyedContextVec::new(),
         }
     }
 }
@@ -155,7 +120,7 @@ pub struct EntityDef {
     pub run_turn_flip_dir_frame:  u64,
     pub tilt_turn_flip_dir_frame: u64,
     pub tilt_turn_into_dash_iasa: u64,
-    pub actions:                  ContextVec<ActionDef>,
+    pub actions:                  KeyedContextVec<ActionDef>,
 }
 
 impl EntityDef {

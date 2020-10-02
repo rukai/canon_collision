@@ -1,5 +1,5 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{Entities, DebugEntity, StepContext, EntityKey, ActionResult};
+use crate::entity::{Entities, StepContext, EntityKey, ActionResult};
 use crate::entity::components::body::{Body, PhysicsResult, Location};
 use crate::entity::components::action_state::ActionState;
 
@@ -7,7 +7,6 @@ use canon_collision_lib::entity_def::EntityDef;
 use canon_collision_lib::entity_def::item::ItemAction;
 
 use cgmath::Quaternion;
-use num_traits::FromPrimitive;
 use treeflection::KeyedContextVec;
 
 pub enum MessageItem {
@@ -40,7 +39,7 @@ impl Item {
     }
 
     pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(action) = ItemAction::from_u64(state.action) {
+        if let Some(action) = state.get_action() {
             match action {
                 ItemAction::Held => { }
                 ItemAction::Spawn |
@@ -60,7 +59,7 @@ impl Item {
             }
         }
 
-        let action_frames = context.entity_def.actions[state.action as usize].frames.len() as i64;
+        let action_frames = context.entity_def.actions[state.action.as_ref()].frames.len() as i64;
         if state.frame + 1 >= action_frames {
             self.action_expired(state)
         } else {
@@ -75,7 +74,7 @@ impl Item {
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let fighter_frame = &context.entity_def.actions[state.action as usize].frames[state.frame as usize];
+        let fighter_frame = &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
         match self.body.physics_step(context, state, fighter_frame) {
             Some(PhysicsResult::Fall) => ActionResult::set_action(ItemAction::Fall),
             Some(PhysicsResult::Land) => ActionResult::set_action(ItemAction::Idle),
@@ -93,7 +92,7 @@ impl Item {
     }
 
     fn action_expired(&mut self, state: &ActionState) -> Option<ActionResult> {
-        ActionResult::set_action(match ItemAction::from_u64(state.action) {
+        ActionResult::set_action(match state.get_action() {
             None => panic!("Custom defined action expirations have not been implemented"),
 
             // Idle
@@ -143,18 +142,6 @@ impl Item {
             }
         }
         set_action
-    }
-
-    pub fn debug_print(&self, entities: &KeyedContextVec<EntityDef>, state: &ActionState, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
-        let mut lines = vec!();
-        if debug.action {
-            lines.push(state.debug_string::<ItemAction>(entities, index));
-        }
-        if debug.physics {
-            lines.push(self.body.debug_string(index));
-        }
-
-        lines
     }
 
     pub fn held_render_angle(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>) -> Option<Quaternion<f32>> {

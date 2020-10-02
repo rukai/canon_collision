@@ -2,35 +2,38 @@ use crate::entity::EntityKey;
 
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
 
-use num_traits::{FromPrimitive, ToPrimitive};
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use treeflection::KeyedContextVec;
 
+use std::str::FromStr;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ActionState {
-    pub entity_def_key:    String,
-    pub action:            u64,
-    pub frame:             i64, // TODO: u64
-    pub frame_no_restart:  i64,
-    pub hitlist:           Vec<EntityKey>,
-    pub hitlag:            Hitlag,
+    // If I need to, I could make lookups for entity_def_key and action more effecient by storing as a usize, by calling actions.key_to_index
+    pub entity_def_key:   String,
+    pub action:           String,
+    pub frame:            i64, // TODO: u64
+    pub frame_no_restart: i64,
+    pub hitlist:          Vec<EntityKey>,
+    pub hitlag:           Hitlag,
 }
 
 impl ActionState {
-    pub fn new<T: ToPrimitive>(entity_def_key: String, action: T) -> ActionState {
+    pub fn new<T: Into<&'static str>>(entity_def_key: String, action: T) -> ActionState {
         ActionState {
             entity_def_key,
-            action:           action.to_u64().unwrap(),
+            action:           action.into().to_string(),
             frame:            0,
             frame_no_restart: 0,
             hitlist:          vec!(),
             hitlag:           Hitlag::None,
         }
     }
+
     pub fn get_entity_frame<'a>(&self, entity_def: &'a EntityDef) -> Option<&'a ActionFrame> {
-        if entity_def.actions.len() > self.action as usize {
-            let frames = &entity_def.actions[self.action as usize].frames;
+        if entity_def.actions.contains_key(&self.action) {
+            let frames = &entity_def.actions[self.action.as_ref()].frames;
             if frames.len() > self.frame as usize {
                 return Some(&frames[self.frame as usize]);
             }
@@ -38,14 +41,18 @@ impl ActionState {
         None
     }
 
-    pub fn debug_string<T: FromPrimitive + std::fmt::Debug>(&self, entity_defs: &KeyedContextVec<EntityDef>, index: EntityKey) -> String {
-        let action = T::from_u64(self.action).unwrap();
+    pub fn debug_string(&self, entity_defs: &KeyedContextVec<EntityDef>, index: EntityKey) -> String {
         let entity_def = &entity_defs[self.entity_def_key.as_ref()];
-        let last_action_frame = entity_def.actions[self.action as usize].frames.len() as u64 - 1;
-        let iasa = entity_def.actions[self.action as usize].iasa;
+        let action = &entity_def.actions[self.action.as_ref()];
+        let last_action_frame = action.frames.len() as u64 - 1;
+        let iasa = action.iasa;
 
-        format!("Entity: {:?}  \"{}\"  hitlag: {:?}  action: {:?}  frame: {}/{}  frame no restart: {}  IASA: {}",
-            index, self.entity_def_key, self.hitlag, action, self.frame, last_action_frame, self.frame_no_restart, iasa)
+        format!("Entity: {:?}  \"{}\"  hitlag: {:?}  action: {}  frame: {}/{}  frame no restart: {}  IASA: {}",
+            index, self.entity_def_key, self.hitlag, self.action, self.frame, last_action_frame, self.frame_no_restart, iasa)
+    }
+
+    pub fn get_action<T: FromStr>(&self) -> Option<T> {
+        T::from_str(self.action.as_ref()).ok()
     }
 }
 

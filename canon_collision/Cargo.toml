@@ -16,8 +16,6 @@ byteorder = "1"
 chrono = { version = "0.4", features = ["serde"] }
 strum = "0.19"
 strum_macros = "0.19"
-num-traits = "0.2"
-num-derive = "0.3"
 getopts = "0.2"
 log = "0.4"
 lyon = "0.16"

@@ -1,8 +1,5 @@
-use treeflection::{Node, NodeRunner, NodeToken};
-use num_traits::FromPrimitive;
-
 #[repr(u64)]
-#[derive(Clone, PartialEq, Debug, ToPrimitive, FromPrimitive, EnumIter, IntoStaticStr, Serialize, Deserialize, Node)]
+#[derive(Clone, PartialEq, Debug, EnumString, IntoStaticStr, EnumIter, Serialize, Deserialize)]
 pub enum PlayerAction {
     // Idle
     Spawn,
@@ -174,16 +171,6 @@ impl PlayerAction {
             &PlayerAction::Land
               => true,
             _ => false
-        }
-    }
-
-    pub fn action_index_to_string(action_index: usize) -> String {
-        match PlayerAction::from_u64(action_index as u64) {
-            Some(action) => {
-                let action: &str = action.into();
-                action.to_string()
-            }
-            None => format!("{}", action_index),
         }
     }
 }

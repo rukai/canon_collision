@@ -137,7 +137,7 @@ impl Package {
         Ok(())
     }
 
-    pub fn new_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) {
+    pub fn new_fighter_frame(&mut self, fighter: &str, action: &str, frame: usize) {
         let new_frame = {
             let action_frames = &self.entities[fighter].actions[action].frames;
             action_frames[frame].clone()
@@ -145,20 +145,20 @@ impl Package {
         self.insert_fighter_frame(fighter, action, frame, new_frame);
     }
 
-    pub fn insert_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize, action_frame: ActionFrame) {
+    pub fn insert_fighter_frame(&mut self, fighter: &str, action: &str, frame: usize, action_frame: ActionFrame) {
         let action_frames = &mut self.entities[fighter].actions[action].frames;
 
         action_frames.insert(frame, action_frame.clone());
 
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       action_frame,
         });
     }
 
-    pub fn delete_fighter_frame(&mut self, fighter: &str, action: usize, frame: usize) -> bool {
+    pub fn delete_fighter_frame(&mut self, fighter: &str, action: &str, frame: usize) -> bool {
         let action_frames = &mut self.entities[fighter].actions[action].frames;
 
         // there must always be at least one frame and only delete frames that exist
@@ -167,7 +167,7 @@ impl Package {
 
             self.package_updates.push(PackageUpdate::DeleteFighterFrame {
                 fighter:     fighter.to_string(),
-                action:      action,
+                action:      action.to_string(),
                 frame_index: frame,
             });
             true
@@ -180,7 +180,7 @@ impl Package {
     /// the added collisionbox is linked to the specified collisionboxes
     /// returns the index the collisionbox was added to.
     pub fn append_fighter_colbox(
-        &mut self, fighter: &str, action: usize, frame: usize, new_colbox: CollisionBox
+        &mut self, fighter: &str, action: &str, frame: usize, new_colbox: CollisionBox
     ) -> usize {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         let new_colbox_index = fighter_frame.colboxes.len();
@@ -188,12 +188,12 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
@@ -201,7 +201,7 @@ impl Package {
         new_colbox_index
     }
 
-    pub fn delete_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, colboxes_to_delete: &HashSet<usize>) {
+    pub fn delete_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, colboxes_to_delete: &HashSet<usize>) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -220,18 +220,18 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
-    pub fn move_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, moved_colboxes: &HashSet<usize>, distance: (f32, f32)) {
+    pub fn move_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, moved_colboxes: &HashSet<usize>, distance: (f32, f32)) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -245,18 +245,18 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
-    pub fn point_hitbox_angles_to(&mut self, fighter: &str, action: usize, frame: usize, set_hitboxes: &HashSet<usize>, x: f32, y: f32) {
+    pub fn point_hitbox_angles_to(&mut self, fighter: &str, action: &str, frame: usize, set_hitboxes: &HashSet<usize>, x: f32, y: f32) {
         let colboxes = &mut self.entities[fighter].actions[action].frames[frame].colboxes;
         for i in set_hitboxes {
             let colbox = &mut colboxes[*i];
@@ -267,7 +267,7 @@ impl Package {
         }
     }
 
-    pub fn resize_fighter_colboxes(&mut self, fighter: &str, action: usize, frame: usize, resized_colboxes: &HashSet<usize>, size_diff: f32) {
+    pub fn resize_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, resized_colboxes: &HashSet<usize>, size_diff: f32) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -280,19 +280,19 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_increase(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_increase(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -306,19 +306,19 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the back
-    pub fn fighter_colboxes_order_set_last(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_set_last(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -331,19 +331,19 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_decrease(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_decrease(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -356,19 +356,19 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_set_first(&mut self, fighter: &str, action: usize, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_set_first(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -382,12 +382,12 @@ impl Package {
 
         self.package_updates.push(PackageUpdate::DeleteFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
         });
         self.package_updates.push(PackageUpdate::InsertFighterFrame {
             fighter:     fighter.to_string(),
-            action:      action,
+            action:      action.to_string(),
             frame_index: frame,
             frame:       fighter_frame.clone(),
         });
@@ -467,8 +467,8 @@ Accessors:
 #[derive(Clone, Serialize, Deserialize)]
 pub enum PackageUpdate {
     Package (Package),
-    DeleteFighterFrame { fighter: String, action: usize, frame_index: usize },
-    InsertFighterFrame { fighter: String, action: usize, frame_index: usize, frame: ActionFrame },
+    DeleteFighterFrame { fighter: String, action: String, frame_index: usize },
+    InsertFighterFrame { fighter: String, action: String, frame_index: usize, frame: ActionFrame },
     DeleteStage { index: usize, key: String },
     InsertStage { index: usize, key: String, stage: Stage },
 }
