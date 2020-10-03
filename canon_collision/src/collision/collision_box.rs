@@ -1,4 +1,4 @@
-use crate::entity::player::Player;
+use crate::entity::fighters::player::Player;
 use crate::entity::{Entities, EntityKey, EntityType};
 use crate::entity::components::action_state::ActionState;
 
@@ -28,7 +28,8 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
 
                 'hitbox_atk: for colbox_atk in &colboxes_atk {
                     if let CollisionBoxRole::Hit (ref hitbox_atk) = colbox_atk.role {
-                        if let EntityType::Player(player_defend) = &entity_defend.ty {
+                        if let EntityType::Fighter(fighter) = &entity_defend.ty {
+                            let player_defend = fighter.get_player();
                             if colbox_shield_collision_check(entity_atk_xy, colbox_atk, entity_defend_xy, player_defend, entity_defend_def, &entity_defend.state) {
                                 result[entity_atk_i].push(CollisionResult::HitShieldAtk {
                                     hitbox: hitbox_atk.clone(),

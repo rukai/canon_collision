@@ -93,6 +93,7 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     else if entity_engine_version < engine_version() {
         for upgrade_from in entity_engine_version..engine_version() {
             match upgrade_from {
+                19 => { upgrade_entity19(&mut entity) }
                 18 => { upgrade_entity18(&mut entity, file_name) }
                 17 => { upgrade_entity17(&mut entity) }
                 16 => { upgrade_entity16(&mut entity) }
@@ -114,6 +115,21 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     }
 
     println!("Upgraded entity from version {} to version {}.", entity_engine_version, engine_version());
+}
+
+fn upgrade_entity19(entity: &mut Value) {
+    if let Value::Map(entity) = entity {
+        entity.insert(Value::Text("css_action".into()), Value::Text("Idle".into()));
+        if let Some(entity_type) = entity.get_mut(&Value::Text("ty".into())) {
+            if let Value::Map(entity_type) = entity_type {
+                if let Some(fighter) = entity_type.get_mut(&Value::Text("Fighter".into())) {
+                    if let Value::Map(fighter) = fighter {
+                        fighter.insert(Value::Text("ty".into()), Value::Text("Toriel".into()));
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn upgrade_entity18(entity: &mut Value, file_name: &str) {

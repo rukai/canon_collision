@@ -1,6 +1,6 @@
 use crate::camera::Camera;
 use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
-use crate::entity::{EntityType, Entities, DebugEntities};
+use crate::entity::{Entities, DebugEntities};
 use crate::rules::Rules;
 
 use canon_collision_lib::files;
@@ -49,16 +49,13 @@ impl Replay {
     pub fn new(game: &Game, input: &Input) -> Replay {
         let mut selected_players = vec!();
         for (_, entity) in &game.entities() {
-            match &entity.ty {
-                EntityType::Player (player) => {
-                    selected_players.push(
-                        PlayerSetup {
-                            fighter: entity.state.entity_def_key.clone(),
-                            team:    player.team,
-                        }
-                    );
-                }
-                _ => { }
+            if let Some(fighter) = entity.ty.get_player() {
+                selected_players.push(
+                    PlayerSetup {
+                        fighter: entity.state.entity_def_key.clone(),
+                        team:    fighter.team,
+                    }
+                );
             }
         }
 

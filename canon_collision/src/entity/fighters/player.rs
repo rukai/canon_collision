@@ -193,16 +193,16 @@ impl Player {
         self.body.location = Location::Airbourne { x, y };
     }
 
-    fn interruptible(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame >= fighter.actions[state.action.as_ref()].iasa
+    fn interruptible(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
+        state.frame >= entity_def.actions[state.action.as_ref()].iasa
     }
 
-    fn first_interruptible(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame == fighter.actions[state.action.as_ref()].iasa
+    fn first_interruptible(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
+        state.frame == entity_def.actions[state.action.as_ref()].iasa
     }
 
-    fn last_frame(&self, fighter: &EntityDef, state: &ActionState) -> bool {
-        state.frame == fighter.actions[state.action.as_ref()].frames.len() as i64 - 1
+    fn last_frame(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
+        state.frame == entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1
     }
 
     pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize, state: &ActionState) -> Option<ActionResult> {
@@ -232,7 +232,9 @@ impl Player {
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, state: &ActionState, col_results: &[CollisionResult]) -> Option<ActionResult> {
-        // TODO: Maybe we should provide a single col_result at a time so that we can handle all ActionResults
+        // TODO: Maybe we should provide a single col_result at a time so that we can handle all ActionResults.
+        //       Ah! or maybe we should filter out the collisions that can should override other
+        //       collisions, consistently giving priority to a specific type of collision.
         let mut set_action = None;
         for col_result in col_results {
             match col_result {
@@ -266,7 +268,7 @@ impl Player {
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
                     let entity_def = &context.entities[entity_defend_i];
-                    if let EntityType::Player (player_def) = &entity_def.ty {
+                    if let Some(player_def) = &entity_def.ty.get_player() {
                         if let &Some(ref power_shield) = power_shield {
                             if let (Some(PlayerAction::PowerShield), &Some(ref stun)) = (state.get_action(), &power_shield.enemy_stun) {
                                 if stun.window > entity_def.state.frame as u64 {
@@ -1969,7 +1971,7 @@ impl Player {
             if let EntityType::Item (item) = &entity.ty {
                 if let Location::ItemHeldByPlayer (player_entity_key) = item.body.location {
                     if let Some(player) = entities.get(player_entity_key) {
-                        if let EntityType::Player (player) = &player.ty {
+                        if let Some(player) = &player.ty.get_player() {
                             if player.id == self.id {
                                 return Some(key);
                             }

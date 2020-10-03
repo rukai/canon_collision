@@ -16,7 +16,8 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
     let mut player_grabs_last_len = 0;
     for _ in 0..10 {
         for (player_i, entity_player) in entities.iter() {
-            if let EntityType::Player (player) = &entity_player.ty {
+            if let EntityType::Fighter (fighter) = &entity_player.ty {
+                let player = fighter.get_player();
                 if player.get_held_item(entities).is_none() {
                     let (player_x, player_y) = entity_player.public_bps_xy(entities, entity_definitions, surfaces);
                     let player_item_grab_box = entity_player.item_grab_box(entities, entity_definitions, surfaces);

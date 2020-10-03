@@ -2,7 +2,7 @@ use canon_collision_lib::entity_def::{CollisionBox, ECB};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::Surface;
-use crate::entity::player::RenderShield;
+use crate::entity::fighters::player::RenderShield;
 use crate::game::{SurfaceSelection, RenderRect};
 use crate::graphics;
 

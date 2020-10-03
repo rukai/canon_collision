@@ -1,13 +1,14 @@
 pub(crate) mod components;
 pub(crate) mod item;
-pub(crate) mod player;
 pub(crate) mod projectile;
 pub(crate) mod toriel_fireball;
+pub(crate) mod fighters;
 
-use player::{Player, RenderPlayer, MessagePlayer};
+use fighters::player::{Player, RenderPlayer, MessagePlayer};
 use projectile::Projectile;
 use toriel_fireball::TorielFireball;
 use item::{Item, MessageItem};
+use fighters::Fighter;
 use components::action_state::{ActionState, Hitlag};
 use components::body::Body;
 
@@ -35,10 +36,19 @@ pub type DebugEntities = SparseSecondaryMap<EntityKey, DebugEntity>;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum EntityType {
-    Player (Player),
+    Fighter (Fighter),
     Projectile (Projectile),
     Item (Item),
     TorielFireball (TorielFireball),
+}
+
+impl EntityType {
+    pub fn get_player(&self) -> Option<&Player> {
+        match self {
+            EntityType::Fighter(fighter) => Some(&fighter.get_player()),
+            _ => None
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -68,8 +78,8 @@ impl Entity {
 
     pub fn face_right(&self) -> bool {
         match &self.ty {
-            EntityType::Player (player) => player.body.face_right,
-            EntityType::Item   (item)   => item.body.face_right,
+            EntityType::Fighter (fighter) => fighter.get_player().body.face_right,
+            EntityType::Item    (item)    => item.body.face_right,
             EntityType::Projectile (projectile) => {
                 let angle = projectile.angle % (PI * 2.0); // TODO: does this handle negative numbers?
                 let face_left = angle > PI / 2.0 && angle < PI * 3.0 / 2.0;
@@ -86,7 +96,7 @@ impl Entity {
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         let action_frame = self.get_entity_frame(&entity_defs[self.state.entity_def_key.as_ref()]);
         match &self.ty {
-            EntityType::Player         (player)     => player.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Fighter        (fighter)    => fighter.get_player().body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Item           (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Projectile     (projectile) => (projectile.x, projectile.y),
             EntityType::TorielFireball (projectile) => (projectile.x, projectile.y),
@@ -97,35 +107,35 @@ impl Entity {
     pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32, f32) {
         let action_frame = self.get_entity_frame(&entity_defs[self.state.entity_def_key.as_ref()]);
         match &self.ty {
-            EntityType::Player     (player)     => player.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
-            EntityType::Item       (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
-            EntityType::Projectile (projectile) => (projectile.x, projectile.y, 0.0),
+            EntityType::Fighter        (fighter)    => fighter.get_player().body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Item           (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Projectile     (projectile) => (projectile.x, projectile.y, 0.0),
             EntityType::TorielFireball (projectile) => (projectile.x, projectile.y, 0.0),
         }
     }
 
     pub fn item_grab(&mut self, hit_key: EntityKey, hit_id: Option<usize>) {
         let action_result = match &mut self.ty {
-            EntityType::Player     (player) => player.item_grab(),
-            EntityType::Item       (item)   => item.grabbed(hit_key, hit_id),
-            _                               => None
+            EntityType::Fighter    (fighter) => fighter.get_player_mut().item_grab(),
+            EntityType::Item       (item)    => item.grabbed(hit_key, hit_id),
+            _                                => None
         };
         self.process_action_result(action_result);
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
         let action_result = match &mut self.ty {
-            EntityType::Player     (player) => player.physics_step(context, &self.state, game_frame, goal),
-            EntityType::Item       (item)   => item.physics_step(context, &self.state),
-            EntityType::Projectile (_)      => None,
-            EntityType::TorielFireball (_)  => None,
+            EntityType::Fighter    (fighter) => fighter.get_player_mut().physics_step(context, &self.state, game_frame, goal),
+            EntityType::Item       (item)    => item.physics_step(context, &self.state),
+            EntityType::Projectile (_)       => None,
+            EntityType::TorielFireball (_)   => None,
         };
         self.process_action_result(action_result);
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
         let action_result = match &mut self.ty {
-            EntityType::Player     (player)         => player.step_collision(context, &self.state, col_results),
+            EntityType::Fighter    (fighter)        => fighter.get_player_mut().step_collision(context, &self.state, col_results),
             EntityType::Item       (item)           => item.step_collision(context, &self.state, col_results),
             EntityType::Projectile (projectile)     => projectile.step_collision(col_results),
             EntityType::TorielFireball (projectile) => projectile.step_collision(col_results),
@@ -196,7 +206,7 @@ impl Entity {
         }
 
         match &mut self.ty {
-            EntityType::Player     (player)         => player.action_step(context, &self.state),
+            EntityType::Fighter    (fighter)        => fighter.action_step(context, &self.state),
             EntityType::Item       (item)           => item.action_step(context, &self.state),
             EntityType::Projectile (projectile)     => projectile.action_step(context, &self.state),
             EntityType::TorielFireball (projectile) => projectile.action_step(context, &self.state),
@@ -205,7 +215,7 @@ impl Entity {
 
     pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
         match &self.ty {
-            EntityType::Player (player) => player.grabbing_xy(entities, entity_defs, surfaces, &self.state),
+            EntityType::Fighter (fighter) => fighter.get_player().grabbing_xy(entities, entity_defs, surfaces, &self.state),
             _ => (0.0, 0.0),
         }
     }
@@ -213,7 +223,7 @@ impl Entity {
     /// TODO: Wont need this anymore when we make surfaces into entities as they will be generational
     pub fn platform_deleted(&mut self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize) {
         let action_result = match &mut self.ty {
-            EntityType::Player (player) => player.platform_deleted(entities, entity_defs, surfaces, deleted_platform_i, &self.state),
+            EntityType::Fighter (fighter) => fighter.get_player_mut().platform_deleted(entities, entity_defs, surfaces, deleted_platform_i, &self.state),
             _ => None
         };
         self.process_action_result(action_result);
@@ -222,7 +232,7 @@ impl Entity {
     pub fn frame_angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
         if let Some(entity_frame) = self.get_entity_frame(entity_def) {
             match &self.ty {
-                EntityType::Player (player) => player.body.angle(entity_frame, surfaces),
+                EntityType::Fighter (fighter) => fighter.get_player().body.angle(entity_frame, surfaces),
                 EntityType::Item (item) => item.body.angle(entity_frame, surfaces),
                 EntityType::Projectile (projectile) => projectile.angle,
                 EntityType::TorielFireball (_) => 0.0,
@@ -280,7 +290,7 @@ impl Entity {
     /// or none if not owned by a player
     pub fn player_id(&self) -> Option<usize> {
         match &self.ty {
-            EntityType::Player (player) => Some(player.id),
+            EntityType::Fighter (fighter) => Some(fighter.get_player().id),
             EntityType::Item (item) => item.owner_id,
             EntityType::Projectile (projectile) => projectile.owner_id,
             EntityType::TorielFireball (projectile) => projectile.owner_id,
@@ -289,7 +299,7 @@ impl Entity {
 
     pub fn cam_area(&self, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
         match &self.ty {
-            EntityType::Player (player) => player.cam_area(&self.state, cam_max, entities, entity_defs, surfaces),
+            EntityType::Fighter (fighter) => fighter.get_player().cam_area(&self.state, cam_max, entities, entity_defs, surfaces),
             _ => None
         }
     }
@@ -318,7 +328,7 @@ impl Entity {
         }
 
         match &self.ty {
-            EntityType::Player     (player)     => lines.extend_from_slice(&player.debug_print(player_input.unwrap(), debug, i)),
+            EntityType::Fighter     (fighter)     => lines.extend_from_slice(&fighter.get_player().debug_print(player_input.unwrap(), debug, i)),
             EntityType::Projectile (projectile) => lines.extend_from_slice(&projectile.debug_print(debug, i)),
             _ => { }
         }
@@ -328,23 +338,23 @@ impl Entity {
 
     pub fn body(&self) -> Option<&Body> {
         match &self.ty {
-            EntityType::Player (player) => Some(&player.body),
-            EntityType::Item (item)     => Some(&item.body),
-            _                           => None
+            EntityType::Fighter (fighter) => Some(&fighter.get_player().body),
+            EntityType::Item (item)       => Some(&item.body),
+            _                             => None
         }
     }
 
     pub fn body_mut(&mut self) -> Option<&mut Body> {
         match &mut self.ty {
-            EntityType::Player (player) => Some(&mut player.body),
-            EntityType::Item (item)     => Some(&mut item.body),
-            _                           => None
+            EntityType::Fighter (fighter) => Some(&mut fighter.get_player_mut().body),
+            EntityType::Item (item)       => Some(&mut item.body),
+            _                             => None
         }
     }
 
     pub fn team(&self) -> usize {
         match &self.ty {
-            EntityType::Player (player) => player.team,
+            EntityType::Fighter (fighter) => fighter.get_player().team,
             EntityType::Item (_) => 0,
             EntityType::Projectile (_) => 0,
             EntityType::TorielFireball (_) => 0,
@@ -353,7 +363,7 @@ impl Entity {
 
     pub fn particles(&self) -> Vec<Particle> {
         match &self.ty {
-            EntityType::Player (player) => player.particles.clone(),
+            EntityType::Fighter (fighter) => fighter.get_player().particles.clone(),
             _ => vec!(),
         }
     }
@@ -362,7 +372,7 @@ impl Entity {
         let fighter_color = graphics::get_team_color3(self.team());
         let entity_def = &entity_defs[self.state.entity_def_key.as_ref()];
 
-        let vector_arrows = if let EntityType::Player (player) = &self.ty {
+        let vector_arrows = if let Some(player) = &self.ty.get_player() {
             player.vector_arrows(&debug)
         } else {
             vec!()
@@ -380,7 +390,7 @@ impl Entity {
         }
 
         let render_type = match &self.ty {
-            EntityType::Player (player)     => RenderEntityType::Player (player.render(entities, entity_defs, surfaces, &self.state)),
+            EntityType::Fighter (fighter)   => RenderEntityType::Player (fighter.get_player().render(entities, entity_defs, surfaces, &self.state)),
             EntityType::Projectile (_)      => RenderEntityType::Projectile,
             EntityType::TorielFireball (_)  => RenderEntityType::Projectile,
             EntityType::Item (_)            => RenderEntityType::Item,

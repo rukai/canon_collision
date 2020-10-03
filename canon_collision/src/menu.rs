@@ -181,7 +181,8 @@ impl Menu {
             for selection in self.fighter_selections.iter_mut() {
                 if let Some(fighter_key) = selection.fighter {
                     let fighter = &fighters[fighter_key].1;
-                    if let Some(action) = fighter.actions.get(fighter.css_action as usize) {
+                    if fighter.actions.contains_key(&fighter.css_action) {
+                        let action = &fighter.actions[fighter.css_action.as_ref()];
                         selection.animation_frame = (selection.animation_frame + 1) % action.frames.len();
                     }
                 }

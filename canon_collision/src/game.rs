@@ -1,7 +1,9 @@
 use crate::camera::Camera;
 use crate::collision::collision_box;
 use crate::collision::item_grab;
-use crate::entity::player::{Player};
+use crate::entity::fighters::Fighter;
+use crate::entity::fighters::player::Player;
+use crate::entity::fighters::toriel::Toriel;
 use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
 use crate::entity::components::action_state::ActionState;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
@@ -13,7 +15,7 @@ use crate::rules::{Rules, Goal};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::entity_def::{ActionFrame, CollisionBox};
+use canon_collision_lib::entity_def::{ActionFrame, CollisionBox, EntityDefType, FighterType};
 use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::Input;
@@ -99,12 +101,20 @@ impl Game {
         {
             for (i, player) in setup.players.iter().enumerate() {
                 // Stage can have less spawn points then players
-                let fighter = player.fighter.clone();
+                let fighter_key = player.fighter.clone();
+                let entity_def = &package.entities[fighter_key.as_ref()];
                 let team = player.team;
-                entities.insert(Entity {
-                    ty: EntityType::Player(Player::new(fighter.as_ref(), team, i, &stage, &package, &setup.rules)),
-                    state: ActionState::new(fighter, PlayerAction::Spawn),
-                });
+
+                if let EntityDefType::Fighter(fighter_def) = &entity_def.ty {
+                    let player = Player::new(fighter_key.as_ref(), team, i, &stage, &package, &setup.rules);
+                    let fighter = match fighter_def.ty {
+                        FighterType::Toriel => Fighter::Toriel(Toriel::new(player)),
+                        FighterType::Dave   => Fighter::Toriel(Toriel::new(player)),
+                    };
+                    let ty = EntityType::Fighter(fighter);
+                    let state = ActionState::new(fighter_key, PlayerAction::Spawn);
+                    entities.insert(Entity { ty, state });
+                }
             }
         }
 
@@ -522,9 +532,9 @@ impl Game {
 
                     // by adding the same amount of frames that are skipped in the entity logic,
                     // the user continues to see the same frames as they step through the action
-                    let repeat_frames = if let EntityType::Player (player) = &self.entities[entity_i].ty {
+                    let repeat_frames = if let Some(fighter) = &self.entities[entity_i].ty.get_player() {
                         if action_enum.as_ref().map_or(false, |x| x.is_land()) {
-                            player.land_frame_skip + 1
+                            fighter.land_frame_skip + 1
                         } else {
                             1
                         }
@@ -1262,10 +1272,9 @@ impl Game {
     }
 
     fn players_iter(&self) -> impl Iterator<Item=(&Player, &ActionState)> {
-        self.entities.values().filter_map(|x| match &x.ty {
-            EntityType::Player(player) => Some((player, &x.state)),
-            _ => None,
-        })
+        self.entities.values().filter_map(|x|
+            x.ty.get_player().map(|f| (f, &x.state))
+        )
     }
 
     pub fn generate_game_results(&self, input: &Input) -> GameState {

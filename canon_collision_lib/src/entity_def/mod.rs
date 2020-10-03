@@ -1,6 +1,8 @@
 pub mod item;
 pub mod player;
 pub mod projectile;
+pub mod toriel;
+pub mod dave;
 pub mod toriel_fireball;
 
 use strum::IntoEnumIterator;
@@ -12,6 +14,9 @@ use crate::geometry::Rect;
 use player::PlayerAction;
 use projectile::ProjectileAction;
 use item::ItemAction;
+use toriel::TorielAction;
+use dave::DaveAction;
+
 use toriel_fireball::TorielFireballAction;
 
 impl Default for EntityDef {
@@ -20,9 +25,9 @@ impl Default for EntityDef {
             engine_version: engine_version(),
 
             // css render
-            name:       "Base Entity".to_string(),
+            name:       "Base Entity".into(),
             //css_action: PlayerAction::Idle.to_u64().unwrap(),
-            css_action: 0,
+            css_action: "".into(),
             css_scale:  1.0,
 
             ty: EntityDefType::default(),
@@ -79,7 +84,7 @@ pub struct EntityDef {
 
     // css render
     pub name:       String,
-    pub css_action: u64,
+    pub css_action: String,
     pub css_scale:  f32,
 
     pub ty: EntityDefType,
@@ -166,9 +171,12 @@ pub enum EntityDefType {
 impl EntityDefType {
     pub fn get_action_names(&self) -> Box<dyn Iterator<Item=&'static str>> {
         match self {
-            EntityDefType::Fighter (_)    => Box::new(PlayerAction::iter().map(|x| x.into())),
-            EntityDefType::Item           => Box::new(ItemAction::iter().map(|x| x.into())),
-            EntityDefType::Projectile     => Box::new(ProjectileAction::iter().map(|x| x.into())),
+            EntityDefType::Fighter (fighter) =>
+                Box::new(PlayerAction::iter().map(|x| x.into()).chain(
+                    fighter.ty.get_action_names()
+                )),
+            EntityDefType::Item           => Box::new(ItemAction          ::iter().map(|x| x.into())),
+            EntityDefType::Projectile     => Box::new(ProjectileAction    ::iter().map(|x| x.into())),
             EntityDefType::TorielFireball => Box::new(TorielFireballAction::iter().map(|x| x.into())),
         }
     }
@@ -182,13 +190,36 @@ impl Default for EntityDefType {
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct Fighter {
+    pub ty:                       FighterType,
     pub air_jumps:                u64,
 }
 
 impl Default for Fighter {
     fn default() -> Self {
         Fighter {
+            ty:                       FighterType::default(),
             air_jumps:                1,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Node)]
+pub enum FighterType {
+    Toriel,
+    Dave,
+}
+
+impl Default for FighterType {
+    fn default() -> Self {
+        FighterType::Toriel
+    }
+}
+
+impl FighterType {
+    pub fn get_action_names(&self) -> Box<dyn Iterator<Item=&'static str>> {
+        match self {
+            FighterType::Toriel => Box::new(TorielAction::iter().map(|x| x.into())),
+            FighterType::Dave   => Box::new(DaveAction  ::iter().map(|x| x.into())),
         }
     }
 }
