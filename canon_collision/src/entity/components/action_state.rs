@@ -41,6 +41,22 @@ impl ActionState {
         None
     }
 
+    pub fn interruptible(&self, entity_def: &EntityDef) -> bool {
+        self.frame >= entity_def.actions[self.action.as_ref()].iasa
+    }
+
+    pub fn first_interruptible(&self, entity_def: &EntityDef) -> bool {
+        self.frame == entity_def.actions[self.action.as_ref()].iasa
+    }
+
+    pub fn last_frame(&self, entity_def: &EntityDef) -> bool {
+        self.frame >= entity_def.actions[self.action.as_ref()].frames.len() as i64 - 1
+    }
+
+    pub fn past_last_frame(&self, entity_def: &EntityDef) -> bool {
+        self.frame >= entity_def.actions[self.action.as_ref()].frames.len() as i64
+    }
+
     pub fn debug_string(&self, entity_defs: &KeyedContextVec<EntityDef>, index: EntityKey) -> String {
         let entity_def = &entity_defs[self.entity_def_key.as_ref()];
         let action = &entity_def.actions[self.action.as_ref()];

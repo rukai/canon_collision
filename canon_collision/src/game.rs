@@ -1157,7 +1157,27 @@ impl Game {
             for (current_key, hit_key) in item_grab_results {
                 let hit_id = grab_entities.get_mut(hit_key).and_then(|x| x.player_id());
                 if let Some(entity) = grab_entities.get_mut(current_key) {
-                    entity.item_grab(hit_key, hit_id);
+                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let delete_self = {
+                        let mut context = StepContext {
+                            entities:     &action_entities,
+                            entity_defs:  &self.package.entities,
+                            entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
+                            stage:        &self.stage,
+                            surfaces:     &self.stage.surfaces,
+                            rng:          &mut rng,
+                            new_entities: &mut new_entities,
+                            messages:     &mut messages,
+                            delete_self:  false,
+                            input,
+                        };
+                        entity.item_grab(&mut context, hit_key, hit_id);
+                        context.delete_self
+                    };
+                    if delete_self {
+                        grab_entities.remove(current_key);
+                    }
                 }
             }
 

@@ -193,18 +193,6 @@ impl Player {
         self.body.location = Location::Airbourne { x, y };
     }
 
-    fn interruptible(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
-        state.frame >= entity_def.actions[state.action.as_ref()].iasa
-    }
-
-    fn first_interruptible(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
-        state.frame == entity_def.actions[state.action.as_ref()].iasa
-    }
-
-    fn last_frame(&self, entity_def: &EntityDef, state: &ActionState) -> bool {
-        state.frame == entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1
-    }
-
     pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize, state: &ActionState) -> Option<ActionResult> {
         let fall = match &mut self.body.location {
             &mut Location::Surface     { ref mut platform_i, .. } |
@@ -325,7 +313,7 @@ impl Player {
      *  Begin action section
      */
 
-    pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) {
         self.knockback_particles(context, state);
 
         // TODO: Gankra plz ... https://github.com/rust-lang/rust/issues/43244
@@ -413,20 +401,9 @@ impl Player {
                 => { self.body.ecb.bottom = prev_bottom }
             _   => { }
         }
-
-        self.frame_step(context, state)
-            .or_else(|| {
-                let action_frames = context.entity_def.actions[state.action.as_ref()].frames.len() as i64;
-                if state.frame + 1 >= action_frames {
-                    // Because frames can be added/removed in the in game editor, we need to be ready to handle the frame index going out of bounds for any action automatically.
-                    self.action_expired(context, state)
-                } else {
-                    None
-                }
-            })
     }
 
-    fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if let Some(action) = state.get_action() {
             match action {
                 PlayerAction::Spawn => None,
@@ -497,7 +474,7 @@ impl Player {
                 PlayerAction::Stun             => self.stun_action(context, state),
                 PlayerAction::GrabbingIdle     => self.grabbing_idle_action(context, state),
                 PlayerAction::GrabbedIdle      => self.grabbed_idle_action(context, state),
-                _ => None
+                _ => None,
             }
         } else {
             None
@@ -631,7 +608,7 @@ impl Player {
     }
 
     fn damage_fall_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(context.entity_def, state) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_attacks_aerial(context))
                 .or_else(|| self.check_special(context))
@@ -671,7 +648,7 @@ impl Player {
     }
 
     fn aerial_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(context.entity_def, state) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_attacks_aerial(context))
                 .or_else(|| self.check_special(context))
@@ -731,7 +708,7 @@ impl Player {
     fn tilt_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
-            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def, state)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && state.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
@@ -789,7 +766,7 @@ impl Player {
     fn run_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
-            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && self.last_frame(&context.entity_def, state)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && state.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
@@ -802,7 +779,7 @@ impl Player {
     }
 
     fn crouch_start_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_pass_platform(context, state))
                 .or_else(|| self.check_shield(context))
@@ -822,7 +799,7 @@ impl Player {
     }
 
     fn crouch_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -851,7 +828,7 @@ impl Player {
     }
 
     fn dtilt_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -938,7 +915,7 @@ impl Player {
             }
         }
 
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -985,25 +962,16 @@ impl Player {
     }
 
     fn attack_land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
-        // TODO: maybe I could better handle this by moving action_expired into its own step
-        // Currently I have to carefully avoid using set_frame to avoid going over the last frame and skipping action_expired
         self.land_action(context, state)
-            .or_else(||
-                if frame > last_action_frame {
-                    self.action_expired(context, state)
-                } else {
-                    ActionResult::set_frame(frame)
-                }
-            )
+            .or_else(|| ActionResult::set_frame(frame))
     }
 
     fn land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         self.land_particles(context, state);
 
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -1016,7 +984,7 @@ impl Player {
                 .or_else(|| self.check_smash_turn(context))
                 .or_else(|| self.check_tilt_turn(context))
                 .or_else(|| self.check_walk(context))
-                .or_else(|| if self.first_interruptible(&context.entity_def, state) && context.input[0].stick_y < -0.5 {
+                .or_else(|| if state.first_interruptible(&context.entity_def) && context.input[0].stick_y < -0.5 {
                         ActionResult::set_action(PlayerAction::Crouch)
                     } else {
                         None
@@ -1031,7 +999,7 @@ impl Player {
     }
 
     fn teeter_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.interruptible(&context.entity_def, state) {
+        if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -1119,7 +1087,7 @@ impl Player {
 
         let run_frame = 13; // TODO: Variable per character
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
-        if (state.frame >= run_frame || (run_frame > last_action_frame && self.last_frame(&context.entity_def, state)))
+        if (state.frame >= run_frame || (run_frame > last_action_frame && state.last_frame(&context.entity_def)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
             ActionResult::set_action(PlayerAction::Run)
@@ -1638,8 +1606,19 @@ impl Player {
 
     fn check_special(&mut self, context: &StepContext) -> Option<ActionResult> {
         if context.input.b.press {
-            // TODO: special attack
-            None
+            if context.input[0].stick_x.abs() > 0.3 {
+                self.body.face_right = context.input.stick_x.value > 0.0;
+                ActionResult::set_action(PlayerAction::SspecialStart)
+            }
+            else if context.input[0].stick_y < -0.3 {
+                ActionResult::set_action(PlayerAction::DspecialStart)
+            }
+            else if context.input[0].stick_y > 0.3 {
+                ActionResult::set_action(PlayerAction::UspecialStart)
+            }
+            else {
+                ActionResult::set_action(PlayerAction::NspecialStart)
+            }
         } else {
             None
         }
@@ -1648,8 +1627,8 @@ impl Player {
     fn check_smash(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press && 
            (context.input[0].stick_x >=  0.79 && context.input[2].stick_x < 0.3) ||
-           (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > 0.3) {
-            self.body.face_right = context.input.c_stick_x.value > 0.0;
+           (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > -0.3) {
+            self.body.face_right = context.input.stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
         }
         else if context.input.a.press && context.input[0].stick_y >= 0.66 && context.input[2].stick_y < 0.3 {
@@ -1658,7 +1637,7 @@ impl Player {
         else if context.input.a.press && context.input[0].stick_y <= -0.66 && context.input[2].stick_y > 0.3 {
             ActionResult::set_action(PlayerAction::Dsmash)
         }
-        else if context.input.a.press && context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
+        else if context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
         }
@@ -1734,9 +1713,9 @@ impl Player {
         }
     }
 
-    fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         ActionResult::set_action(match state.get_action() {
-            None => panic!("Custom defined action expirations have not been implemented"),
+            None => panic!("Unknown action expired"),
 
             // Idle
             Some(PlayerAction::Spawn)          => PlayerAction::Idle,
@@ -1902,6 +1881,12 @@ impl Player {
             Some(PlayerAction::FairLand) => PlayerAction::Idle,
             Some(PlayerAction::BairLand) => PlayerAction::Idle,
             Some(PlayerAction::NairLand) => PlayerAction::Idle,
+
+            // Specials
+            Some(PlayerAction::UspecialStart) => PlayerAction::Idle,
+            Some(PlayerAction::DspecialStart) => PlayerAction::Idle,
+            Some(PlayerAction::SspecialStart) => PlayerAction::Idle,
+            Some(PlayerAction::NspecialStart) => PlayerAction::Idle,
 
             // Taunts
             Some(PlayerAction::TauntUp)    => PlayerAction::Idle,

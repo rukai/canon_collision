@@ -66,7 +66,7 @@ impl Entity {
                 None
             }
         };
-        self.process_action_result(action_result);
+        self.process_action_result(context, action_result);
     }
 
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
@@ -114,13 +114,13 @@ impl Entity {
         }
     }
 
-    pub fn item_grab(&mut self, hit_key: EntityKey, hit_id: Option<usize>) {
+    pub fn item_grab(&mut self, context: &mut StepContext, hit_key: EntityKey, hit_id: Option<usize>) {
         let action_result = match &mut self.ty {
             EntityType::Fighter    (fighter) => fighter.get_player_mut().item_grab(),
             EntityType::Item       (item)    => item.grabbed(hit_key, hit_id),
             _                                => None
         };
-        self.process_action_result(action_result);
+        self.process_action_result(context, action_result);
     }
 
     pub fn physics_step(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) {
@@ -130,7 +130,7 @@ impl Entity {
             EntityType::Projectile (_)       => None,
             EntityType::TorielFireball (_)   => None,
         };
-        self.process_action_result(action_result);
+        self.process_action_result(context, action_result);
     }
 
     pub fn step_collision(&mut self, context: &mut StepContext, col_results: &[CollisionResult]) {
@@ -140,7 +140,7 @@ impl Entity {
             EntityType::Projectile (projectile)     => projectile.step_collision(col_results),
             EntityType::TorielFireball (projectile) => projectile.step_collision(col_results),
         };
-        self.process_action_result(action_result);
+        self.process_action_result(context, action_result);
         for col_result in col_results {
             match col_result {
                 &CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
@@ -186,16 +186,23 @@ impl Entity {
 
         self.state.hitlag.step(&mut context.rng);
         if let Hitlag::None = self.state.hitlag {
-            let main_action_result = self.action_step(context);
+            let main_action_result = self.action_step(context)
+                .or_else(||
+                    if self.state.last_frame(&context.entity_def) {
+                        self.action_expired(context)
+                    } else {
+                        None
+                    }
+                );
             let secondary_action_result = match main_action_result {
                 Some(ActionResult::SetAction(_)) => {
-                    self.process_action_result(main_action_result);
+                    self.process_action_result(context, main_action_result);
                     self.action_step(context)
                 }
                 Some(ActionResult::SetFrame(_)) => main_action_result,
                 None => ActionResult::set_frame(self.state.frame + 1)
             };
-            self.process_action_result(secondary_action_result);
+            self.process_action_result(context, secondary_action_result);
         }
     }
 
@@ -206,10 +213,17 @@ impl Entity {
         }
 
         match &mut self.ty {
-            EntityType::Fighter    (fighter)        => fighter.action_step(context, &self.state),
-            EntityType::Item       (item)           => item.action_step(context, &self.state),
-            EntityType::Projectile (projectile)     => projectile.action_step(context, &self.state),
+            EntityType::Fighter        (fighter)    => fighter.action_step(context, &self.state),
+            EntityType::Item           (item)       => item.action_step(context, &self.state),
+            EntityType::Projectile     (projectile) => projectile.action_step(context, &self.state),
             EntityType::TorielFireball (projectile) => projectile.action_step(context, &self.state),
+        }
+    }
+
+    fn action_expired(&mut self, context: &mut StepContext) -> Option<ActionResult> {
+        match &mut self.ty {
+            EntityType::Fighter (fighter) => fighter.action_expired(context, &self.state),
+            _ => None
         }
     }
 
@@ -226,7 +240,15 @@ impl Entity {
             EntityType::Fighter (fighter) => fighter.get_player_mut().platform_deleted(entities, entity_defs, surfaces, deleted_platform_i, &self.state),
             _ => None
         };
-        self.process_action_result(action_result);
+        match action_result {
+            Some(ActionResult::SetAction (action)) => {
+                self.state.frame_no_restart = 0;
+                self.state.frame = 0;
+                self.state.action = action;
+                self.state.hitlist.clear()
+            }
+            _ => { }
+        }
     }
 
     pub fn frame_angle(&self, entity_def: &EntityDef, surfaces: &[Surface]) -> f32 {
@@ -446,11 +468,14 @@ impl Entity {
         }
     }
 
-    fn process_action_result(&mut self, action_result: Option<ActionResult>) {
+    fn process_action_result(&mut self, context: &mut StepContext, action_result: Option<ActionResult>) {
         match action_result {
             Some(ActionResult::SetAction (action)) => {
                 if self.state.action != action {
                     self.state.frame_no_restart = 0;
+                }
+                else {
+                    self.state.frame_no_restart += 1;
                 }
                 self.state.frame = 0;
                 self.state.action = action;
@@ -458,6 +483,14 @@ impl Entity {
             }
             Some(ActionResult::SetFrame (frame)) => {
                 self.state.frame = frame;
+                if self.state.past_last_frame(&context.entity_def) {
+                    let next_action = self.action_expired(context);
+                    match next_action {
+                        Some(ActionResult::SetAction (_)) | None => self.process_action_result(context, next_action),
+                        _ => { }
+                    }
+                }
+
                 self.state.frame_no_restart += 1;
             }
             None => { }

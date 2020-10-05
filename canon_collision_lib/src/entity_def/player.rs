@@ -122,6 +122,12 @@ pub enum PlayerAction {
     BairLand,
     NairLand,
 
+    // Specials
+    UspecialStart,
+    DspecialStart,
+    SspecialStart,
+    NspecialStart,
+
     // Taunts
     TauntUp,
     TauntDown,

@@ -300,10 +300,20 @@ pub struct PowerShieldEffect {
     pub duration: u64
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
+#[derive(Clone, Serialize, Deserialize, Node)]
 pub struct ActionDef {
+    /// Invariant: Must always have one or more elements
     pub frames: ContextVec<ActionFrame>,
     pub iasa:   i64,
+}
+
+impl Default for ActionDef {
+    fn default() -> ActionDef {
+        ActionDef {
+            iasa: 0,
+            frames: ContextVec::from_vec(vec!(ActionFrame::default())),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Node)]
