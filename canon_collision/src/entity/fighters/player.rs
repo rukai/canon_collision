@@ -3,18 +3,13 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::item::{Item, MessageItem};
-use crate::entity::projectile::Projectile;
-use crate::entity::toriel_fireball::TorielFireball;
-use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
+use crate::entity::item::MessageItem;
+use crate::entity::{EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
 use crate::entity::components::body::{Body, Location, PhysicsResult};
 use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox};
 use canon_collision_lib::entity_def::player::PlayerAction;
-use canon_collision_lib::entity_def::item::ItemAction;
-use canon_collision_lib::entity_def::projectile::ProjectileAction;
-use canon_collision_lib::entity_def::toriel_fireball::TorielFireballAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
@@ -611,7 +606,7 @@ impl Player {
         if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_attacks_aerial(context))
-                .or_else(|| self.check_special(context))
+                .or_else(|| self.check_special_air(context))
                 .or_else(|| self.check_jump_aerial(context, state))
                 .or_else(|| if
                     (context.input[0].stick_x >  0.7 && context.input[1].stick_x <  0.7) ||
@@ -637,7 +632,7 @@ impl Player {
     fn spawn_idle(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         None
             .or_else(|| self.check_attacks_aerial(context))
-            .or_else(|| self.check_special(context))
+            .or_else(|| self.check_special_ground(context))
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
             .or_else(|| if context.input[0].stick_x.abs() > 0.2 || context.input[0].stick_y.abs() > 0.2 || state.frame_no_restart >= 1000 {
@@ -647,11 +642,11 @@ impl Player {
             })
     }
 
-    fn aerial_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn aerial_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_attacks_aerial(context))
-                .or_else(|| self.check_special(context))
+                .or_else(|| self.check_special_air(context))
                 .or_else(|| self.check_jump_aerial(context, state))
                 .or_else(|| self.check_aerialdodge(context))
         } else {
@@ -667,7 +662,7 @@ impl Player {
     fn jump_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         None
             .or_else(|| self.check_attacks_aerial(context))
-            .or_else(|| self.check_special(context))
+            .or_else(|| self.check_special_air(context))
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
             .or_else(|| {
@@ -717,7 +712,7 @@ impl Player {
             .or_else(|| self.check_dash_out_of_tilt_turn(context, state))
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
-            .or_else(|| self.check_special(context)) // TODO: No neutral special
+            .or_else(|| self.check_special_ground(context)) // TODO: No neutral special
             .or_else(|| self.check_smash(context))
             .or_else(|| self.check_attacks(context))
             .or_else(|| self.check_grab(context))
@@ -744,7 +739,7 @@ impl Player {
             .or_else(|| self.check_dash_out_of_smash_turn(context, state))
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
-            .or_else(|| self.check_special(context)) // TODO: No neutral special
+            .or_else(|| self.check_special_ground(context)) // TODO: No neutral special
             .or_else(|| self.check_smash(context))
             .or_else(|| self.check_attacks(context))
             .or_else(|| self.check_grab(context))
@@ -783,7 +778,7 @@ impl Player {
             None
                 .or_else(|| self.check_pass_platform(context, state))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context)) // TODO: no neutral/side special
+                .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -803,7 +798,7 @@ impl Player {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context)) // TODO: no neutral/side special
+                .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -832,7 +827,7 @@ impl Player {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context)) // TODO: no neutral/side special
+                .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -850,76 +845,12 @@ impl Player {
         })
     }
 
-    fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if let Some(PlayerAction::Jab) = state.get_action() {
-            if state.frame == 5 {
-                let (x, y) = self.bps_xy(context, state);
-                context.new_entities.push(Entity {
-                    ty: EntityType::TorielFireball(
-                        TorielFireball {
-                            owner_id: Some(self.id),
-                            face_right: self.body.face_right,
-                            x: x + self.relative_f(10.0),
-                            y: y + 10.0,
-                            y_vel: 2.2,
-                            x_sin_counter: 0.0,
-                            x_sin_origin: 0.0,
-                        }
-                    ),
-                    state: ActionState::new(
-                        "TorielFireball.cbor".to_string(),
-                        TorielFireballAction::Spawn
-                    ),
-                });
-            }
-        }
-
-        if let Some(PlayerAction::TauntLeft) = state.get_action() {
-            if state.frame == 0 {
-                let (x, y) = self.bps_xy(context, state);
-                context.new_entities.push(Entity {
-                    ty: EntityType::Projectile(
-                        Projectile {
-                            owner_id: Some(self.id),
-                            speed: 0.6,
-                            angle: if self.body.face_right { 0.0 } else { PI },
-                            x: x + self.relative_f(10.0),
-                            y: y + 10.0,
-                        }
-                    ),
-                    state: ActionState::new(
-                        "PerfectlyGenericProjectile.cbor".to_string(),
-                        ProjectileAction::Spawn
-                    ),
-                });
-            }
-        }
-
-        if let Some(PlayerAction::TauntRight) = state.get_action() {
-            if state.frame == 0 {
-                let (x, y) = self.bps_xy(context, state);
-                let x = x + 15.0;
-                let y = y + 10.0;
-                context.new_entities.push(Entity {
-                    ty: EntityType::Item(
-                        Item {
-                            owner_id: None,
-                            body: Body::new(Location::Airbourne { x, y }, true),
-                        }
-                    ),
-                    state: ActionState::new(
-                        "PerfectlyGenericObject.cbor".to_string(),
-                        ItemAction::Fall
-                    ),
-                });
-            }
-        }
-
+    pub fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context))
+                .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -975,7 +906,7 @@ impl Player {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context))
+                .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -1003,7 +934,7 @@ impl Player {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
-                .or_else(|| self.check_special(context))
+                .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
                 .or_else(|| self.check_attacks(context))
                 .or_else(|| self.check_grab(context))
@@ -1026,7 +957,7 @@ impl Player {
         }
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
-            .or_else(|| self.check_special(context))
+            .or_else(|| self.check_special_ground(context))
             .or_else(|| self.check_smash(context))
             .or_else(|| self.check_attacks(context))
             .or_else(|| self.check_grab(context))
@@ -1127,6 +1058,7 @@ impl Player {
             )
             .or_else(|| self.check_dash_grab(context))
             .or_else(|| self.check_dash_attack(context))
+            .or_else(|| self.check_special_ground(context))
             .or_else(|| {
                 let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
                 let acc = (vel_max - self.body.x_vel)
@@ -1604,20 +1536,40 @@ impl Player {
         }
     }
 
-    fn check_special(&mut self, context: &StepContext) -> Option<ActionResult> {
+    fn check_special_ground(&mut self, context: &StepContext) -> Option<ActionResult> {
         if context.input.b.press {
             if context.input[0].stick_x.abs() > 0.3 {
                 self.body.face_right = context.input.stick_x.value > 0.0;
-                ActionResult::set_action(PlayerAction::SspecialStart)
+                ActionResult::set_action(PlayerAction::SspecialGroundStart)
             }
             else if context.input[0].stick_y < -0.3 {
-                ActionResult::set_action(PlayerAction::DspecialStart)
+                ActionResult::set_action(PlayerAction::DspecialGroundStart)
             }
             else if context.input[0].stick_y > 0.3 {
-                ActionResult::set_action(PlayerAction::UspecialStart)
+                ActionResult::set_action(PlayerAction::UspecialGroundStart)
             }
             else {
-                ActionResult::set_action(PlayerAction::NspecialStart)
+                ActionResult::set_action(PlayerAction::NspecialGroundStart)
+            }
+        } else {
+            None
+        }
+    }
+
+    fn check_special_air(&mut self, context: &StepContext) -> Option<ActionResult> {
+        if context.input.b.press {
+            if context.input[0].stick_x.abs() > 0.3 {
+                self.body.face_right = context.input.stick_x.value > 0.0;
+                ActionResult::set_action(PlayerAction::SspecialAirStart)
+            }
+            else if context.input[0].stick_y < -0.3 {
+                ActionResult::set_action(PlayerAction::DspecialAirStart)
+            }
+            else if context.input[0].stick_y > 0.3 {
+                ActionResult::set_action(PlayerAction::UspecialAirStart)
+            }
+            else {
+                ActionResult::set_action(PlayerAction::NspecialAirStart)
             }
         } else {
             None
@@ -1883,10 +1835,15 @@ impl Player {
             Some(PlayerAction::NairLand) => PlayerAction::Idle,
 
             // Specials
-            Some(PlayerAction::UspecialStart) => PlayerAction::Idle,
-            Some(PlayerAction::DspecialStart) => PlayerAction::Idle,
-            Some(PlayerAction::SspecialStart) => PlayerAction::Idle,
-            Some(PlayerAction::NspecialStart) => PlayerAction::Idle,
+            Some(PlayerAction::UspecialGroundStart) => PlayerAction::Idle,
+            Some(PlayerAction::DspecialGroundStart) => PlayerAction::Idle,
+            Some(PlayerAction::SspecialGroundStart) => PlayerAction::Idle,
+            Some(PlayerAction::NspecialGroundStart) => PlayerAction::Idle,
+
+            Some(PlayerAction::UspecialAirStart) => PlayerAction::Fall,
+            Some(PlayerAction::DspecialAirStart) => PlayerAction::Fall,
+            Some(PlayerAction::SspecialAirStart) => PlayerAction::Fall,
+            Some(PlayerAction::NspecialAirStart) => PlayerAction::Fall,
 
             // Taunts
             Some(PlayerAction::TauntUp)    => PlayerAction::Idle,

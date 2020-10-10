@@ -123,10 +123,17 @@ pub enum PlayerAction {
     NairLand,
 
     // Specials
-    UspecialStart,
-    DspecialStart,
-    SspecialStart,
-    NspecialStart,
+    UspecialGroundStart,
+    UspecialAirStart,
+
+    DspecialGroundStart,
+    DspecialAirStart,
+
+    SspecialGroundStart,
+    SspecialAirStart,
+
+    NspecialGroundStart,
+    NspecialAirStart,
 
     // Taunts
     TauntUp,
