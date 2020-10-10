@@ -1232,8 +1232,23 @@ impl Player {
 
     fn grabbing_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         self.apply_friction(context.entity_def, state);
-
-        if state.frame_no_restart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
+        if (context.input[0].stick_x   <= -0.66 && context.input[1].stick_x   > -0.66)
+        || (context.input[0].c_stick_x <= -0.66 && context.input[1].c_stick_x > -0.66) {
+            ActionResult::set_action(PlayerAction::Fthrow)
+        }
+        else if (context.input[0].stick_x   >= 0.66 && context.input[1].stick_x   < 0.66)
+             || (context.input[0].c_stick_x >= 0.66 && context.input[1].c_stick_x < 0.66) {
+            ActionResult::set_action(PlayerAction::Fthrow)
+        }
+        else if (context.input[0].stick_y   >= 0.66 && context.input[1].stick_y   < 0.66)
+             || (context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66) {
+            ActionResult::set_action(PlayerAction::Uthrow)
+        }
+        else if (context.input[0].stick_y   <= -0.66 && context.input[1].stick_y   > -0.66)
+             || (context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66) {
+            ActionResult::set_action(PlayerAction::Dthrow)
+        }
+        else if state.frame_no_restart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
             ActionResult::set_action(PlayerAction::GrabbingEnd)
         } else {
             None
