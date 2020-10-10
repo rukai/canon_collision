@@ -100,7 +100,7 @@ impl Toriel {
     }
 
     fn s_special_start(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.frame == 5 {
+        if state.frame == 20 {
             let (x, y) = self.player.bps_xy(context, state);
             context.new_entities.push(Entity {
                 ty: EntityType::Projectile(
@@ -108,7 +108,7 @@ impl Toriel {
                         owner_id: Some(self.player.id),
                         speed: 0.6,
                         angle: if self.player.body.face_right { 0.0 } else { PI },
-                        x: x + self.relative_f(10.0),
+                        x: x + self.relative_f(2.0),
                         y: y + 10.0,
                     }
                 ),
@@ -139,8 +139,8 @@ impl Toriel {
                     TorielFireball {
                         owner_id: Some(self.player.id),
                         face_right: self.player.body.face_right,
-                        x: x + self.relative_f(10.0),
-                        y: y + 10.0,
+                        x: x - self.relative_f(4.0),
+                        y: y + 12.5,
                         y_vel: 2.2,
                         x_sin_counter: 0.0,
                         x_sin_origin: 0.0,
