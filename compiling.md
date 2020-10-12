@@ -37,6 +37,12 @@ Install rust via https://www.rustup.rs/ (Use the default settings)
 sudo apt-get install build-essential libssl-dev libusb-1.0-0-dev pkg-config cmake libvulkan-dev vulkan-utils libudev-dev blender
 ```
 
+Currently the blender provided by ubuntu is too old.
+Instead you must manually download the latest blender for linux: https://www.blender.org/download/
+Then you need to add the path containing the blender executable to your PATH environment variable.
+Maybe the CI script will help illustrate the simplest possible commands to do this: https://github.com/rukai/canon_collision/blob/44fa7c1c2335292e6c0b41d07185cc470c58e1c9/travis.sh#L19
+But you will probably want to set it up better for your own usage.
+
 Need to also install one of the following packages depending on your graphics card:
 *   Intel: sudo apt-get install mesa-vulkan-drivers
 *   Nvidia: No extra drivers required
