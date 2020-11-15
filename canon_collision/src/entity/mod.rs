@@ -60,7 +60,8 @@ pub struct Entity {
 impl Entity {
     pub fn process_message(&mut self, message: Message, context: &mut StepContext) {
         let action_result = match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
-            (EntityType::Item (item), MessageContents::Item (message)) => item.process_message(message, context, &self.state),
+            (EntityType::Item    (entity), MessageContents::Item    (message)) => entity.process_message(message, context, &self.state),
+            (EntityType::Fighter (entity), MessageContents::Player  (message)) => entity.get_player_mut().process_message(message, context, &self.state),
             _ => {
                 error!("Message received by entity type that cannot process it");
                 None
@@ -629,6 +630,7 @@ pub struct VectorArrow {
 }
 
 pub struct StepContext<'a> {
+    pub entity_key:   EntityKey,
     pub input:        &'a PlayerInput,
     pub entities:     &'a Entities,
     pub entity_defs:  &'a KeyedContextVec<EntityDef>,

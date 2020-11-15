@@ -1131,6 +1131,7 @@ impl Game {
                     let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
+                        entity_key:   key,
                         entities:     &self.entities,
                         entity_defs:  &self.package.entities,
                         entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
@@ -1161,6 +1162,7 @@ impl Game {
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let delete_self = {
                         let mut context = StepContext {
+                            entity_key:   current_key,
                             entities:     &action_entities,
                             entity_defs:  &self.package.entities,
                             entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
@@ -1190,6 +1192,7 @@ impl Game {
                     let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
+                        entity_key:   key,
                         entities:     &grab_entities,
                         entity_defs:  &self.package.entities,
                         entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
@@ -1226,6 +1229,7 @@ impl Game {
                     let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                     let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                     let mut context = StepContext {
+                        entity_key:   key,
                         entities:     &physics_entities,
                         entity_defs:  &self.package.entities,
                         entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
@@ -1250,6 +1254,7 @@ impl Game {
                 let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
                 let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
                 let mut context = StepContext {
+                    entity_key:   message.recipient,
                     entities:     &physics_entities,
                     entity_defs:  &self.package.entities,
                     entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],

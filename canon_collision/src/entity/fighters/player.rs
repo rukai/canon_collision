@@ -8,7 +8,7 @@ use crate::entity::{EntityType, StepContext, DebugEntity, VectorArrow, Entities,
 use crate::entity::components::body::{Body, Location, PhysicsResult};
 use crate::entity::components::action_state::ActionState;
 
-use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox};
+use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox, HurtBox, HitboxEffect};
 use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
@@ -37,9 +37,9 @@ impl LockTimer {
     }
 }
 
-#[allow(dead_code)]
 pub enum MessagePlayer {
-    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32 }, // TODO: maybe just include a HitBox
+    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32, entity_atk_i: EntityKey },
+    #[allow(dead_code)]
     Released,
 }
 
@@ -214,6 +214,32 @@ impl Player {
         }
     }
 
+    fn launch(&mut self, context: &mut StepContext, state: &ActionState, hitbox: &HitBox, hurtbox: &HurtBox, entity_atk_i: EntityKey) -> Option<ActionResult> {
+        self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
+        let kb_vel_mult = if let Some(PlayerAction::Crouch) = state.get_action() {
+            0.67
+        } else {
+            1.0
+        };
+
+        let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
+        let kb_vel = self.body.launch(context, state, action_frame, hitbox, hurtbox, entity_atk_i, kb_vel_mult);
+
+        if let Location::Airbourne { .. } = self.body.location {
+            self.fastfalled = false;
+            self.hitstun = match hitbox.hitstun {
+                HitStun::FramesTimesKnockback (frames) => { frames * kb_vel }
+                HitStun::Frames               (frames) => { frames as f32 }
+            };
+        }
+
+        if kb_vel > 80.0 {
+            ActionResult::set_action(PlayerAction::DamageFly)
+        } else {
+            ActionResult::set_action(PlayerAction::Damage)
+        }
+    }
+
     pub fn step_collision(&mut self, context: &mut StepContext, state: &ActionState, col_results: &[CollisionResult]) -> Option<ActionResult> {
         // TODO: Maybe we should provide a single col_result at a time so that we can handle all ActionResults.
         //       Ah! or maybe we should filter out the collisions that can should override other
@@ -225,29 +251,7 @@ impl Player {
                     self.hit_particles(point.clone(), hitbox);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
-                    self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
-                    let kb_vel_mult = if let Some(PlayerAction::Crouch) = state.get_action() {
-                        0.67
-                    } else {
-                        1.0
-                    };
-
-                    let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
-                    let kb_vel = self.body.launch(context, state, action_frame, hitbox, hurtbox, entity_atk_i, kb_vel_mult);
-
-                    if let Location::Airbourne { .. } = self.body.location {
-                        self.fastfalled = false;
-                        self.hitstun = match hitbox.hitstun {
-                            HitStun::FramesTimesKnockback (frames) => { frames * kb_vel }
-                            HitStun::Frames               (frames) => { frames as f32 }
-                        };
-                    }
-
-                    set_action = if kb_vel > 80.0 {
-                        ActionResult::set_action(PlayerAction::DamageFly)
-                    } else {
-                        ActionResult::set_action(PlayerAction::Damage)
-                    };
+                    set_action = self.launch(context, state, hitbox, hurtbox, entity_atk_i);
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
                     let entity_def = &context.entities[entity_defend_i];
@@ -1232,12 +1236,12 @@ impl Player {
 
     fn grabbing_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         self.apply_friction(context.entity_def, state);
-        if (context.input[0].stick_x   <= -0.66 && context.input[1].stick_x   > -0.66)
-        || (context.input[0].c_stick_x <= -0.66 && context.input[1].c_stick_x > -0.66) {
-            ActionResult::set_action(PlayerAction::Fthrow)
+        if (self.relative_f(context.input[0].stick_x)   <= -0.66 && self.relative_f(context.input[1].stick_x)   > -0.66 && context.input[0].stick_x  .abs() > context.input[0].stick_y  .abs() - 0.1)
+        || (self.relative_f(context.input[0].c_stick_x) <= -0.66 && self.relative_f(context.input[1].c_stick_x) > -0.66 && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1) {
+            ActionResult::set_action(PlayerAction::Bthrow)
         }
-        else if (context.input[0].stick_x   >= 0.66 && context.input[1].stick_x   < 0.66)
-             || (context.input[0].c_stick_x >= 0.66 && context.input[1].c_stick_x < 0.66) {
+        else if (self.relative_f(context.input[0].stick_x)   >= 0.66 && self.relative_f(context.input[1].stick_x)   < 0.66 && context.input[0].stick_x  .abs() > context.input[0].stick_y  .abs() - 0.1)
+             || (self.relative_f(context.input[0].c_stick_x) >= 0.66 && self.relative_f(context.input[1].c_stick_x) < 0.66 && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1) {
             ActionResult::set_action(PlayerAction::Fthrow)
         }
         else if (context.input[0].stick_y   >= 0.66 && context.input[1].stick_y   < 0.66)
@@ -1927,9 +1931,27 @@ impl Player {
         for (key, entity) in entities.iter() {
             if let EntityType::Item (item) = &entity.ty {
                 if let Location::ItemHeldByPlayer (player_entity_key) = item.body.location {
-                    if let Some(player) = entities.get(player_entity_key) {
-                        if let Some(player) = &player.ty.get_player() {
-                            if player.id == self.id {
+                    if let Some(check_entity) = entities.get(player_entity_key) {
+                        if let Some(check_player) = &check_entity.ty.get_player() {
+                            if check_player.id == self.id {
+                                return Some(key);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn get_held_fighter(&self, entities: &Entities) -> Option<EntityKey> {
+        for (key, entity) in entities.iter() {
+            if let EntityType::Fighter (fighter) = &entity.ty {
+                if let Location::GrabbedByPlayer (player_entity_key) = fighter.get_player().body.location {
+                    if let Some(check_entity) = entities.get(player_entity_key) {
+                        if let Some(check_player) = &check_entity.ty.get_player() {
+                            if check_player.id == self.id {
                                 return Some(key);
                             }
                         }
@@ -2390,6 +2412,51 @@ impl Player {
         }
 
         vector_arrows
+    }
+
+    pub fn process_message(&mut self, message: &MessagePlayer, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        match message {
+            MessagePlayer::Thrown { angle, damage, bkb, kbg, entity_atk_i } => {
+                let hitbox = HitBox {
+                    shield_damage: 0.0,
+                    damage: *damage,
+                    bkb: *bkb,
+                    kbg: *kbg,
+                    angle: *angle,
+                    hitstun: HitStun::Frames(0),
+                    enable_clang: false,
+                    enable_rebound: false,
+                    effect: HitboxEffect::None,
+                    enable_reverse_hit: false,
+                };
+
+                let hurtbox = HurtBox::default();
+                self.launch(context, state, &hitbox, &hurtbox, *entity_atk_i)
+            }
+            MessagePlayer::Released => None,
+        }
+    }
+
+    pub fn send_thrown_message(&self, context: &mut StepContext, angle: f32, damage: f32, bkb: f32, kbg: f32) {
+        if let Some(recipient) = self.get_held_fighter(context.entities) {
+            let angle = if !self.body.face_right {
+                180.0 - angle
+            } else {
+                angle
+            };
+            let message = MessagePlayer::Thrown {
+                angle,
+                damage,
+                bkb,
+                kbg,
+                entity_atk_i: context.entity_key,
+            };
+
+            context.messages.push(Message {
+                recipient,
+                contents:  MessageContents::Player(message)
+            });
+        }
     }
 }
 

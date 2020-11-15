@@ -31,6 +31,7 @@ impl Toriel {
 impl FighterTrait for Toriel {
     fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         match state.get_action() {
+            // Specials
             Some(TorielAction::DspecialGroundStart) => self.d_special_ground_start_action(context, state),
             Some(TorielAction::DspecialAirStart)    => self.d_special_air_start_action(context, state),
 
@@ -40,18 +41,32 @@ impl FighterTrait for Toriel {
             Some(TorielAction::NspecialGroundStart) => self.n_special_ground_start_action(context, state),
             Some(TorielAction::NspecialAirStart)    => self.n_special_air_start_action(context, state),
 
+            // Throws
+            Some(TorielAction::Uthrow) => self.u_throw_action(context, state),
+            Some(TorielAction::Dthrow) => self.d_throw_action(context, state),
+            Some(TorielAction::Fthrow) => self.f_throw_action(context, state),
+            Some(TorielAction::Bthrow) => self.b_throw_action(context, state),
+
             None => self.player.frame_step(context, state)
         }
     }
 
     fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         match state.get_action() {
+            // Specials
             Some(TorielAction::DspecialGroundStart) => ActionResult::set_action(PlayerAction::Idle),
             Some(TorielAction::SspecialGroundStart) => ActionResult::set_action(PlayerAction::Idle),
             Some(TorielAction::NspecialGroundStart) => ActionResult::set_action(PlayerAction::Idle),
             Some(TorielAction::DspecialAirStart)    => ActionResult::set_action(PlayerAction::Fall),
             Some(TorielAction::SspecialAirStart)    => ActionResult::set_action(PlayerAction::Fall),
             Some(TorielAction::NspecialAirStart)    => ActionResult::set_action(PlayerAction::Fall),
+
+            // Throws
+            Some(TorielAction::Uthrow) => ActionResult::set_action(PlayerAction::Idle),
+            Some(TorielAction::Dthrow) => ActionResult::set_action(PlayerAction::Idle),
+            Some(TorielAction::Fthrow) => ActionResult::set_action(PlayerAction::Idle),
+            Some(TorielAction::Bthrow) => ActionResult::set_action(PlayerAction::Idle),
+
             None => self.player.action_expired(context, state),
         }
     }
@@ -151,6 +166,59 @@ impl Toriel {
                     TorielFireballAction::Spawn
                 ),
             });
+        }
+        None
+    }
+
+    fn u_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 5 {
+            // TODO: lets make this a struct instead of commenting the args.
+            self.player.send_thrown_message(
+                context,
+                85.0, // angle
+                5.0,  // damage
+                80.0, // bkb
+                1.1   // kbg
+            );
+        }
+        None
+    }
+
+    fn d_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 5 {
+            self.player.send_thrown_message(
+                context,
+                -90.0, // angle
+                5.0,   // damage
+                80.0,  // bkb
+                1.1    // kbg
+            );
+        }
+        None
+    }
+
+    fn f_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 5 {
+            self.player.send_thrown_message(
+                context,
+                30.0, // angle
+                5.0,  // damage
+                80.0, // bkb
+                1.1   // kbg
+            );
+        }
+        None
+    }
+
+    fn b_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 5 {
+            self.player.send_thrown_message(
+                context,
+                170.0, // angle
+                5.0,   // damage
+                80.0,  // bkb
+                1.1    // kbg
+            );
         }
         None
     }
