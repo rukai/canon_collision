@@ -86,20 +86,36 @@ impl Toriel {
     fn d_special_start(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 5 {
             let (x, y) = self.player.bps_xy(context, state);
-            let x = x + self.relative_f(10.0);
-            let y = y + 10.0;
+            let x = x + self.relative_f(15.0);
             context.new_entities.push(Entity {
                 ty: EntityType::Item(
                     Item {
                         owner_id: None,
-                        body: Body::new(Location::Airbourne { x, y }, true),
+                        body: Body::new(Location::Airbourne { x, y }, !self.player.body.face_right),
                     }
                 ),
                 state: ActionState::new(
-                    "PerfectlyGenericObject.cbor".to_string(),
-                    ItemAction::Fall
+                    "TorielOven.cbor".to_string(),
+                    ItemAction::Spawn
                 ),
             });
+        }
+
+        if self.player.get_held_item(&context.entities).is_none() {
+            if state.frame == 50 {
+                context.new_entities.push(Entity {
+                    ty: EntityType::Item(
+                        Item {
+                            owner_id: Some(self.player.id),
+                            body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
+                        }
+                    ),
+                    state: ActionState::new(
+                        "PerfectlyGenericObject.cbor".to_string(),
+                        ItemAction::Fall
+                    ),
+                });
+            }
         }
         None
     }
