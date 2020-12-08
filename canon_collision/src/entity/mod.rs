@@ -2,11 +2,13 @@ pub(crate) mod components;
 pub(crate) mod item;
 pub(crate) mod projectile;
 pub(crate) mod toriel_fireball;
+pub(crate) mod toriel_oven;
 pub(crate) mod fighters;
 
 use fighters::player::{Player, RenderPlayer, MessagePlayer};
 use projectile::Projectile;
 use toriel_fireball::TorielFireball;
+use toriel_oven::{TorielOven, MessageTorielOven};
 use item::{Item, MessageItem};
 use fighters::Fighter;
 use components::action_state::{ActionState, Hitlag};
@@ -40,6 +42,7 @@ pub enum EntityType {
     Projectile (Projectile),
     Item (Item),
     TorielFireball (TorielFireball),
+    TorielOven (TorielOven),
 }
 
 impl EntityType {
@@ -60,8 +63,9 @@ pub struct Entity {
 impl Entity {
     pub fn process_message(&mut self, message: Message, context: &mut StepContext) {
         let action_result = match (&mut self.ty, &message.contents) { // TODO: we could very happily match the owned value once thats stabilised
-            (EntityType::Item    (entity), MessageContents::Item    (message)) => entity.process_message(message, context, &self.state),
-            (EntityType::Fighter (entity), MessageContents::Player  (message)) => entity.get_player_mut().process_message(message, context, &self.state),
+            (EntityType::Item       (entity), MessageContents::Item       (message)) => entity.process_message(message, context, &self.state),
+            (EntityType::Fighter    (entity), MessageContents::Player     (message)) => entity.get_player_mut().process_message(message, context, &self.state),
+            (EntityType::TorielOven (entity), MessageContents::TorielOven (message)) => entity.process_message(message, context, &self.state),
             _ => {
                 error!("Message received by entity type that cannot process it");
                 None
@@ -87,6 +91,7 @@ impl Entity {
                 !face_left
             }
             EntityType::TorielFireball (_) => true,
+            EntityType::TorielOven (toriel_oven) => toriel_oven.body.face_right,
         }
     }
 
@@ -99,6 +104,7 @@ impl Entity {
         match &self.ty {
             EntityType::Fighter        (fighter)    => fighter.get_player().body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Item           (item)       => item.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::TorielOven     (toriel_oven) => toriel_oven.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, &self.state),
             EntityType::Projectile     (projectile) => (projectile.x, projectile.y),
             EntityType::TorielFireball (projectile) => (projectile.x, projectile.y),
         }
@@ -108,10 +114,11 @@ impl Entity {
     pub fn public_bps_xyz(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32, f32) {
         let action_frame = self.get_entity_frame(&entity_defs[self.state.entity_def_key.as_ref()]);
         match &self.ty {
-            EntityType::Fighter        (fighter)    => fighter.get_player().body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
-            EntityType::Item           (item)       => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
-            EntityType::Projectile     (projectile) => (projectile.x, projectile.y, 0.0),
-            EntityType::TorielFireball (projectile) => (projectile.x, projectile.y, 0.0),
+            EntityType::Fighter        (fighter)     => fighter.get_player().body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Item           (item)        => item.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::TorielOven     (toriel_oven) => toriel_oven.body.public_bps_xyz(entities, entity_defs, action_frame, surfaces, &self.state),
+            EntityType::Projectile     (projectile)  => (projectile.x, projectile.y, 0.0),
+            EntityType::TorielFireball (projectile)  => (projectile.x, projectile.y, 0.0),
         }
     }
 
@@ -130,6 +137,7 @@ impl Entity {
             EntityType::Item       (item)    => item.physics_step(context, &self.state),
             EntityType::Projectile (_)       => None,
             EntityType::TorielFireball (_)   => None,
+            EntityType::TorielOven (_)       => None,
         };
         self.process_action_result(context, action_result);
     }
@@ -140,6 +148,7 @@ impl Entity {
             EntityType::Item       (item)           => item.step_collision(context, &self.state, col_results),
             EntityType::Projectile (projectile)     => projectile.step_collision(col_results),
             EntityType::TorielFireball (projectile) => projectile.step_collision(col_results),
+            EntityType::TorielOven (_) => None,
         };
         self.process_action_result(context, action_result);
         for col_result in col_results {
@@ -200,7 +209,8 @@ impl Entity {
                     self.process_action_result(context, main_action_result);
                     self.action_step(context)
                 }
-                Some(ActionResult::SetFrame(_)) => main_action_result,
+                Some(ActionResult::SetActionKeepFrame(_)) => main_action_result,
+                Some(ActionResult::SetFrame(_))           => main_action_result,
                 None => ActionResult::set_frame(self.state.frame + 1)
             };
             self.process_action_result(context, secondary_action_result);
@@ -214,10 +224,11 @@ impl Entity {
         }
 
         match &mut self.ty {
-            EntityType::Fighter        (fighter)    => fighter.action_step(context, &self.state),
-            EntityType::Item           (item)       => item.action_step(context, &self.state),
-            EntityType::Projectile     (projectile) => projectile.action_step(context, &self.state),
-            EntityType::TorielFireball (projectile) => projectile.action_step(context, &self.state),
+            EntityType::Fighter        (fighter)     => fighter.action_step(context, &self.state),
+            EntityType::Item           (item)        => item.action_step(context, &self.state),
+            EntityType::Projectile     (projectile)  => projectile.action_step(context, &self.state),
+            EntityType::TorielFireball (projectile)  => projectile.action_step(context, &self.state),
+            EntityType::TorielOven     (toriel_oven) => toriel_oven.action_step(context, &self.state),
         }
     }
 
@@ -257,6 +268,7 @@ impl Entity {
             match &self.ty {
                 EntityType::Fighter (fighter) => fighter.get_player().body.angle(entity_frame, surfaces),
                 EntityType::Item (item) => item.body.angle(entity_frame, surfaces),
+                EntityType::TorielOven (toriel_oven) => toriel_oven.body.angle(entity_frame, surfaces),
                 EntityType::Projectile (projectile) => projectile.angle,
                 EntityType::TorielFireball (_) => 0.0,
             }
@@ -317,6 +329,7 @@ impl Entity {
             EntityType::Item (item) => item.owner_id,
             EntityType::Projectile (projectile) => projectile.owner_id,
             EntityType::TorielFireball (projectile) => projectile.owner_id,
+            EntityType::TorielOven (toriel_oven) => toriel_oven.owner_id,
         }
     }
 
@@ -381,6 +394,7 @@ impl Entity {
             EntityType::Item (_) => 0,
             EntityType::Projectile (_) => 0,
             EntityType::TorielFireball (_) => 0,
+            EntityType::TorielOven (_) => 0,
         }
     }
 
@@ -417,6 +431,7 @@ impl Entity {
             EntityType::Projectile (_)      => RenderEntityType::Projectile,
             EntityType::TorielFireball (_)  => RenderEntityType::Projectile,
             EntityType::Item (_)            => RenderEntityType::Item,
+            EntityType::TorielOven     (_)  => RenderEntityType::Projectile,
         };
 
         let visible = match &self.ty {
@@ -479,6 +494,11 @@ impl Entity {
                     self.state.frame_no_restart += 1;
                 }
                 self.state.frame = 0;
+                self.state.action = action;
+                self.state.hitlist.clear()
+            }
+            Some(ActionResult::SetActionKeepFrame (action)) => {
+                self.state.frame_no_restart += 1;
                 self.state.action = action;
                 self.state.hitlist.clear()
             }
@@ -650,17 +670,23 @@ pub struct Message {
 
 #[allow(dead_code)]
 pub enum MessageContents {
-    Player (MessagePlayer),
-    Item   (MessageItem),
+    Player     (MessagePlayer),
+    Item       (MessageItem),
+    TorielOven (MessageTorielOven),
 }
 
 #[must_use]
 pub enum ActionResult {
-    SetAction (String),
-    SetFrame  (i64),
+    SetAction          (String),
+    SetActionKeepFrame (String),
+    SetFrame           (i64),
 }
 
 impl ActionResult {
+    fn set_action_keep_frame<T: Into<&'static str>>(action: T) -> Option<ActionResult> {
+        Some(ActionResult::SetActionKeepFrame (action.into().to_string()))
+    }
+
     fn set_action<T: Into<&'static str>>(action: T) -> Option<ActionResult> {
         Some(ActionResult::SetAction (action.into().to_string()))
     }

@@ -5,12 +5,14 @@ use crate::entity::fighters::player::Player;
 use crate::entity::item::Item;
 use crate::entity::projectile::Projectile;
 use crate::entity::toriel_fireball::TorielFireball;
-use crate::entity::{Entity, EntityType, ActionResult, StepContext};
+use crate::entity::toriel_oven::{TorielOven, MessageTorielOven};
+use crate::entity::{Entity, Entities, EntityType, EntityKey, ActionResult, StepContext, Message, MessageContents};
 
 use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::entity_def::projectile::ProjectileAction;
 use canon_collision_lib::entity_def::toriel::TorielAction;
 use canon_collision_lib::entity_def::toriel_fireball::TorielFireballAction;
+use canon_collision_lib::entity_def::toriel_oven::TorielOvenAction;
 use canon_collision_lib::entity_def::item::ItemAction;
 
 use std::f32::consts::PI;
@@ -83,40 +85,69 @@ impl Toriel {
             .or_else(|| self.d_special_start(context, state))
     }
 
+    fn get_oven(&self, entities: &Entities) -> Option<EntityKey> {
+        for (key, entity) in entities.iter() {
+            if let EntityType::TorielOven (oven) = &entity.ty {
+                if let Some(owner_id) = oven.owner_id {
+                    if owner_id == self.player.id {
+                        return Some(key);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     fn d_special_start(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 5 {
             let (x, y) = self.player.bps_xy(context, state);
             let x = x + self.relative_f(15.0);
             context.new_entities.push(Entity {
-                ty: EntityType::Item(
-                    Item {
-                        owner_id: None,
+                ty: EntityType::TorielOven(
+                    TorielOven {
+                        owner_id: Some(self.player.id),
                         body: Body::new(Location::Airbourne { x, y }, !self.player.body.face_right),
                     }
                 ),
                 state: ActionState::new(
                     "TorielOven.cbor".to_string(),
-                    ItemAction::Spawn
+                    TorielOvenAction::EarlyEnd,
                 ),
             });
         }
 
-        if self.player.get_held_item(&context.entities).is_none() {
-            if state.frame == 50 {
-                context.new_entities.push(Entity {
-                    ty: EntityType::Item(
-                        Item {
-                            owner_id: Some(self.player.id),
-                            body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
-                        }
-                    ),
-                    state: ActionState::new(
-                        "PerfectlyGenericObject.cbor".to_string(),
-                        ItemAction::Fall
-                    ),
+        if let Some(recipient) = self.get_oven(&context.entities) {
+            if state.frame == 26 {
+                let message = if context.input.b.value {
+                    MessageTorielOven::AttackExtended
+                } else {
+                    MessageTorielOven::Attack
+                };
+                context.messages.push(Message {
+                    recipient,
+                    contents: MessageContents::TorielOven(message),
                 });
             }
+
+            if self.player.get_held_item(&context.entities).is_none() { // TODO: and Attack
+                if state.frame == 50 {
+                    context.new_entities.push(Entity {
+                        ty: EntityType::Item(
+                            Item {
+                                owner_id: Some(self.player.id),
+                                body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
+                            }
+                        ),
+                        state: ActionState::new(
+                            "PerfectlyGenericObject.cbor".to_string(),
+                            ItemAction::Fall
+                        ),
+                    });
+                }
+            }
         }
+
         None
     }
 

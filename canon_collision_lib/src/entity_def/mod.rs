@@ -4,6 +4,7 @@ pub mod projectile;
 pub mod toriel;
 pub mod dave;
 pub mod toriel_fireball;
+pub mod toriel_oven;
 
 use strum::IntoEnumIterator;
 use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec, ContextVec};
@@ -18,6 +19,7 @@ use toriel::TorielAction;
 use dave::DaveAction;
 
 use toriel_fireball::TorielFireballAction;
+use toriel_oven::TorielOvenAction;
 
 impl Default for EntityDef {
     fn default() -> EntityDef {
@@ -166,6 +168,7 @@ pub enum EntityDefType {
     Item,
     Projectile,
     TorielFireball,
+    TorielOven,
 }
 
 impl EntityDefType {
@@ -178,6 +181,7 @@ impl EntityDefType {
             EntityDefType::Item           => Box::new(ItemAction          ::iter().map(|x| x.into())),
             EntityDefType::Projectile     => Box::new(ProjectileAction    ::iter().map(|x| x.into())),
             EntityDefType::TorielFireball => Box::new(TorielFireballAction::iter().map(|x| x.into())),
+            EntityDefType::TorielOven     => Box::new(TorielOvenAction    ::iter().map(|x| x.into())),
         }
     }
 }
