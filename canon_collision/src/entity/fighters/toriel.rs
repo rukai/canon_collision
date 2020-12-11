@@ -85,18 +85,19 @@ impl Toriel {
             .or_else(|| self.d_special_start(context, state))
     }
 
-    fn get_oven(&self, entities: &Entities) -> Option<EntityKey> {
+    fn get_ovens(&self, entities: &Entities) -> Vec<EntityKey> {
+        let mut ovens = vec!();
         for (key, entity) in entities.iter() {
             if let EntityType::TorielOven (oven) = &entity.ty {
                 if let Some(owner_id) = oven.owner_id {
                     if owner_id == self.player.id {
-                        return Some(key);
+                        ovens.push(key);
                     }
                 }
             }
         }
 
-        None
+        ovens
     }
 
     fn d_special_start(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
@@ -105,10 +106,10 @@ impl Toriel {
             let x = x + self.relative_f(15.0);
             context.new_entities.push(Entity {
                 ty: EntityType::TorielOven(
-                    TorielOven {
-                        owner_id: Some(self.player.id),
-                        body: Body::new(Location::Airbourne { x, y }, !self.player.body.face_right),
-                    }
+                    TorielOven::new(
+                        self.player.id,
+                        Body::new(Location::Airbourne { x, y }, !self.player.body.face_right),
+                    )
                 ),
                 state: ActionState::new(
                     "TorielOven.cbor".to_string(),
@@ -117,33 +118,28 @@ impl Toriel {
             });
         }
 
-        if let Some(recipient) = self.get_oven(&context.entities) {
-            if state.frame == 26 {
-                let message = if context.input.b.value {
-                    MessageTorielOven::AttackExtended
-                } else {
-                    MessageTorielOven::Attack
-                };
-                context.messages.push(Message {
-                    recipient,
-                    contents: MessageContents::TorielOven(message),
-                });
-            }
+        for oven_key in self.get_ovens(&context.entities) {
+            context.messages.push(Message {
+                recipient: oven_key,
+                contents: MessageContents::TorielOven(MessageTorielOven::KeepAlive),
+            });
 
-            if self.player.get_held_item(&context.entities).is_none() { // TODO: and Attack
-                if state.frame == 50 {
-                    context.new_entities.push(Entity {
-                        ty: EntityType::Item(
-                            Item {
-                                owner_id: Some(self.player.id),
-                                body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
-                            }
-                        ),
-                        state: ActionState::new(
-                            "PerfectlyGenericObject.cbor".to_string(),
-                            ItemAction::Fall
-                        ),
-                    });
+            if let Some(TorielOvenAction::Attack) = context.entities.get(oven_key).and_then(|x| x.state.get_action()) {
+                if self.player.get_held_item(&context.entities).is_none() {
+                    if state.frame == 50 {
+                        context.new_entities.push(Entity {
+                            ty: EntityType::Item(
+                                Item {
+                                    owner_id: Some(self.player.id),
+                                    body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
+                                }
+                            ),
+                            state: ActionState::new(
+                                "TorielButterscotchCinnamonPie.cbor".to_string(),
+                                ItemAction::Held
+                            ),
+                        });
+                    }
                 }
             }
         }

@@ -1250,23 +1250,24 @@ impl Game {
             }
 
             for message in messages {
-                let entity = &mut collision_entities[message.recipient];
-                let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
-                let mut context = StepContext {
-                    entity_key:   message.recipient,
-                    entities:     &physics_entities,
-                    entity_defs:  &self.package.entities,
-                    entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                    stage:        &self.stage,
-                    surfaces:     &self.stage.surfaces,
-                    rng:          &mut rng,
-                    new_entities: &mut new_entities,
-                    messages:     &mut vec!(),
-                    delete_self:  false,
-                    input,
-                };
-                entity.process_message(message, &mut context);
+                if let Some(entity) = collision_entities.get_mut(message.recipient) {
+                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let mut context = StepContext {
+                        entity_key:   message.recipient,
+                        entities:     &physics_entities,
+                        entity_defs:  &self.package.entities,
+                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
+                        stage:        &self.stage,
+                        surfaces:     &self.stage.surfaces,
+                        rng:          &mut rng,
+                        new_entities: &mut new_entities,
+                        messages:     &mut vec!(),
+                        delete_self:  false,
+                        input,
+                    };
+                    entity.process_message(message, &mut context);
+                }
             }
 
             for entity in new_entities {
