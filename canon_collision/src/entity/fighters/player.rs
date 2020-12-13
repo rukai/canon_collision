@@ -3,13 +3,14 @@ use crate::graphics;
 use crate::particle::{Particle, ParticleType};
 use crate::results::{RawPlayerResult, DeathRecord};
 use crate::rules::{Goal, Rules};
-use crate::entity::item::MessageItem;
-use crate::entity::{EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
+use crate::entity::item::{MessageItem, Item};
+use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
 use crate::entity::components::body::{Body, Location, PhysicsResult};
 use crate::entity::components::action_state::ActionState;
 
 use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox, HurtBox, HitboxEffect};
 use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::item::ItemAction;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
@@ -850,6 +851,26 @@ impl Player {
     }
 
     pub fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if let Some(PlayerAction::TauntDown) = state.get_action() {
+            if state.frame == 0 && context.input.b.value {
+                let (x, y) = self.bps_xy(context, state);
+                let x = x + 15.0;
+                let y = y + 10.0;
+                context.new_entities.push(Entity {
+                    ty: EntityType::Item(
+                        Item {
+                            owner_id: None,
+                            body: Body::new(Location::Airbourne { x, y }, true),
+                        }
+                    ),
+                    state: ActionState::new(
+                        "PerfectlyGenericObject.cbor".to_string(),
+                        ItemAction::Fall
+                    ),
+                });
+            }
+        }
+
         if state.interruptible(&context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))

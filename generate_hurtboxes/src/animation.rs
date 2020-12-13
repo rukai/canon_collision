@@ -1,3 +1,8 @@
+/// TODO: Share common code with canon_collision/wgpu module.
+/// Current differences:
+/// * ibm not applied to transformation
+/// * transformation written directly to Joint struct
+
 use crate::model::{Animation, Joint, ChannelOutputs, Channel};
 
 use cgmath::{Matrix4, VectorSpace, InnerSpace};

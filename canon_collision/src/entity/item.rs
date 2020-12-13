@@ -6,7 +6,7 @@ use crate::entity::components::action_state::ActionState;
 use canon_collision_lib::entity_def::EntityDef;
 use canon_collision_lib::entity_def::item::ItemAction;
 
-use cgmath::Quaternion;
+use cgmath::{Quaternion, Rad, Angle, Zero, Rotation3};
 use treeflection::KeyedContextVec;
 
 pub enum MessageItem {
@@ -147,15 +147,23 @@ impl Item {
     pub fn held_render_angle(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>) -> Option<Quaternion<f32>> {
         match self.body.location {
             Location::ItemHeldByPlayer (player_i) => {
-                entities.get(player_i)
-                    .and_then(|player| player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()]))
-                    .and_then(|action_frame| action_frame.item_hold.as_ref())
-                    .and_then(|item_hold| Some(Quaternion::new(
-                        item_hold.quaternion_x,
-                        item_hold.quaternion_y,
-                        item_hold.quaternion_z,
-                        item_hold.quaternion_rotation
-                    )))
+                if let Some(player) = entities.get(player_i) {
+                    let angle_y = if player.face_right() { Rad::zero() } else { Rad::turn_div_2() };
+                    let dir = Quaternion::from_angle_y(angle_y);
+
+                    player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()])
+                        .and_then(|action_frame| action_frame.item_hold.as_ref())
+                        .and_then(|item_hold|
+                            Some(dir * Quaternion::new(
+                                item_hold.quaternion_rotation,
+                                item_hold.quaternion_x,
+                                item_hold.quaternion_y,
+                                item_hold.quaternion_z,
+                            ))
+                        )
+                } else {
+                    None
+                }
             }
             _ => None
         }

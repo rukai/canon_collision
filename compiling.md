@@ -10,6 +10,11 @@ The recommended way to do this is to install [chocolatey](https://chocolatey.org
 *   `choco install python`
 *   `choco install blender`
 
+Make sure to add blender to your [PATH environment variable](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/).
+The path to blender will be somewhere like `C:\Program Files\Blender Foundation\Blender 2.83`.
+
+<!--
+Leave this out until gtk-rs get their act together
 Install gtk, the recommended way is to run the following commands in cmd:
 ```cmd
 git clone https://github.com/Microsoft/vcpkg
@@ -28,6 +33,7 @@ mkdir %VCPKGDIR%\etc\gtk-3.0
 echo "[Settings]" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
 echo "gtk-theme-name=win32" > %VCPKGDIR%\etc\gtk-3.0\settings.ini
 ```
+-->
 
 # Setup for Ubuntu
 

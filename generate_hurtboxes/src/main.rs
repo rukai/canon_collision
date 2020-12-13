@@ -154,10 +154,10 @@ fn generate_item_hold(frame: &mut ActionFrame, root_joint: &Joint, bone_name: &s
                 translation_x: point.x,
                 translation_y: point.y,
                 translation_z: point.z,
-                quaternion_x: quaternion.3,
-                quaternion_y: quaternion.1,
-                quaternion_z: quaternion.2,
-                quaternion_rotation: quaternion.0,
+                quaternion_x: quaternion.1,
+                quaternion_y: quaternion.2,
+                quaternion_z: quaternion.3,
+                quaternion_rotation: -quaternion.0, // No idea why this needs to be inverted but it makes everything work ¯\_(ツ)_/¯
             });
         }
     }

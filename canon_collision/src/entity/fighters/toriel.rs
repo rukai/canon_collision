@@ -103,7 +103,7 @@ impl Toriel {
     fn d_special_start(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 5 {
             let (x, y) = self.player.bps_xy(context, state);
-            let x = x + self.relative_f(15.0);
+            let x = x + self.relative_f(14.0);
             context.new_entities.push(Entity {
                 ty: EntityType::TorielOven(
                     TorielOven::new(
@@ -126,7 +126,7 @@ impl Toriel {
 
             if let Some(TorielOvenAction::Attack) = context.entities.get(oven_key).and_then(|x| x.state.get_action()) {
                 if self.player.get_held_item(&context.entities).is_none() {
-                    if state.frame == 50 {
+                    if state.frame == 59 {
                         context.new_entities.push(Entity {
                             ty: EntityType::Item(
                                 Item {
