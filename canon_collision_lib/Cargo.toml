@@ -13,7 +13,7 @@ edition = "2018"
 [dependencies]
 backtrace = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
-dirs = "3"
+dirs-next = "2"
 strum = "0.20"
 strum_macros = "0.20"
 env_logger = "0.8"
@@ -21,7 +21,7 @@ gilrs-core = "0.3"
 rusb = "0.6"
 log = "0.4"
 os_type = "2"
-rand = "0.7"
+rand = "0.8"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
@@ -31,6 +31,6 @@ toml = "0.5"
 treeflection = "0.1"
 treeflection_derive = "0.4"
 uuid = { version = "0.8", features = ["v4", "serde"] }
-winit = "0.23" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
-winit_input_helper = "0.8"
+winit = "0.24" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
+winit_input_helper = "0.9"
 hotwatch = "0.4" # TODO: I could probably pretty easily replace this with notify, the hotwatch wrapper isnt really giving me much.

@@ -2259,8 +2259,8 @@ impl Player {
 
     pub fn knockback_particles(&mut self, context: &mut StepContext, state: &ActionState) {
         let kb_vel = (self.body.kb_x_vel * self.body.kb_x_vel + self.body.kb_y_vel * self.body.kb_y_vel).sqrt();
-        let angle = self.body.kb_y_vel.atan2(self.body.kb_x_vel) + context.rng.gen_range(-0.2, 0.2);
-        let vec_mult = context.rng.gen_range(0.7, 1.0);
+        let angle = self.body.kb_y_vel.atan2(self.body.kb_x_vel) + context.rng.gen_range(-0.2..=0.2);
+        let vec_mult = context.rng.gen_range(0.7..=1.0);
         let (x, y) = self.bps_xy(context, state);
         let num = if self.hitstun > 0.0 {
             (kb_vel/2.0) as usize
@@ -2269,7 +2269,7 @@ impl Player {
         };
 
         for _ in 0..num {
-            let z = context.rng.gen_range(-1.0, 1.0);
+            let z = context.rng.gen_range(-1.0..=1.0);
             self.particles.push(Particle {
                 color:       graphics::get_team_color3(self.team),
                 counter:     0,
@@ -2277,13 +2277,13 @@ impl Player {
                 x:           x,
                 y:           y + self.body.ecb.top / 2.0,
                 z,
-                angle:       context.rng.gen_range(0.0, 2.0 * PI),
+                angle:       context.rng.gen_range(0.0..=2.0 * PI),
                 p_type:      ParticleType::Spark {
                     x_vel:      angle.cos() * vec_mult * -1.0,
                     y_vel:      angle.sin() * vec_mult * -1.0,
-                    z_vel:      context.rng.gen_range(0.0, 0.4) * z.signum(),
-                    size:       context.rng.gen_range(1.0, 3.0),
-                    angle_vel:  context.rng.gen_range(0.0, 1.0),
+                    z_vel:      context.rng.gen_range(0.0..=0.4) * z.signum(),
+                    size:       context.rng.gen_range(1.0..=3.0),
+                    angle_vel:  context.rng.gen_range(0.0..=1.0),
                 }
             });
         }
@@ -2313,7 +2313,7 @@ impl Player {
         };
 
         for _ in 0..num {
-            let z = context.rng.gen_range(-3.0, 3.0);
+            let z = context.rng.gen_range(-3.0..=3.0);
             self.particles.push(Particle {
                 color,
                 counter:     0,
@@ -2321,13 +2321,13 @@ impl Player {
                 x:           x,
                 y:           y,
                 z,
-                angle:       context.rng.gen_range(0.0, 2.0 * PI),
+                angle:       context.rng.gen_range(0.0..=2.0 * PI),
                 p_type:      ParticleType::Spark {
-                    x_vel:      context.rng.gen_range(-0.3, 0.3),
-                    y_vel:      context.rng.gen_range(0.0, 0.2),
-                    z_vel:      context.rng.gen_range(0.0, 0.5) * z.signum(),
-                    size:       context.rng.gen_range(1.0, 3.0),
-                    angle_vel:  context.rng.gen_range(0.0, 1.0),
+                    x_vel:      context.rng.gen_range(-0.3..=0.3),
+                    y_vel:      context.rng.gen_range(0.0..=0.2),
+                    z_vel:      context.rng.gen_range(0.0..=0.5) * z.signum(),
+                    size:       context.rng.gen_range(1.0..=3.0),
+                    angle_vel:  context.rng.gen_range(0.0..=1.0),
                 }
             });
         }
@@ -2349,7 +2349,7 @@ impl Player {
         let x_offset = self.relative_f(3.0);
 
         for _ in 0..num {
-            let z = context.rng.gen_range(-6.0, 6.0);
+            let z = context.rng.gen_range(-6.0..=6.0);
             self.particles.push(Particle {
                 color:       graphics::get_team_color3(self.team),
                 counter:     0,
@@ -2357,13 +2357,13 @@ impl Player {
                 x:           x + x_offset,
                 y:           y,
                 z,
-                angle:       context.rng.gen_range(0.0, 2.0 * PI),
+                angle:       context.rng.gen_range(0.0..=2.0 * PI),
                 p_type:      ParticleType::Spark {
-                    x_vel:      if self.body.face_right { context.rng.gen_range(-0.3, 0.0) } else { context.rng.gen_range(0.0, 0.3) },
-                    y_vel:      context.rng.gen_range(0.0, 0.3),
-                    z_vel:      context.rng.gen_range(0.0, 0.3) * z.signum(),
-                    size:       context.rng.gen_range(2.0, 4.0),
-                    angle_vel:  context.rng.gen_range(0.0, 1.0),
+                    x_vel:      if self.body.face_right { context.rng.gen_range(-0.3..=0.0) } else { context.rng.gen_range(0.0..=0.3) },
+                    y_vel:      context.rng.gen_range(0.0..=0.3),
+                    z_vel:      context.rng.gen_range(0.0..=0.3) * z.signum(),
+                    size:       context.rng.gen_range(2.0..=4.0),
+                    angle_vel:  context.rng.gen_range(0.0..=1.0),
                 }
             });
         }

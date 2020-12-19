@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{PathBuf, Path};
 
-use dirs;
+use dirs_next;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use serde_json;
@@ -92,7 +92,7 @@ pub fn has_ext(path: &Path, check_ext: &str) -> bool {
 }
 
 pub fn get_path() -> PathBuf {
-    let mut data_local = dirs::data_local_dir().expect("Could not get data_local_dir");
+    let mut data_local = dirs_next::data_local_dir().expect("Could not get data_local_dir");
     data_local.push("CanonCollision");
     data_local
 }

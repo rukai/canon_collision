@@ -1328,7 +1328,7 @@ impl WgpuGraphics {
                             let position = Matrix4::from_translation(Vector3::new(shield.pos.0, shield.pos.1, 0.0));
                             let color = if shield.distort > 0 {
                                 let c = shield.color;
-                                [c[0] * rng.gen_range(0.75, 1.25), c[1] * rng.gen_range(0.75, 1.25), c[2] * rng.gen_range(0.75, 1.25), c[3] * rng.gen_range(0.8, 1.2)]
+                                [c[0] * rng.gen_range(0.75..=1.25), c[1] * rng.gen_range(0.75..=1.25), c[2] * rng.gen_range(0.75..=1.25), c[3] * rng.gen_range(0.8..=1.2)]
                             } else {
                                 shield.color
                             };
