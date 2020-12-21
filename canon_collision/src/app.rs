@@ -294,6 +294,6 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
         }
 
         let frame_duration = Duration::from_secs(1) / 60;
-        while frame_start.elapsed() < frame_duration { }
+        spin_sleep::sleep(frame_duration - frame_start.elapsed());
     }
 }
