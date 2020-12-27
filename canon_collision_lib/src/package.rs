@@ -109,7 +109,7 @@ impl Package {
     }
 
     pub fn load(&mut self) -> Result<(), String> {
-        // Get paths to the entities
+        let mut entities = vec!();
         if let Ok (dir) = fs::read_dir(self.path.join("Entities")) {
             for path in dir {
                 let full_path = path.unwrap().path();
@@ -118,11 +118,13 @@ impl Package {
                 let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
                 let mut entity: EntityDef = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
                 entity.cleanup();
-                self.entities.push(key, entity);
+                entities.push((key, entity));
             }
         }
+        entities.sort_by_key(|x| x.0.clone());
+        self.entities = KeyedContextVec::from_vec(entities);
 
-        // Get paths to the stages
+        let mut stages = vec!();
         if let Ok (dir) = fs::read_dir(self.path.join("Stages")) {
             for path in dir {
                 let full_path = path.unwrap().path();
@@ -130,9 +132,12 @@ impl Package {
 
                 let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
                 let stage = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
-                self.stages.push(key, stage);
+                stages.push((key, stage));
             }
         }
+        stages.sort_by_key(|x| x.0.clone());
+        self.stages = KeyedContextVec::from_vec(stages);
+
 
         self.force_update_entire_package();
         Ok(())

@@ -70,11 +70,11 @@ impl NetCommandLine {
 
 /*  Message Formats:
     Matchmaking Request:
-        1 byte - 0x00
+        1 byte  - 0x00
         n bytes - bincode serialized MatchMakingRequest
 
     Initiate Connection:
-        1 byte   - 0x01
+        1 byte  - 0x01
         n bytes - bincode serialized InitConnection
 
     Ping Request:
@@ -200,8 +200,8 @@ impl Netplay {
                 if self.state_frame % 600 == 1 { // Send a request every 10 seconds
                     let mut data = bincode::serialize(&request).unwrap();
                     data.insert(0, 0x00);
-                    if let Err(_) = self.socket.send_to(&data, "matchmaking.pfsandbox.net:8413") {
-                        self.disconnect_with_reason("matchmaking.pfsandbox.net:8413 is inaccessible");
+                    if let Err(_) = self.socket.send_to(&data, "matchmaking.canoncollision.com:8413") {
+                        self.disconnect_with_reason("matchmaking.canoncollision.com:8413 is inaccessible");
                     }
                 }
                 if let &Some(ref response) = &self.match_making_response {
