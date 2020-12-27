@@ -18,6 +18,7 @@ pub(crate) mod particle;
 pub(crate) mod replays;
 pub(crate) mod results;
 pub(crate) mod rules;
+pub(crate) mod audio;
 
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;

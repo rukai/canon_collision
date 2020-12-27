@@ -20,7 +20,7 @@ pub fn cli() -> CLIResults {
     opts.optopt("a",  "address",          "IP Address of other client to start netplay with", "IP_ADDRESS");
     opts.optopt("n",  "netplayplayers",   "Search for a netplay game with the specified number of players", "NUM_PLAYERS");
     opts.optopt("r",  "netplayregion",    "Search for a netplay game with the specified region", "REGION");
-    opts.optopt("k",  "replay",           "load the replay in the replays folder with the specified filename. Replay additionally loads normally usused data that is kept specifically for hot reloading.", "FILENAME");
+    opts.optopt("k",  "replay",           "load the replay in the replays folder with the specified filename. Replay additionally loads normally unused data that is kept specifically for hot reloading.", "FILENAME");
     opts.optopt("m",  "maxhistoryframes", "The oldest history frame is removed when number of history frames exceeds this value", "NUM_FRAMES");
     opts.optopt("g",  "graphics",         "Graphics backend to use",
         if cfg!(feature = "wgpu_renderer") {

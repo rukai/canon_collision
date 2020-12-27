@@ -10,9 +10,7 @@ use hotwatch::{Hotwatch, Event};
 pub struct Assets {
     path: PathBuf,
     models_reload_rx: Receiver<Reload>,
-    //audio_reload_rx: Receiver<Reload>,
     models_reload_tx: Sender<Reload>,
-    //audio_reload_tx: Arc<Sender<Reload>,
     hotwatch: Hotwatch,
 }
 
@@ -98,6 +96,10 @@ impl Assets {
             return None;
         };
         Some(contents)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 

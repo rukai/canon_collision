@@ -8,6 +8,7 @@ addons:
       - libssl-dev
       - libudev-dev
       - libgtk-3-dev
+      - libasound2-dev
       #- blender # blender version on bionic is too old, so we need to manually download a newer version
 cache: cargo
 before_install:

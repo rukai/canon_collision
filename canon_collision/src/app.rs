@@ -9,13 +9,14 @@ use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
 use canon_collision_lib::assets::Assets;
 use crate::ai;
+use crate::audio::Audio;
 use crate::camera::Camera;
 use crate::cli::{ContinueFrom, CLIResults};
 use crate::game::{Game, GameState, GameSetup, PlayerSetup, Edit};
 use crate::graphics::GraphicsMessage;
 use crate::menu::{Menu, MenuState, ResumeMenu};
-use crate::rules::Rules;
 use crate::replays;
+use crate::rules::Rules;
 
 use winit::event::WindowEvent;
 use winit_input_helper::WinitInputHelper;
@@ -56,10 +57,9 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
     };
 
     // package has better file missing error handling so load assets after package
-    let mut _assets = if let Some(assets) = Assets::new() {
+    let assets = if let Some(assets) = Assets::new() {
         assets
-    }
-    else {
+    } else {
         println!("Could not find assets/ in current directory or any of its parent directories.");
         return;
     };
@@ -217,6 +217,9 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             ContinueFrom::Close => unreachable!()
         }
     };
+
+    let mut audio = Audio::new(assets);
+    audio.play();
 
     let mut command_line = CommandLine::new();
     let mut os_input = WinitInputHelper::new();
