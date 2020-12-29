@@ -4,6 +4,7 @@ mod animation;
 
 use buffers::{ColorVertex, Vertex, Buffers};
 use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic};
+use crate::audio::BGMMetadata;
 use crate::entity::{RenderEntityType, RenderEntityFrame};
 use crate::game::{GameState, RenderObject, RenderGame};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
@@ -68,6 +69,7 @@ pub struct WgpuGraphics {
     prev_fullscreen:              Option<bool>,
     frame_durations:              Vec<Duration>,
     fps:                          String,
+    bgm_metadata:                 Option<(BGMMetadata, Instant)>,
     width:                        u32,
     height:                       u32,
 }
@@ -547,6 +549,7 @@ impl WgpuGraphics {
             prev_fullscreen: None,
             frame_durations: vec!(),
             fps: "".into(),
+            bgm_metadata: None,
             width,
             height,
         }
@@ -945,6 +948,65 @@ impl WgpuGraphics {
         });
     }
 
+    fn bgm_change(&mut self, render: &RenderGame) {
+        if let Some(bgm_metadata) = &render.bgm_metadata {
+            self.bgm_metadata = Some((bgm_metadata.clone(), Instant::now()));
+        }
+
+        if let Some((bgm_metadata, start_time)) = self.bgm_metadata.clone() {
+            if start_time.elapsed() > Duration::from_secs(10) {
+                self.bgm_metadata = None;
+            }
+
+            self.glyph_brush.queue(Section {
+                text: vec!(
+                    Text::new("♪")
+                    .with_color([1.0, 1.0, 1.0, 0.9])
+                    .with_scale(150.0)
+                ),
+                screen_position: (80.0, 70.0),
+                .. Section::default()
+            });
+
+            let title = format!("{}\n", bgm_metadata.title);
+            let artist = bgm_metadata.artist.map(|x| format!("{}\n", x));
+            let album = bgm_metadata.album.map(|x| format!("{}\n", x));
+
+            let mut text = vec!(
+                Text::new(&title)
+                .with_color([1.0, 1.0, 1.0, 0.9])
+                .with_scale(45.0)
+            );
+
+            if let Some(artist) = &artist {
+                text.push(
+                    Text::new(artist)
+                    .with_color([1.0, 1.0, 1.0, 0.9])
+                    .with_scale(20.0)
+                );
+                text.push(
+                    Text::new("\n")
+                    .with_color([1.0, 1.0, 1.0, 0.9])
+                    .with_scale(5.0)
+                );
+            }
+
+            if let Some(album) = &album {
+                text.push(
+                    Text::new(album)
+                    .with_color([1.0, 1.0, 1.0, 0.9])
+                    .with_scale(20.0)
+                );
+            }
+
+            self.glyph_brush.queue(Section {
+                text,
+                screen_position: (160.0, 100.0),
+                .. Section::default()
+            });
+        }
+    }
+
     fn debug_lines_render(&mut self, lines: &[String]) {
         if lines.len() > 1 {
             for (i, line) in lines.iter().enumerate() {
@@ -1075,6 +1137,7 @@ impl WgpuGraphics {
             self.game_timer_render(&render.timer);
             self.debug_lines_render(&render.debug_lines);
             self.fps_render();
+            self.bgm_change(&render);
         }
         else {
             self.command_render(command_output);

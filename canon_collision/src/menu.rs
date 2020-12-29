@@ -1,3 +1,4 @@
+use crate::audio::Audio;
 use crate::camera::Camera;
 use crate::game::{GameSetup, GameState, PlayerSetup, Edit};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
@@ -63,7 +64,9 @@ impl Menu {
         }
     }
 
-    pub fn resume(&mut self, resume_menu: ResumeMenu) {
+    pub fn resume(&mut self, resume_menu: ResumeMenu, audio: &mut Audio) {
+        audio.play_bgm("Menu");
+
         self.current_frame = 0;
         match resume_menu {
             ResumeMenu::NetplayDisconnect { reason: message } => {
@@ -886,7 +889,7 @@ impl MenuTicker {
 }
 
 pub struct RenderMenu {
-    pub state:          RenderMenuState,
+    pub state: RenderMenuState,
 }
 
 /// # Game -> Menu Transitions

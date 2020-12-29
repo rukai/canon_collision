@@ -1,11 +1,12 @@
+use crate::audio::{Audio, BGMMetadata};
 use crate::camera::Camera;
 use crate::collision::collision_box;
 use crate::collision::item_grab;
+use crate::entity::components::action_state::ActionState;
 use crate::entity::fighters::Fighter;
 use crate::entity::fighters::player::Player;
 use crate::entity::fighters::toriel::Toriel;
 use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
-use crate::entity::components::action_state::ActionState;
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
 use crate::replays::Replay;
@@ -70,6 +71,7 @@ pub struct Game {
         copied_frame:           Option<ActionFrame>,
     pub camera:                 Camera,
     pub tas:                    Vec<ControllerInput>,
+    bgm_metadata:               Option<BGMMetadata>,
     save_replay:                bool,
     reset_deadzones:            bool,
     prev_mouse_point:           Option<(f32, f32)>,
@@ -81,7 +83,7 @@ pub struct Game {
 /// All previous frame state is used to calculate the next frame, then the current_frame is incremented.
 
 impl Game {
-    pub fn new(package: Package, setup: GameSetup) -> Game {
+    pub fn new(package: Package, setup: GameSetup, audio: &mut Audio) -> Game {
         let stage = if let Some(stage) = setup.hot_reload_stage {
             stage
         } else {
@@ -134,6 +136,8 @@ impl Game {
             entities = overwrite;
         }
 
+        let bgm_metadata = Some(audio.play_bgm(&stage.name));
+
         Game {
             init_seed:              setup.init_seed,
             state:                  setup.state,
@@ -157,6 +161,7 @@ impl Game {
             save_replay:            false,
             reset_deadzones:        false,
             prev_mouse_point:       None,
+            bgm_metadata,
             package,
             stage,
             entities,
@@ -1516,6 +1521,7 @@ impl Game {
             camera:            self.camera.clone(),
             debug_lines:       self.debug_lines.clone(),
             timer:             timer,
+            bgm_metadata:      self.bgm_metadata.clone(),
         }
     }
 
@@ -1526,6 +1532,7 @@ impl Game {
             render_type:    RenderType::Game(self.render()),
             fullscreen:     config.fullscreen,
         };
+        self.bgm_metadata = None;
 
         GraphicsMessage {
             package_updates: self.package.updates(),
@@ -1727,6 +1734,7 @@ pub struct RenderGame {
     pub camera:            Camera,
     pub debug_lines:       Vec<String>,
     pub timer:             Option<Duration>,
+    pub bgm_metadata:      Option<BGMMetadata>,
 }
 
 pub enum RenderObject {

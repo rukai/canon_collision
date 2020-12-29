@@ -64,12 +64,15 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
         return;
     };
 
+    let mut audio = Audio::new(assets);
+
     // CLI options
     let (mut menu, mut game) = {
         #[allow(unused_variables)] // Needed for headless build
 
         match cli_results.continue_from {
             ContinueFrom::Menu => {
+                audio.play_bgm("Menu");
                 (
                     Menu::new(MenuState::GameSelect),
                     None,
@@ -173,7 +176,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 };
                 (
                     Menu::new(MenuState::character_select()),
-                    Some(Game::new(package.take().unwrap(), setup)),
+                    Some(Game::new(package.take().unwrap(), setup, &mut audio)),
                 )
             }
             ContinueFrom::ReplayFile (file_name) => {
@@ -183,7 +186,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                         input.set_history(std::mem::replace(&mut game_setup.input_history, vec!()));
                         (
                             Menu::new(MenuState::character_select()),
-                            Some(Game::new(package.take().unwrap(), game_setup)),
+                            Some(Game::new(package.take().unwrap(), game_setup, &mut audio)),
                         )
                     }
                     Err(err) => {
@@ -194,6 +197,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
             }
             ContinueFrom::Netplay => {
+                audio.play_bgm("Menu");
                 netplay.direct_connect(cli_results.address.unwrap());
                 let state = MenuState::NetplayWait { message: String::from("") };
 
@@ -203,6 +207,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 )
             }
             ContinueFrom::MatchMaking => {
+                audio.play_bgm("Menu");
                 netplay.connect_match_making(
                     cli_results.netplay_region.unwrap_or(config.netplay_region.clone().unwrap_or(String::from("AU"))),
                     cli_results.netplay_players.unwrap_or(2),
@@ -217,9 +222,6 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             ContinueFrom::Close => unreachable!()
         }
     };
-
-    let mut audio = Audio::new(assets);
-    audio.play();
 
     let mut command_line = CommandLine::new();
     let mut os_input = WinitInputHelper::new();
@@ -268,7 +270,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             input.step(&[], &[], &mut netplay, false);
             if let Some(mut menu_game_setup) = menu.step(package.as_ref().unwrap(), &mut config, &mut input, &os_input, &mut netplay) {
                 input.set_history(std::mem::replace(&mut menu_game_setup.input_history, vec!()));
-                game = Some(Game::new(package.take().unwrap(), menu_game_setup));
+                game = Some(Game::new(package.take().unwrap(), menu_game_setup, &mut audio));
             }
             else {
                 if let Err(_) = render_tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
@@ -282,7 +284,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
             input.reset_history();
             game = None;
-            menu.resume(resume_menu);
+            menu.resume(resume_menu, &mut audio);
 
             // Game -> Menu Transitions
             // Game complete   -> display results -> CSS
@@ -297,6 +299,9 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
         }
 
         let frame_duration = Duration::from_secs(1) / 60;
-        spin_sleep::sleep(frame_duration - frame_start.elapsed());
+        let frame_elapsed = frame_start.elapsed();
+        if frame_elapsed < frame_duration {
+            spin_sleep::sleep(frame_duration - frame_elapsed);
+        }
     }
 }
