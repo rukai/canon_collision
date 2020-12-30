@@ -18,6 +18,7 @@ use canon_collision_lib::stage::{Stage, Surface};
 
 use treeflection::KeyedContextVec;
 use rand::Rng;
+use kira::Value;
 
 use std::f32;
 use std::f32::consts::PI;
@@ -249,12 +250,14 @@ impl Player {
         for col_result in col_results {
             match col_result {
                 &CollisionResult::HitAtk { ref hitbox, ref point, .. } => {
+                    context.audio.play_sound_effect(&context.entity_def, "hit.wav", Value::Random(0.15, 0.2), Value::Random(0.90, 1.1));
                     self.hit_particles(point.clone(), hitbox);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     set_action = self.launch(context, state, hitbox, hurtbox, entity_atk_i);
                 }
                 &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
+                    context.audio.play_sound_effect(&context.entity_def, "hit.wav", Value::Random(0.15, 0.2), Value::Random(0.90, 1.1));
                     let entity_def = &context.entities[entity_defend_i];
                     if let Some(player_def) = &entity_def.ty.get_player() {
                         if let &Some(ref power_shield) = power_shield {
@@ -459,7 +462,7 @@ impl Player {
                 PlayerAction::Crouch           => self.crouch_action(context, state),
                 PlayerAction::Walk             => self.walk_action(context, state),
                 PlayerAction::Dash             => self.dash_action(context, state),
-                PlayerAction::Run              => self.run_action(context),
+                PlayerAction::Run              => self.run_action(context, state),
                 PlayerAction::RunEnd           => self.run_end_action(context, state),
                 PlayerAction::TiltTurn         => self.tilt_turn_action(context, state),
                 PlayerAction::SmashTurn        => self.smash_turn_action(context, state),
@@ -665,6 +668,9 @@ impl Player {
     }
 
     fn jump_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "jump.ogg", Value::Random(0.15, 0.2), Value::Random(0.90, 1.1));
+        }
         None
             .or_else(|| self.check_attacks_aerial(context))
             .or_else(|| self.check_special_air(context))
@@ -918,6 +924,9 @@ impl Player {
     }
 
     fn attack_land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "land.ogg", Value::Random(0.05, 0.1), Value::Random(0.90, 1.1));
+        }
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
         self.land_action(context, state)
@@ -925,6 +934,9 @@ impl Player {
     }
 
     fn land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "land.ogg", Value::Random(0.05, 0.1), Value::Random(0.90, 1.1));
+        }
         self.land_particles(context, state);
 
         if state.interruptible(&context.entity_def) {
@@ -975,6 +987,10 @@ impl Player {
     }
 
     fn walk_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame_no_restart % 20 == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "walk.ogg", Value::Random(0.01, 0.03), Value::Random(0.95, 1.05));
+        }
+
         if context.input[0].stick_x == 0.0 {
             ActionResult::set_action(PlayerAction::Idle)
         } else {
@@ -1009,6 +1025,9 @@ impl Player {
     }
 
     fn dash_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "dash.ogg", Value::Random(0.15, 0.2), Value::Random(0.95, 1.05));
+        }
         self.dash_particles(context, state);
         if state.frame == 1 {
             self.body.x_vel = self.relative_f(context.entity_def.dash_init_vel);
@@ -1063,7 +1082,10 @@ impl Player {
         .or_else(|| self.check_smash_turn(context))
     }
 
-    fn run_action(&mut self, context: &mut StepContext) -> Option<ActionResult> {
+    fn run_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+        if state.frame_no_restart % 17 == 0 {
+            context.audio.play_sound_effect(&context.entity_def, "walk.ogg", Value::Random(0.03, 0.1), Value::Random(0.95, 1.05));
+        }
         None
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
@@ -2141,6 +2163,7 @@ impl Player {
     }
 
     fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) -> Option<ActionResult> {
+        context.audio.play_sound_effect(&context.entity_def, "die.wav", Value::Random(0.30, 0.4), Value::Random(0.90, 1.1));
         self.body = if context.stage.respawn_points.len() == 0 {
             Body::new(
                 Location::Airbourne { x: 0.0, y: 0.0 },

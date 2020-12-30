@@ -170,7 +170,7 @@ impl Game {
         }
     }
 
-    pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay) -> GameState {
+    pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay, audio: &mut Audio) -> GameState {
         if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();
@@ -184,12 +184,12 @@ impl Game {
         {
             let state = self.state.clone();
             match state {
-                GameState::Local                     => self.step_local(input, netplay),
-                GameState::Netplay                   => self.step_netplay(input, netplay),
+                GameState::Local                     => self.step_local(input, netplay, audio),
+                GameState::Netplay                   => self.step_netplay(input, netplay, audio),
                 GameState::ReplayForwardsFromHistory => self.step_replay_forwards_from_history(input),
-                GameState::ReplayForwardsFromInput   => self.step_replay_forwards_from_input(input, netplay),
+                GameState::ReplayForwardsFromInput   => self.step_replay_forwards_from_input(input, netplay, audio),
                 GameState::ReplayBackwards           => self.step_replay_backwards(input),
-                GameState::StepThenPause             => { self.step_local(input, netplay); self.state = GameState::Paused; }
+                GameState::StepThenPause             => { self.step_local(input, netplay, audio); self.state = GameState::Paused; }
                 GameState::StepForwardThenPause      => { self.step_replay_forwards_from_history(input); self.state = GameState::Paused; }
                 GameState::StepBackwardThenPause     => { self.step_replay_backwards(input); self.state = GameState::Paused; }
                 GameState::Paused                    => self.step_pause(input),
@@ -202,7 +202,7 @@ impl Game {
                     GameState::ReplayForwardsFromHistory => self.step_replay_forwards_os_input(os_input),
                     GameState::ReplayForwardsFromInput   => self.step_replay_forwards_os_input(os_input),
                     GameState::ReplayBackwards           => self.step_replay_backwards_os_input(os_input),
-                    GameState::Paused                    => self.step_pause_os_input(input, os_input, netplay),
+                    GameState::Paused                    => self.step_pause_os_input(input, os_input, netplay, audio),
                     GameState::Quit (_)                  => unreachable!(),
 
                     GameState::Netplay              | GameState::StepThenPause |
@@ -299,7 +299,7 @@ impl Game {
         }
     }
 
-    fn step_local(&mut self, input: &mut Input, netplay: &Netplay) {
+    fn step_local(&mut self, input: &mut Input, netplay: &Netplay, audio: &mut Audio) {
         self.entity_history.push(self.entities.clone());
         self.stage_history.push(self.stage.clone());
         self.current_frame += 1;
@@ -315,7 +315,7 @@ impl Game {
         // run game loop
         input.game_update(self.current_frame);
         let player_inputs = &input.players(self.current_frame, netplay);
-        self.step_game(input, player_inputs);
+        self.step_game(input, player_inputs, audio);
 
         if let Some(max_history_frames) = self.max_history_frames {
             let extra_frames = self.entity_history.len().saturating_sub(max_history_frames);
@@ -338,7 +338,7 @@ impl Game {
         }
     }
 
-    fn step_netplay(&mut self, input: &mut Input, netplay: &Netplay) {
+    fn step_netplay(&mut self, input: &mut Input, netplay: &Netplay, audio: &mut Audio) {
         if !netplay.skip_frame() {
             self.current_frame += 1;
 
@@ -356,7 +356,7 @@ impl Game {
 
             for frame in start..end {
                 let player_inputs = &input.players(frame, netplay);
-                self.step_game(input, player_inputs);
+                self.step_game(input, player_inputs, audio);
 
                 self.entity_history.push(self.entities.clone());
                 self.stage_history.push(self.stage.clone());
@@ -373,13 +373,13 @@ impl Game {
         }
     }
 
-    fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
+    fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay, audio: &mut Audio) {
         // game flow control
         if os_input.key_pressed(VirtualKeyCode::J) {
             self.step_replay_backwards(input);
         }
         else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::K) {
-            self.step_replay_forwards_from_input(input, netplay);
+            self.step_replay_forwards_from_input(input, netplay, audio);
         }
         else if os_input.key_pressed(VirtualKeyCode::K) {
             self.step_replay_forwards_from_history(input);
@@ -394,7 +394,7 @@ impl Game {
             self.state = GameState::ReplayForwardsFromHistory;
         }
         else if os_input.key_pressed(VirtualKeyCode::Space) {
-            self.step_local(input, netplay);
+            self.step_local(input, netplay, audio);
         }
         else if os_input.key_pressed(VirtualKeyCode::U) {
             self.saved_frame = self.current_frame;
@@ -407,11 +407,11 @@ impl Game {
         }
 
         if self.camera.dev_mode() {
-            self.step_editor(input, os_input, netplay);
+            self.step_editor(input, os_input, netplay, audio);
         }
     }
 
-    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay) {
+    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay, audio: &mut Audio) {
         // set current edit state
         if os_input.key_pressed(VirtualKeyCode::Key0) {
             self.edit = Edit::Stage;
@@ -584,7 +584,7 @@ impl Game {
                             }
                             // We want to step just the entities current frame to simplify the animation work flow
                             // However we need to do a proper full step so that the history doesn't get mucked up.
-                            self.step_local(input, netplay);
+                            self.step_local(input, netplay, audio);
                         }
                         // delete frame
                         if os_input.key_pressed(VirtualKeyCode::N) {
@@ -1022,11 +1022,11 @@ impl Game {
     }
 
     /// next frame is advanced by using the input history on the current frame
-    fn step_replay_forwards_from_input(&mut self, input: &mut Input, netplay: &Netplay) {
+    fn step_replay_forwards_from_input(&mut self, input: &mut Input, netplay: &Netplay, audio: &mut Audio) {
         if self.current_frame <= input.last_frame() {
             self.current_frame += 1;
             let player_inputs = &input.players(self.current_frame, netplay);
-            self.step_game(input, player_inputs);
+            self.step_game(input, player_inputs, audio);
 
             self.update_frame();
         }
@@ -1116,7 +1116,7 @@ impl Game {
         seed
     }
 
-    fn step_game(&mut self, input: &Input, player_inputs: &[PlayerInput]) {
+    fn step_game(&mut self, input: &Input, player_inputs: &[PlayerInput], audio: &mut Audio) {
         let default_input = PlayerInput::empty();
         {
             let mut rng = ChaChaRng::from_seed(self.get_seed());
@@ -1146,6 +1146,7 @@ impl Game {
                         new_entities: &mut new_entities,
                         messages:     &mut messages,
                         delete_self:  false,
+                        audio,
                         input,
                     };
                     entity.action_hitlag_step(&mut context);
@@ -1177,6 +1178,7 @@ impl Game {
                             new_entities: &mut new_entities,
                             messages:     &mut messages,
                             delete_self:  false,
+                            audio,
                             input,
                         };
                         entity.item_grab(&mut context, hit_key, hit_id);
@@ -1207,6 +1209,7 @@ impl Game {
                         new_entities: &mut new_entities,
                         messages:     &mut messages,
                         delete_self:  false,
+                        audio,
                         input,
                     };
                     entity.physics_step(&mut context, self.current_frame, self.rules.goal.clone());
@@ -1244,6 +1247,7 @@ impl Game {
                         new_entities: &mut new_entities,
                         messages:     &mut messages,
                         delete_self:  false,
+                        audio,
                         input,
                     };
                     entity.step_collision(&mut context, &collision_results[key]);
@@ -1269,6 +1273,7 @@ impl Game {
                         new_entities: &mut new_entities,
                         messages:     &mut vec!(),
                         delete_self:  false,
+                        audio,
                         input,
                     };
                     entity.process_message(message, &mut context);

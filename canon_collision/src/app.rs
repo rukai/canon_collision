@@ -254,7 +254,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 let reset_deadzones = game.check_reset_deadzones();
                 input.step(&game.tas, &ai_inputs, &mut netplay, reset_deadzones);
 
-                if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input, command_line.block(), &netplay) {
+                if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input, command_line.block(), &netplay, &mut audio) {
                     resume_menu = Some(resume_menu_inner)
                 }
                 if let Err(_) = render_tx.send(game.graphics_message(&config, &command_line)) {

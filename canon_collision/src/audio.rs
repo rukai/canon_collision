@@ -5,12 +5,13 @@ use audiotags::Tag;
 use kira::instance::{InstanceId, InstanceSettings, StopInstanceSettings};
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::playable::PlayableSettings;
+use kira::Value;
 use rand::seq::IteratorRandom;
 use rand;
 use treeflection::{Node, NodeRunner, NodeToken};
 
 use canon_collision_lib::assets::Assets;
-use crate::entity::Entity;
+use canon_collision_lib::entity_def::EntityDef;
 
 pub struct Audio {
     manager: AudioManager,
@@ -21,7 +22,7 @@ pub struct Audio {
 impl Audio {
     pub fn new(assets: Assets) -> Self {
         let manager = AudioManager::new(AudioManagerSettings::default()).unwrap();
-        let path = assets.path().join("audio").join("music");
+        let path = assets.path().join("audio");
 
         Audio {
             manager,
@@ -30,8 +31,24 @@ impl Audio {
         }
     }
 
+    /// TODO: Load all sounds effects on startup
+    /// TODO: Random sfx selection from a pool?
     /// TODO: How to handle rollback?
-    pub fn _play_sound_effect(&mut self, _entity: Entity, _sfx_name: &str) {
+    /// TODO: I could probably add a foo.txt for a foo.mp3 that contains a relative path to another mp3 file
+    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx_name: &str, volume: Value<f64>, pitch: Value<f64>) {
+        self.play_sound_effect_inner(entity, sfx_name, volume, pitch).unwrap();
+    }
+
+    pub fn play_sound_effect_inner(&mut self, entity: &EntityDef, sfx_name: &str, volume: Value<f64>, pitch: Value<f64>) -> Result<(), String> {
+        let folder = entity.name.replace(" ", "");
+        let path = self.path.join("sfx").join(&folder).join(sfx_name);
+
+        let playable_settings = PlayableSettings::default();
+        let new_sound = self.manager.load_sound(&path, playable_settings).map_err(|x| format!("Failed to load {:?}. {}", path, x))?;
+
+        let instance_settings = InstanceSettings::default().volume(volume).pitch(pitch);
+        self.manager.play(new_sound, instance_settings).map_err(|x| x.to_string())?;
+        Ok(())
     }
 
     /// Folders can contain music organized by stage/menu or fighter
@@ -50,7 +67,7 @@ impl Audio {
 
     fn play_bgm_inner(&mut self, folder: &str) -> Result<BGMMetadata, String> {
         let folder = folder.replace(" ", "");
-        let read_dir = fs::read_dir(self.path.join(&folder)).map_err(|x| x.to_string())?;
+        let read_dir = fs::read_dir(self.path.join("music").join(&folder)).map_err(|x| x.to_string())?;
         let chosen_file = read_dir
             .filter_map(|x| x.ok())
             .filter(|x|

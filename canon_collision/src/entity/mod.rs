@@ -14,6 +14,7 @@ use fighters::Fighter;
 use components::action_state::{ActionState, Hitlag};
 use components::body::Body;
 
+use crate::audio::Audio;
 use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
 use crate::particle::Particle;
@@ -660,6 +661,7 @@ pub struct StepContext<'a> {
     pub rng:          &'a mut ChaChaRng,
     pub new_entities: &'a mut Vec<Entity>,
     pub messages:     &'a mut Vec<Message>,
+    pub audio:        &'a mut Audio,
     pub delete_self:  bool,
 }
 
