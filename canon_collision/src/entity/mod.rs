@@ -5,6 +5,9 @@ pub(crate) mod toriel_fireball;
 pub(crate) mod toriel_oven;
 pub(crate) mod fighters;
 
+use std::collections::HashSet;
+use std::f32::consts::PI;
+
 use fighters::player::{Player, RenderPlayer, MessagePlayer};
 use projectile::Projectile;
 use toriel_fireball::TorielFireball;
@@ -19,6 +22,7 @@ use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
 use crate::particle::Particle;
 use crate::rules::Goal;
+use crate::audio::sfx::{SFXType, HitBoxSFX};
 
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::entity_def::{EntityDef, ActionFrame, CollisionBoxRole, ECB};
@@ -29,9 +33,6 @@ use cgmath::{Quaternion, Rotation3, Rad};
 use rand_chacha::ChaChaRng;
 use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
 use treeflection::KeyedContextVec;
-
-use std::collections::HashSet;
-use std::f32::consts::PI;
 
 new_key_type! { pub struct EntityKey; }
 pub type Entities = DenseSlotMap<EntityKey, Entity>;
@@ -155,10 +156,12 @@ impl Entity {
         for col_result in col_results {
             match col_result {
                 &CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
+                    context.audio.play_sound_effect(&context.entity_def, SFXType::Hit(HitBoxSFX::Punch));
                     self.state.hitlist.push(entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
                 &CollisionResult::HitShieldAtk { entity_defend_i, ref hitbox, .. } => {
+                    context.audio.play_sound_effect(&context.entity_def, SFXType::Hit(HitBoxSFX::Sword));
                     self.state.hitlist.push(entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }

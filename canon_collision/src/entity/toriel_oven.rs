@@ -1,6 +1,9 @@
-use crate::entity::{StepContext, ActionResult};
-use crate::entity::components::body::Body;
+use kira::Value;
+
+use crate::audio::sfx::SFXType;
 use crate::entity::components::action_state::ActionState;
+use crate::entity::components::body::Body;
+use crate::entity::{StepContext, ActionResult};
 
 use canon_collision_lib::entity_def::toriel_oven::TorielOvenAction;
 
@@ -54,7 +57,16 @@ impl TorielOven {
                 }
             }
             Some(TorielOvenAction::AttackExtended) => None,
-            Some(TorielOvenAction::Attack) => None,
+            Some(TorielOvenAction::Attack) => {
+                if state.frame == 40 {
+                    context.audio.play_sound_effect(&context.entity_def, SFXType::Custom {
+                        filename: "ovenTimer.ogg".into(),
+                        volume:   Value::Fixed(0.3),
+                        pitch:    Value::Fixed(1.0),
+                    });
+                }
+                None
+            }
             None => None,
         };
 
