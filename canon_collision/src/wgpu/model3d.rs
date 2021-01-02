@@ -152,7 +152,7 @@ pub struct Model3D {
 pub struct Mesh {
     pub primitives: Vec<Primitive>,
     pub transform:  Matrix4<f32>,
-    pub root_joint: Option<Joint>,
+    pub root_joints: Vec<Joint>,
 }
 
 pub struct Primitive {
@@ -190,6 +190,18 @@ pub struct Joint {
     pub translation: Vector3<f32>,
     pub rotation:    Quaternion<f32>,
     pub scale:       Vector3<f32>,
+}
+
+impl Joint {
+    fn contains_joint(&self, joint_index: usize) -> bool {
+        for child in &self.children {
+            if child.contains_joint(joint_index) {
+                return true;
+            }
+        }
+
+        self.index == joint_index
+    }
 }
 
 impl Model3D {
@@ -299,8 +311,7 @@ impl Model3D {
                     channels.push(Channel { target_node_index, inputs, outputs, interpolation });
                 }
 
-                let name = name.to_string();
-                animations.insert(name, Animation { channels });
+                animations.insert(name.to_string(), Animation { channels });
             }
             else {
                 error!("A gltf animation could not be loaded as it has no name.");
@@ -328,7 +339,7 @@ impl Model3D {
         let transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         if let Some(mesh) = node.mesh() {
-            let mut root_joint = None;
+            let mut root_joints: Vec<Joint> = vec!();
             if let Some(skin) = node.skin() {
                 // You might think that skin.skeleton() would return the root_node, but you would be wrong.
                 let joints: Vec<_> = skin.joints().collect();
@@ -342,7 +353,11 @@ impl Model3D {
                     });
                     let ibm: Vec<Matrix4<f32>> = reader.read_inverse_bind_matrices().unwrap().map(|x| x.into()).collect();
                     let node_to_joints_lookup: Vec<_> = joints.iter().map(|x| x.index()).collect();
-                    root_joint = Some(Model3D::skeleton_from_gltf_node(&joints[0], blob, &node_to_joints_lookup, &ibm, Matrix4::identity()));
+                    for (joint_index, joint) in joints.iter().enumerate() {
+                        if root_joints.iter().all(|x| !x.contains_joint(joint_index)) {
+                            root_joints.push(Model3D::skeleton_from_gltf_node(joint, &node_to_joints_lookup, &ibm, Matrix4::identity()));
+                        }
+                    }
                 }
             }
 
@@ -419,7 +434,7 @@ impl Model3D {
                 primitives.push(Primitive { vertex_type, shader_type, buffers, texture });
             }
 
-            meshes.push(Mesh { primitives, transform, root_joint });
+            meshes.push(Mesh { primitives, transform, root_joints });
         }
 
         for child in node.children() {
@@ -429,7 +444,7 @@ impl Model3D {
         meshes
     }
 
-    fn skeleton_from_gltf_node(node: &Node, blob: &[u8], node_to_joints_lookup: &[usize], ibms: &[Matrix4<f32>], parent_transform: Matrix4<f32>) -> Joint {
+    fn skeleton_from_gltf_node(node: &Node, node_to_joints_lookup: &[usize], ibms: &[Matrix4<f32>], parent_transform: Matrix4<f32>) -> Joint {
         let mut children = vec!();
         let node_index = node.index();
         let index = node_to_joints_lookup.iter().enumerate().find(|(_, x)| **x == node_index).unwrap().0;
@@ -439,7 +454,7 @@ impl Model3D {
         let pose_transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         for child in node.children() {
-            children.push(Model3D::skeleton_from_gltf_node(&child, blob, node_to_joints_lookup, ibms, pose_transform.clone()));
+            children.push(Model3D::skeleton_from_gltf_node(&child, node_to_joints_lookup, ibms, pose_transform.clone()));
         }
 
         let ibm = ibm.clone();

@@ -1058,15 +1058,15 @@ impl WgpuGraphics {
         let mut draws = vec!();
 
         for mesh in &model.meshes {
+            let transform = (camera * entity * mesh.transform).into();
             for primitive in &mesh.primitives {
                 if let Some(texture) = primitive.texture.clone() {
                     let buffers = primitive.buffers.clone();
 
                     let draw = match primitive.vertex_type {
                         ModelVertexType::Animated => {
-                            let transform = (camera * entity).into();
                             let mut joint_transforms = [Matrix4::identity().into(); 500];
-                            if let Some(root_joint) = &mesh.root_joint {
+                            for root_joint in &mesh.root_joints {
                                 if let Some(animation) = model.animations.get(animation_name) {
                                     animation::generate_joint_transforms(animation, animation_frame, &root_joint, Matrix4::identity(), &mut joint_transforms);
                                 }
@@ -1084,17 +1084,16 @@ impl WgpuGraphics {
                             Draw { ty, buffers }
                         }
                         ModelVertexType::Static => {
-                            let transformation = camera * entity * mesh.transform;
                             let ty = match primitive.shader_type {
                                 ShaderType::Lava => {
                                     let uniform = TransformUniformCycle {
-                                        transform: transformation.into(),
-                                        frame_count: animation_frame,
+                                        transform,
+                                        frame_count: animation_frame_no_restart,
                                     };
                                     DrawType::Lava { uniform, texture }
                                 },
                                 ShaderType::Standard | ShaderType::Fireball => {
-                                    let uniform = TransformUniform { transform: transformation.into() };
+                                    let uniform = TransformUniform { transform };
                                     DrawType::ModelStatic { uniform, texture }
                                 }
                             };
@@ -1158,7 +1157,14 @@ impl WgpuGraphics {
         let stage_transformation = Matrix4::identity();
         if render.render_stage_mode.normal() {
             if let Some(stage) = self.models.get(&render.stage_model_name) {
-                draws.extend(self.render_model3d(&render.camera, &stage, &stage_transformation, "NONE", render.current_frame as f32, render.current_frame as f32));
+                draws.extend(self.render_model3d(
+                    &render.camera,
+                    &stage,
+                    &stage_transformation,
+                    "Main",
+                    (render.current_frame % 300) as f32, // TODO: Somehow get the animation length from the gltf
+                    render.current_frame as f32
+                ));
             }
         }
 
