@@ -18,20 +18,20 @@ strum = "0.20"
 strum_macros = "0.20"
 getopts = "0.2"
 log = "0.4"
-lyon = "0.16"
+lyon = "0.17"
 rand = "0.8"
 rand_chacha = "0.3"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
-slotmap = { version = "0.4", features = ["serde"] }
+slotmap = { version = "1", features = ["serde"] }
 treeflection = "0.1"
 treeflection_derive = "0.4"
 winit = "0.24" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
 winit_input_helper = "0.9"
 gltf = "0.15"
 png-decoder = { git = "https://github.com/mpizenberg/png-decoder" }
-cgmath = { version = "0.17" }
+cgmath = { version = "0.18" }
 futures = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
 vk-shader-macros = { version = "0.2", optional = true }

@@ -325,7 +325,7 @@ impl Camera {
                 let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -20000.0, 20000.0);
                 let camera_target   = Point3::new(middle_x, middle_y, 0.0);
                 let camera_location = Point3::new(middle_x, middle_y, 2000.0);
-                let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
+                let view = Matrix4::look_at_rh(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
                 aspect_ratio * proj * view
             }
             TransformMode::Play => {
@@ -341,7 +341,7 @@ impl Camera {
                         let camera_location = self.get_camera_location();
 
                         // view matrix
-                        let view = Matrix4::look_at(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
+                        let view = Matrix4::look_at_rh(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
                         aspect_ratio * proj * view
                     }
                     CameraControlState::Manual => {
@@ -350,7 +350,7 @@ impl Camera {
                             self.freelook_location.1,
                             self.freelook_location.2,
                         );
-                        let view = Matrix4::look_at_dir(camera_location, self.freelook_direction(), Vector3::new(0.0, 1.0, 0.0));
+                        let view = Matrix4::look_to_rh(camera_location, self.freelook_direction(), Vector3::new(0.0, 1.0, 0.0));
                         aspect_ratio * proj * view
                     }
                 }

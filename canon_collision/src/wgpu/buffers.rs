@@ -10,8 +10,8 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use wgpu::{Device, Buffer};
 use lyon::path::Path;
-use lyon::math::{Point, point};
-use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillAttributes};
+use lyon::math::point;
+use lyon::tessellation::{VertexBuffers, FillTessellator, FillOptions, FillVertexConstructor, BuffersBuilder, FillVertex};
 
 use std::collections::HashSet;
 use std::f32::consts;
@@ -41,7 +41,8 @@ fn colorvertex(x: f32, y: f32, color: [f32; 4]) -> ColorVertex {
 
 struct StageVertexConstructor;
 impl FillVertexConstructor<ColorVertex> for StageVertexConstructor {
-    fn new_vertex(&mut self, position: Point, _attributes: FillAttributes) -> ColorVertex {
+    fn new_vertex(&mut self, fill_vertex: FillVertex) -> ColorVertex {
+        let position = fill_vertex.position();
         ColorVertex {
             position: [position.x, position.y, 0.0, 1.0],
             color:    [0.16, 0.16, 0.16, 1.0]
@@ -215,7 +216,7 @@ impl Buffers {
             return None;
         }
 
-        let mut builder = Path::builder();
+        let mut builder = Path::svg_builder();
         let mut used: Vec<usize> = vec!();
         let mut cant_loop: Vec<usize> = vec!(); // optimization, so we dont have to keep rechecking surfaces that will never loop
 

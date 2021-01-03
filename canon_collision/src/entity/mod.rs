@@ -31,7 +31,7 @@ use canon_collision_lib::stage::{Stage, Surface};
 
 use cgmath::{Quaternion, Rotation3, Rad};
 use rand_chacha::ChaChaRng;
-use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type};
+use slotmap::{DenseSlotMap, SparseSecondaryMap, new_key_type, Key};
 use treeflection::KeyedContextVec;
 
 new_key_type! { pub struct EntityKey; }
