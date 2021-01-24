@@ -91,7 +91,7 @@ impl SFX {
             (_, SFXType::Jump) => self.sfx.get_mut("Common/jump.ogg"),
             (_, SFXType::Land) => self.sfx.get_mut("Common/land.ogg"),
             (_, SFXType::Die)  => self.sfx.get_mut("Common/die.wav"),
-            (_, SFXType::Hit (HitBoxSFX::Sword)) => self.sfx.get_mut("Common/swordHit.ogg"),
+            (_, SFXType::Hit (HitBoxSFX::Sword)) => self.sfx.get_mut("Common/hit.wav"),
             (_, SFXType::Hit (HitBoxSFX::Punch)) => self.sfx.get_mut("Common/hit.wav"),
             (folder, SFXType::Custom { filename, .. }) => self.sfx.get_mut(&format!("{}/{}", folder, filename)),
         };
