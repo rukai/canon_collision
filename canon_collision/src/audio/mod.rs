@@ -2,9 +2,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use audiotags::Tag;
-use kira::instance::{InstanceId, InstanceSettings, StopInstanceSettings};
+use kira::instance::{InstanceSettings, StopInstanceSettings};
+use kira::instance::handle::InstanceHandle;
 use kira::manager::{AudioManager, AudioManagerSettings};
-use kira::playable::PlayableSettings;
+use kira::sound::SoundSettings;
 use rand::seq::IteratorRandom;
 use rand;
 use treeflection::{Node, NodeRunner, NodeToken};
@@ -19,7 +20,7 @@ use sfx::{SFX, SFXType};
 pub struct Audio {
     manager: AudioManager,
     path:    PathBuf,
-    bgm:     Option<InstanceId>,
+    bgm:     Option<InstanceHandle>,
     sfx:     SFX,
 }
 
@@ -38,7 +39,7 @@ impl Audio {
     }
 
     pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SFXType) {
-        self.sfx.play_sound_effect(&mut self.manager, entity, sfx);
+        self.sfx.play_sound_effect(entity, sfx);
     }
 
     /// Folders can contain music organized by stage/menu or fighter
@@ -65,14 +66,14 @@ impl Audio {
             ).choose(&mut rand::thread_rng())
             .ok_or("No files in folder")?;
 
-        let basic_loop = PlayableSettings::default().default_loop_start(0.0);
-        let new_sound = self.manager.load_sound(chosen_file.path(), basic_loop).map_err(|x| x.to_string())?;
+        let basic_loop = SoundSettings::default().default_loop_start(0.0);
+        let mut new_sound = self.manager.load_sound(chosen_file.path(), basic_loop).map_err(|x| x.to_string())?;
 
-        if let Some(instance_id) = self.bgm.take() {
-            self.manager.stop_instance(instance_id, StopInstanceSettings::default()).unwrap();
+        if let Some(mut instance_id) = self.bgm.take() {
+            instance_id.stop(StopInstanceSettings::default()).unwrap();
         }
 
-        self.bgm = Some(self.manager.play(new_sound, InstanceSettings::default()).map_err(|x| x.to_string())?);
+        self.bgm = Some(new_sound.play(InstanceSettings::default()).map_err(|x| x.to_string())?);
 
         let tag = Tag::new().read_from_path(chosen_file.path()).unwrap();
 

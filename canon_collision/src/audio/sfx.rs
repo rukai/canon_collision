@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use kira::Value;
 use kira::instance::InstanceSettings;
 use kira::manager::AudioManager;
-use kira::playable::PlayableSettings;
-use kira::sound::SoundId;
+use kira::sound::SoundSettings;
+use kira::sound::handle::SoundHandle;
 
 use canon_collision_lib::entity_def::EntityDef;
 
@@ -35,7 +35,7 @@ pub enum SFXType {
 }
 
 pub struct SFX {
-    sfx: HashMap<String, SoundId>,
+    sfx: HashMap<String, SoundHandle>,
 }
 
 impl SFX {
@@ -46,7 +46,7 @@ impl SFX {
         SFX { sfx }
     }
 
-    fn populate_sfx(manager: &mut AudioManager, root_path: &Path, search_path: Option<&PathBuf>, sfx: &mut HashMap<String, SoundId>) {
+    fn populate_sfx(manager: &mut AudioManager, root_path: &Path, search_path: Option<&PathBuf>, sfx: &mut HashMap<String, SoundHandle>) {
         let path = if let Some(search_path) = search_path {
             root_path.join(search_path)
         } else {
@@ -55,7 +55,7 @@ impl SFX {
 
         for file in fs::read_dir(path).unwrap() {
             let file = file.unwrap();
-            let playable_settings = PlayableSettings::default();
+            let playable_settings = SoundSettings::default();
 
             let sub_search_path = if let Some(search_path) = search_path {
                 search_path.join(file.file_name())
@@ -80,21 +80,21 @@ impl SFX {
     }
 
     /// TODO: How to handle rollback?
-    pub fn play_sound_effect(&mut self, manager: &mut AudioManager, entity: &EntityDef, sfx: SFXType) {
+    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SFXType) {
         let entity_name = entity.name.replace(" ", "");
 
         let sfx_id = match (&entity_name, &sfx) {
             //(_, SFXType::Walk) => ["Common/walk1.ogg", "Common/walk2.ogg"].choose(&mut rand::thread_rng()).unwrap(), // TODO: This is possible
-            (_, SFXType::Walk) => self.sfx["Common/walk.ogg"],
-            (_, SFXType::Run)  => self.sfx["Common/walk.ogg"],
-            (_, SFXType::Dash) => self.sfx["Common/dash.ogg"],
-            (_, SFXType::Jump) => self.sfx["Common/jump.ogg"],
-            (_, SFXType::Land) => self.sfx["Common/land.ogg"],
-            (_, SFXType::Die)  => self.sfx["Common/die.wav"],
-            (_, SFXType::Hit (HitBoxSFX::Sword)) => self.sfx["Common/swordHit.ogg"],
-            (_, SFXType::Hit (HitBoxSFX::Punch)) => self.sfx["Common/hit.wav"],
-            (folder, SFXType::Custom { filename, .. }) => self.sfx[&format!("{}/{}", folder, filename)],
-        }.clone();
+            (_, SFXType::Walk) => self.sfx.get_mut("Common/walk.ogg"),
+            (_, SFXType::Run)  => self.sfx.get_mut("Common/walk.ogg"),
+            (_, SFXType::Dash) => self.sfx.get_mut("Common/dash.ogg"),
+            (_, SFXType::Jump) => self.sfx.get_mut("Common/jump.ogg"),
+            (_, SFXType::Land) => self.sfx.get_mut("Common/land.ogg"),
+            (_, SFXType::Die)  => self.sfx.get_mut("Common/die.wav"),
+            (_, SFXType::Hit (HitBoxSFX::Sword)) => self.sfx.get_mut("Common/swordHit.ogg"),
+            (_, SFXType::Hit (HitBoxSFX::Punch)) => self.sfx.get_mut("Common/hit.wav"),
+            (folder, SFXType::Custom { filename, .. }) => self.sfx.get_mut(&format!("{}/{}", folder, filename)),
+        };
 
         let (volume, pitch) = match (&entity_name, sfx) {
             (_, SFXType::Walk) => (Value::Random(0.01, 0.03), Value::Random(0.95, 1.05)),
@@ -109,6 +109,6 @@ impl SFX {
         };
 
         let instance_settings = InstanceSettings::default().volume(volume).pitch(pitch);
-        manager.play(sfx_id, instance_settings).map_err(|x| x.to_string()).unwrap();
+        sfx_id.unwrap().play(instance_settings).map_err(|x| x.to_string()).unwrap();
     }
 }
