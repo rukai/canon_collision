@@ -1,6 +1,5 @@
 use std::fs::{DirBuilder, File};
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{PathBuf, Path};
 
 use dirs_next;
@@ -19,7 +18,7 @@ pub fn save_struct_json<T: Serialize>(filename: &Path, object: &T) {
 
     // save
     let json = serde_json::to_string_pretty(object).unwrap();
-    File::create(filename).unwrap().write_all(&json.as_bytes()).unwrap();
+    std::fs::write(filename, &json.as_bytes()).unwrap();
 }
 
 pub fn load_struct_json<T: DeserializeOwned>(filename: &Path) -> Result<T, String> {
@@ -61,16 +60,8 @@ pub fn load_struct_bincode<T: DeserializeOwned>(filename: &Path) -> Result<T, St
 }
 
 pub fn load_file(filename: &Path) -> Result<String, String> {
-    let mut file = match File::open(&filename) {
-        Ok(file) => file,
-        Err(err) => return Err(format!("Failed to open file: {} because: {}", filename.to_str().unwrap(), err))
-    };
-
-    let mut contents = String::new();
-    if let Err(err) = file.read_to_string(&mut contents) {
-        return Err(format!("Failed to read file {} because: {}", filename.to_str().unwrap(), err))
-    };
-    Ok(contents)
+    std::fs::read_to_string(&filename)
+        .map_err(|x| format!("Failed to open file: {} because: {}", filename.to_str().unwrap(), x))
 }
 
 /// deletes all files in the passed directory

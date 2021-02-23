@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 use std::env;
-use std::fs::File;
-use std::io::{Write, Read};
 use std::panic::PanicInfo;
 use std::panic;
 use std::path::{Path, PathBuf};
@@ -11,6 +9,7 @@ use backtrace::Backtrace;
 use os_type;
 use uuid::Uuid;
 use toml;
+use crate::files;
 
 /// Enables the panic handler.
 /// Only use on Canon Collision applications with a gui
@@ -125,9 +124,8 @@ impl Report {
         if let Some(tmp_dir) = tmp_dir.to_str() {
             let file_name = format!("canon-collision-panic-{}.toml", &uuid);
             let file_path = Path::new(tmp_dir).join(file_name);
-            let mut file = File::create(&file_path).map_err(|x| format!("{:?}", x))?;
             let toml = toml::to_string_pretty(&self).map_err(|x| format!("{:?}", x))?;
-            file.write_all(toml.as_bytes()).map_err(|x| format!("{:?}", x))?;
+            std::fs::write(&file_path, toml.as_bytes()).map_err(|x| format!("{:?}", x))?;
             Ok(file_path)
         } else {
             Err(String::from("Couldnt get a temp directory"))
@@ -136,9 +134,7 @@ impl Report {
 
     /// Read a report from disk
     pub fn from_file(file_name: &str) -> Result<Report, String> {
-        let mut file = File::open(file_name).map_err(|x| format!("{:?}", x))?;
-        let mut text = String::new();
-        file.read_to_string(&mut text).map_err(|x| format!("{:?}", x))?;
+        let text = files::load_file(Path::new(file_name))?;
         toml::from_str(&text).map_err(|x| format!("{:?}", x))
     }
 }

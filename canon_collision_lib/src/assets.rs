@@ -1,6 +1,4 @@
-use std::fs::File;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -82,20 +80,9 @@ impl Assets {
 
     /// On failure to read from disk, logs the error and returns None
     fn load_file(path: PathBuf) -> Option<Vec<u8>> {
-        let mut file = match File::open(&path) {
-            Ok(file) => file,
-            Err(err) => {
-                error!("Failed to open file: '{}' because: {}", path.to_str().unwrap(), err);
-                return None;
-            }
-        };
-
-        let mut contents = Vec::<u8>::new();
-        if let Err(err) = file.read_to_end(&mut contents) {
-            error!("Failed to read file '{}' because: {}", path.to_str().unwrap(), err);
-            return None;
-        };
-        Some(contents)
+        std::fs::read(&path)
+            .map_err(|err| error!("Failed to read file '{}' because: {}", path.to_str().unwrap(), err))
+            .ok()
     }
 
     pub fn path(&self) -> &Path {
