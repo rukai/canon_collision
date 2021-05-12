@@ -3,7 +3,7 @@ name = "cc_cli"
 version = "0.0.1"
 authors = ["Rukai <rubickent@gmail.com>"]
 description = "CLI client for Canon Collision"
-license = "GPL-3.0"
+license = "MIT"
 repository = "https://github.com/rukai/pf_sandbox"
 keywords = ["canon", "collision", "CLI", "command", "client"]
 

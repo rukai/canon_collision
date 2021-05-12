@@ -1,7 +1,7 @@
 [package]
 name = "package_upgrader"
 version = "0.0.1"
-license = "GPL-3.0"
+license = "MIT"
 authors = ["Rukai <rubickent@gmail.com>"]
 repository = "https://github.com/rukai/canon_collision"
 edition = "2018"
