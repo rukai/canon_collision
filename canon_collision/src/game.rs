@@ -39,13 +39,13 @@ use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 
+#[derive(Clone, Default, Serialize, Deserialize, Node)]
 #[NodeActions(
     NodeAction(function="save_replay", return_string),
     NodeAction(function="reset_deadzones", return_string),
     NodeAction(function="copy_stage_to_package", return_string),
     NodeAction(function="copy_package_to_stage", return_string),
 )]
-#[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct Game {
     pub package:                Package,
     pub init_seed:              u64,
