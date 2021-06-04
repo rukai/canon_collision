@@ -108,7 +108,7 @@ impl SFX {
             (_, SFXType::Custom { volume, pitch, .. }) => (volume, pitch),
         };
 
-        let instance_settings = InstanceSettings::default().volume(volume).pitch(pitch);
+        let instance_settings = InstanceSettings::default().volume(volume).playback_rate(pitch);
         sfx_id.unwrap().play(instance_settings).map_err(|x| x.to_string()).unwrap();
     }
 }
