@@ -106,11 +106,7 @@ impl WgpuGraphics {
             None,
         ).await.unwrap();
 
-        let color_vs = vk_shader_macros::include_glsl!("src/shaders/color-vertex.glsl", kind: vert);
-        let color_vs_module = WgpuGraphics::create_shader(&mut device, color_vs);
-
-        let color_fs = vk_shader_macros::include_glsl!("src/shaders/color-fragment.glsl", kind: frag);
-        let color_fs_module = WgpuGraphics::create_shader(&mut device, color_fs);
+        let color_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/color.wgsl"));
 
         let bind_group_layout_generic = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -183,8 +179,8 @@ impl WgpuGraphics {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &color_vs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
@@ -195,8 +191,8 @@ impl WgpuGraphics {
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &color_fs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "fs_main",
                 targets: &targets,
             }),
             primitive: primitive.clone(),
@@ -208,8 +204,8 @@ impl WgpuGraphics {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &color_vs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
@@ -220,8 +216,8 @@ impl WgpuGraphics {
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &color_fs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "fs_main",
                 targets: &targets,
             }),
             primitive: primitive_back_face_culling.clone(),
@@ -241,8 +237,8 @@ impl WgpuGraphics {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &color_vs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
@@ -253,8 +249,8 @@ impl WgpuGraphics {
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &color_fs_module,
-                entry_point: "main",
+                module: &color_module,
+                entry_point: "fs_main",
                 targets: &targets,
             }),
             primitive: primitive.clone(),
@@ -262,18 +258,14 @@ impl WgpuGraphics {
             multisample: multisample.clone(),
         });
 
-        let hitbox_vs = vk_shader_macros::include_glsl!("src/shaders/hitbox-vertex.glsl", kind: vert);
-        let hitbox_vs_module = WgpuGraphics::create_shader(&mut device, hitbox_vs);
-
-        let hitbox_fs = vk_shader_macros::include_glsl!("src/shaders/hitbox-fragment.glsl", kind: frag);
-        let hitbox_fs_module = WgpuGraphics::create_shader(&mut device, hitbox_fs);
+        let hitbox_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/hitbox.wgsl"));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &hitbox_vs_module,
-                entry_point: "main",
+                module: &hitbox_module,
+                entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
@@ -285,8 +277,8 @@ impl WgpuGraphics {
                 }],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &hitbox_fs_module,
-                entry_point: "main",
+                module: &hitbox_module,
+                entry_point: "fs_main",
                 targets: &targets,
             }),
             primitive: primitive.clone(),
@@ -295,19 +287,22 @@ impl WgpuGraphics {
         });
 
         let model3d_standard_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-standard-fragment.glsl", kind: frag);
-        let model3d_standard_fs_module = WgpuGraphics::create_shader(&mut device, model3d_standard_fs);
+        let model3d_standard_fs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_standard_fs);
 
         let model3d_lava_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-lava-fragment.glsl", kind: frag);
-        let model3d_lava_fs_module = WgpuGraphics::create_shader(&mut device, model3d_lava_fs);
+        let model3d_lava_fs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_lava_fs);
 
         let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
-        let model3d_static_vs_module = WgpuGraphics::create_shader(&mut device, model3d_static_vs);
+        let model3d_static_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_static_vs);
 
         let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
-        let model3d_animated_vs_module = WgpuGraphics::create_shader(&mut device, model3d_animated_vs);
+        let model3d_animated_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_animated_vs);
 
         let model3d_fireball_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-fireball-vertex.glsl", kind: vert);
-        let model3d_fireball_vs_module = WgpuGraphics::create_shader(&mut device, model3d_fireball_vs);
+        let model3d_fireball_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_fireball_vs);
+
+        // TODO: wgsl cant even handle the multiply yet.
+        //let model3d_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/model3d.wgsl"));
 
         let bind_group_layout_model3d = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -522,11 +517,19 @@ impl WgpuGraphics {
         }
     }
 
-    fn create_shader(device: &mut Device, shader: &[u32]) -> wgpu::ShaderModule {
+    fn create_shader_glsl(device: &mut Device, shader: &[u32]) -> wgpu::ShaderModule {
         device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::SpirV(Cow::Borrowed(shader)),
-            flags: wgpu::ShaderFlags::VALIDATION
+            flags: wgpu::ShaderFlags::all(),
+        })
+    }
+
+    fn create_shader(device: &mut Device, shader: &str) -> wgpu::ShaderModule {
+        device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: ShaderSource::Wgsl(Cow::Borrowed(shader)),
+            flags: wgpu::ShaderFlags::all(),
         })
     }
 
