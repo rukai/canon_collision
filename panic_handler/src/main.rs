@@ -57,7 +57,7 @@ fn display_window(file_name: &str) {
             };
             let body = "PLEASE REPLACE THIS TEXT WITH WHAT YOU WERE DOING WHEN THE PANIC OCCURRED.%0A%0APLEASE ENSURE THE PANIC DUMP FILE IS ATTACHED.";
             let address = format!("https://github.com/rukai/canon_collision/issues/new?labels=panic&title={}&body={}", title, body);
-            let link = LinkButton::with_label(&address, Some("https://github.com/rukai/canon_collision/issues/new"));
+            let link = LinkButton::with_label(&address, "https://github.com/rukai/canon_collision/issues/new");
             if address.len() >= 2000 {
                 eprintln!("This address is too long, it may not work on some browsers:\n{}", address);
             }

@@ -4,7 +4,7 @@ mod state;
 
 use uuid::Uuid;
 use gtk::prelude::*;
-use gdk::Atom;
+use gtk::gdk::Atom;
 use gtk::{
     Box,
     Button,
@@ -37,6 +37,7 @@ use state::{State, Code, AnalogHistory};
 
 use std::rc::Rc;
 use std::sync::RwLock;
+use std::time::Duration;
 
 // make moving clones into closures more convenient
 macro_rules! clone {
@@ -67,7 +68,7 @@ fn main() {
     gtk::init().unwrap();
 
     let window = Window::new(WindowType::Toplevel);
-    window.set_property_default_height(800);
+    window.set_default_height(800);
     window.set_title("CC Controller Mapper");
 
     let vbox = Box::new(Orientation::Vertical, 5);
@@ -77,7 +78,7 @@ fn main() {
     window.add(&vbox);
 
     let scrolled_window = ScrolledWindow::new(gtk::NONE_ADJUSTMENT, gtk::NONE_ADJUSTMENT);
-    scrolled_window.set_property_hscrollbar_policy(PolicyType::Never);
+    scrolled_window.set_hscrollbar_policy(PolicyType::Never);
 
     let inputs_vbox = Box::new(Orientation::Vertical, 20);
     inputs_vbox.set_margin_top(10);
@@ -131,7 +132,7 @@ fn controller_select_hbox(state: Rc<RwLock<State>>, inputs_vbox: Box) -> Box {
     let combo_box = ComboBoxText::new();
     combo_box.connect_changed(clone!(state, combo_box => move |_| {
         let mut controller = None;
-        if let Some(text) = combo_box.get_active_text() {
+        if let Some(text) = combo_box.active_text() {
             let mut state = state.write().unwrap();
             for (i, controller_map) in state.controller_maps.maps.iter().enumerate() {
                 if controller_map.get_fullname() == text && controller_map.os == OS::get_current() {
@@ -150,7 +151,7 @@ fn controller_select_hbox(state: Rc<RwLock<State>>, inputs_vbox: Box) -> Box {
     only_plugged_in.connect_toggled(clone!(state, only_plugged_in, combo_box => move |_| {
         combo_box.remove_all();
         let state = state.read().unwrap();
-        if only_plugged_in.get_active() {
+        if only_plugged_in.is_active() {
             for map in state.controller_maps.maps.iter() {
                 let mut add = false;
                 for i in 0..state.gilrs.last_gamepad_hint() {
@@ -196,7 +197,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
 
     hbox.add(&label);
 
-    gtk::timeout_add(16, move || {
+    gtk::glib::timeout_add_local(Duration::from_millis(16), move || {
         let mut state = state.write().unwrap();
         while let Some(ev) = state.gilrs.next_event() {
             match ev.event {
@@ -244,7 +245,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
 }
 
 fn populate_inputs(state: Rc<RwLock<State>>, vbox: Box) {
-    for children in vbox.get_children() {
+    for children in vbox.children() {
         vbox.remove(&children);
     }
 
@@ -372,7 +373,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));
     let code_entry = Entry::with_buffer(&code_entry_buffer);
     code_entry.connect_changed(clone!(state => move |_| {
-        if let Ok(value) = code_entry_buffer.get_text().parse() {
+        if let Ok(value) = code_entry_buffer.text().parse() {
             let mut state = state.write().unwrap();
             let map_i = state.controller.unwrap();
             let digital_map_i = state.ui_to_digital_map[&uuid];
@@ -387,7 +388,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
             let min_entry_buffer = EntryBuffer::new(Some(min.to_string().as_ref()));
             let min_entry = Entry::with_buffer(&min_entry_buffer);
             min_entry.connect_changed(clone!(state => move |_| {
-                if let Ok(value) = min_entry_buffer.get_text().parse() {
+                if let Ok(value) = min_entry_buffer.text().parse() {
                     let mut state = state.write().unwrap();
                     let map_i = state.controller.unwrap();
                     let digital_map_i = state.ui_to_digital_map[&uuid];
@@ -400,7 +401,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
             let max_entry_buffer = EntryBuffer::new(Some(max.to_string().as_ref()));
             let max_entry = Entry::with_buffer(&max_entry_buffer);
             max_entry.connect_changed(clone!(state => move |_| {
-                if let Ok(value) = max_entry_buffer.get_text().parse() {
+                if let Ok(value) = max_entry_buffer.text().parse() {
                     let mut state = state.write().unwrap();
                     let map_i = state.controller.unwrap();
                     let digital_map_i = state.ui_to_digital_map[&uuid];
@@ -535,7 +536,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));
     let code_entry = Entry::with_buffer(&code_entry_buffer);
     code_entry.connect_changed(clone!(state => move |_| {
-        if let Ok(value) = code_entry_buffer.get_text().parse() {
+        if let Ok(value) = code_entry_buffer.text().parse() {
             let mut state = state.write().unwrap();
             let map_i = state.controller.unwrap();
             let analog_map_i = state.ui_to_analog_map[&uuid];
@@ -550,7 +551,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
             let min_entry_buffer = EntryBuffer::new(Some(min.to_string().as_ref()));
             let min_entry = Entry::with_buffer(&min_entry_buffer);
             min_entry.connect_changed(clone!(state => move |_| {
-                if let Ok(value) = min_entry_buffer.get_text().parse() {
+                if let Ok(value) = min_entry_buffer.text().parse() {
                     let mut state = state.write().unwrap();
                     let map_i = state.controller.unwrap();
                     let analog_map_i = state.ui_to_analog_map[&uuid];
@@ -563,7 +564,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
             let max_entry_buffer = EntryBuffer::new(Some(max.to_string().as_ref()));
             let max_entry = Entry::with_buffer(&max_entry_buffer);
             max_entry.connect_changed(clone!(state => move |_| {
-                if let Ok(value) = max_entry_buffer.get_text().parse() {
+                if let Ok(value) = max_entry_buffer.text().parse() {
                     let mut state = state.write().unwrap();
                     let map_i = state.controller.unwrap();
                     let analog_map_i = state.ui_to_analog_map[&uuid];
@@ -577,7 +578,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
                 let mut state = state.write().unwrap();
                 let map_i = state.controller.unwrap();
                 let analog_map_i = state.ui_to_analog_map[&uuid];
-                state.controller_maps.maps[map_i].analog_maps[analog_map_i].filter.set_flip(flip_check_button.get_active());
+                state.controller_maps.maps[map_i].analog_maps[analog_map_i].filter.set_flip(flip_check_button.is_active());
             }));
             flip_check_button.set_active(flip);
             hbox.add(&flip_check_button);
@@ -588,7 +589,7 @@ fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index:
             let value_entry_buffer = EntryBuffer::new(Some(value.to_string().as_ref()));
             let value_entry = Entry::with_buffer(&value_entry_buffer);
             value_entry.connect_changed(clone!(state => move |_| {
-                if let Ok(value) = value_entry_buffer.get_text().parse() {
+                if let Ok(value) = value_entry_buffer.text().parse() {
                     let mut state = state.write().unwrap();
                     let map_i = state.controller.unwrap();
                     let analog_map_i = state.ui_to_analog_map[&uuid];
