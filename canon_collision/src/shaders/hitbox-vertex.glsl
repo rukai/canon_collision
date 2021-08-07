@@ -1,4 +1,4 @@
-#version 450
+#version 440
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in float edge;

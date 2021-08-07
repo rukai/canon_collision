@@ -35,9 +35,8 @@ cgmath = { version = "0.18" }
 futures = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
 vk-shader-macros = { version = "0.2", optional = true }
-#wgpu_glyph = { version = "0.11", optional = true }
-wgpu_glyph = { git = "https://github.com/hecrj/wgpu_glyph", optional = true, rev = "a8e97479a97e46aa61d6d9bf1a7c3049abab8a97" }
-wgpu = { version = "0.7.0", optional = true }
+wgpu_glyph = { version = "0.13", optional = true }
+wgpu = { version = "0.9.0", optional = true }
 raw-window-handle = "0.3"
 spin_sleep = "1"
 kira = "0.5"

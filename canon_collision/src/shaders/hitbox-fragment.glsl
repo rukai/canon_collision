@@ -1,4 +1,4 @@
-#version 450
+#version 440
 
 layout(location = 0) in float v_edge;
 layout(location = 1) flat in uint v_render_id;
@@ -11,11 +11,11 @@ layout(set = 0, binding = 0) uniform Data {
 } uniforms;
 
 void main() {
+    float e = fwidth(v_edge);
     if (v_render_id == 0) {
         f_color = uniforms.color;
     }
     else if (v_render_id == 1) {
-        float e = fwidth(v_edge);
         float value = smoothstep(0.8 - e, 0.8 + e, v_edge);
         f_color = mix(uniforms.color, uniforms.edge_color, value);
     }
@@ -46,5 +46,8 @@ void main() {
     }
     else if (v_render_id == 8) {
         f_color = vec4(0.0, 0.0, 1.0, 1.0);
+    }
+    else {
+        f_color = vec4(1.0, 0.0, 1.0, 1.0);
     }
 }

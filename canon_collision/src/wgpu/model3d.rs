@@ -7,6 +7,7 @@ use canon_collision_lib::entity_def::EntityDef;
 
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use bytemuck::{Pod, Zeroable};
@@ -238,7 +239,7 @@ impl Model3D {
                     let size = wgpu::Extent3d {
                         width: png.width as u32,
                         height: png.height as u32,
-                        depth: 1,
+                        depth_or_array_layers: 1,
                     };
                     let texture = device.create_texture(&wgpu::TextureDescriptor {
                         label: None,
@@ -251,15 +252,15 @@ impl Model3D {
                     });
 
                     // copy buffer to texture
-                    let texture_copy_view = wgpu::TextureCopyView {
+                    let texture_copy_view = wgpu::ImageCopyTextureBase {
                         texture: &texture,
                         mip_level: 0,
                         origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
                     };
-                    let texture_data_layout = wgpu::TextureDataLayout {
+                    let texture_data_layout = wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: png.width as u32 * 4,
-                        rows_per_image: 0,
+                        bytes_per_row: NonZeroU32::new(png.width as u32 * 4),
+                        rows_per_image: None,
                     };
                     queue.write_texture(texture_copy_view, &data, texture_data_layout, size);
 

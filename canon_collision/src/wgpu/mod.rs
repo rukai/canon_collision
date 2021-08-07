@@ -32,7 +32,7 @@ use cgmath::{Matrix4, Vector3};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::util::DeviceExt;
-use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderSource};
+use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderSource, BufferBinding};
 use wgpu_glyph::ab_glyph::FontArc;
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
 
@@ -138,29 +138,31 @@ impl WgpuGraphics {
         let primitive_back_face_culling = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: wgpu::CullMode::Back,
+            cull_mode: Some(wgpu::Face::Back),
             .. Default::default()
         };
 
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: wgpu::CullMode::None,
+            cull_mode: None,
             .. Default::default()
         };
 
         let targets = [wgpu::ColorTargetState {
             format: wgpu::TextureFormat::Bgra8Unorm,
-            color_blend: wgpu::BlendState {
-                src_factor: wgpu::BlendFactor::SrcAlpha,
-                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                operation: wgpu::BlendOperation::Add,
-            },
-            alpha_blend: wgpu::BlendState {
-                src_factor: wgpu::BlendFactor::SrcAlpha,
-                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                operation: wgpu::BlendOperation::Add,
-            },
+            blend: Some(wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            }),
             write_mask: wgpu::ColorWrite::ALL,
         }];
         let depth_stencil = Some(wgpu::DepthStencilState {
@@ -169,7 +171,6 @@ impl WgpuGraphics {
             depth_compare: wgpu::CompareFunction::LessEqual,
             stencil: Default::default(),
             bias: Default::default(),
-            clamp_depth: false,
         });
 
         let multisample = wgpu::MultisampleState {
@@ -188,8 +189,8 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float4  // color
+                        0 => Float32x4, // position
+                        1 => Float32x4  // color
                     ],
                 }],
             },
@@ -213,8 +214,8 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float4  // color
+                        0 => Float32x4, // position
+                        1 => Float32x4  // color
                     ],
                 }],
             },
@@ -234,7 +235,6 @@ impl WgpuGraphics {
             depth_compare: wgpu::CompareFunction::Always,
             stencil: Default::default(),
             bias: Default::default(),
-            clamp_depth: false,
         });
 
         let pipeline_debug = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -247,8 +247,8 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float4  // color
+                        0 => Float32x4, // position
+                        1 => Float32x4  // color
                     ],
                 }],
             },
@@ -278,9 +278,9 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float2, // position
-                        1 => Float,  // edge
-                        2 => Uint    // render_id
+                        0 => Float32x2, // position
+                        1 => Float32,   // edge
+                        2 => Uint32     // render_id
                     ],
                 }],
             },
@@ -361,8 +361,8 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float2  // uv
+                        0 => Float32x4, // position
+                        1 => Float32x2  // uv
                     ],
                 }],
             },
@@ -386,8 +386,8 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float2  // uv
+                        0 => Float32x4, // position
+                        1 => Float32x2  // uv
                     ],
                 }],
             },
@@ -411,10 +411,10 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float2, // uv
-                        2 => Uint4,  // joints
-                        3 => Float4  // weights
+                        0 => Float32x4, // position
+                        1 => Float32x2, // uv
+                        2 => Uint32x4,  // joints
+                        3 => Float32x4  // weights
                     ],
                 }],
             },
@@ -438,10 +438,10 @@ impl WgpuGraphics {
                     array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
-                        0 => Float4, // position
-                        1 => Float2, // uv
-                        2 => Uint4,  // joints
-                        3 => Float4  // weights
+                        0 => Float32x4, // position
+                        1 => Float32x2, // uv
+                        2 => Uint32x4,  // joints
+                        3 => Float32x4  // weights
                     ],
                 }],
             },
@@ -707,16 +707,16 @@ impl WgpuGraphics {
             let mut bind_groups = vec!();
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &self.wsd.multisampled_framebuffer,
+                    color_attachments: &[wgpu::RenderPassColorAttachment {
+                        view: &self.wsd.multisampled_framebuffer,
                         resolve_target: Some(&frame.view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
                         },
                     }],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                        attachment: &self.wsd.depth_stencil,
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.wsd.depth_stencil,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
                             store: true,
@@ -731,11 +731,11 @@ impl WgpuGraphics {
 
                 let mut uniforms_offset = 0;
                 for draw in &draws {
-                    let uniform_resource = wgpu::BindingResource::Buffer {
+                    let uniform_resource = wgpu::BindingResource::Buffer(BufferBinding{
                         buffer: &self.uniforms_buffer,
                         offset: uniforms_offset,
                         size: NonZeroU64::new(draw.ty.uniform_size() as u64),
-                    };
+                    });
                     let bind_group = match &draw.ty {
                         DrawType::Color { .. } => {
                             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1860,7 +1860,7 @@ impl WindowSizeDependent {
 
         let multisampled_frame_descriptor = &wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth: 1 },
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
@@ -1871,7 +1871,7 @@ impl WindowSizeDependent {
 
         let depth_stencil_descriptor = &wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth: 1 },
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
