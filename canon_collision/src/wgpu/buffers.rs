@@ -61,12 +61,12 @@ impl Buffers {
         let vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsage::VERTEX
+            usage: wgpu::BufferUsages::VERTEX
         });
         let index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsage::INDEX
+            usage: wgpu::BufferUsages::INDEX
         });
         let index_count = indices.len() as u32;
 

@@ -32,7 +32,7 @@ use cgmath::{Matrix4, Vector3};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::util::DeviceExt;
-use wgpu::{Device, Queue, Surface, SwapChain, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderSource, BufferBinding};
+use wgpu::{Device, Queue, Surface, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderSource, BufferBinding};
 use wgpu_glyph::ab_glyph::FontArc;
 use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
 
@@ -84,7 +84,7 @@ impl WgpuGraphics {
 
         let size = window.inner_size();
 
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
 
         let adapter = instance.request_adapter(
@@ -114,7 +114,7 @@ impl WgpuGraphics {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::all(),
+                        visibility: wgpu::ShaderStages::all(),
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -159,7 +159,7 @@ impl WgpuGraphics {
                     operation: wgpu::BlendOperation::Add,
                 },
             }),
-            write_mask: wgpu::ColorWrite::ALL,
+            write_mask: wgpu::ColorWrites::ALL,
         }];
         let depth_stencil = Some(wgpu::DepthStencilState {
             format: wgpu::TextureFormat::Depth32Float,
@@ -183,7 +183,7 @@ impl WgpuGraphics {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x4  // color
@@ -208,7 +208,7 @@ impl WgpuGraphics {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x4  // color
@@ -241,7 +241,7 @@ impl WgpuGraphics {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ColorVertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x4  // color
@@ -268,7 +268,7 @@ impl WgpuGraphics {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x2, // position
                         1 => Float32,   // edge
@@ -310,7 +310,7 @@ impl WgpuGraphics {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::all(),
+                        visibility: wgpu::ShaderStages::all(),
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -320,7 +320,7 @@ impl WgpuGraphics {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
                             view_dimension: wgpu::TextureViewDimension::D2,
@@ -330,7 +330,7 @@ impl WgpuGraphics {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             comparison: false,
                             filtering: true,
@@ -354,7 +354,7 @@ impl WgpuGraphics {
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x2  // uv
@@ -379,7 +379,7 @@ impl WgpuGraphics {
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x2  // uv
@@ -404,7 +404,7 @@ impl WgpuGraphics {
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x2, // uv
@@ -431,7 +431,7 @@ impl WgpuGraphics {
                 entry_point: "main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x4, // position
                         1 => Float32x2, // uv
@@ -478,7 +478,7 @@ impl WgpuGraphics {
         let uniforms_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: &[],
-            usage: wgpu::BufferUsage::UNIFORM,
+            usage: wgpu::BufferUsages::UNIFORM,
         });
         let uniforms_buffer_len = 0;
 
@@ -521,7 +521,6 @@ impl WgpuGraphics {
         device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::SpirV(Cow::Borrowed(shader)),
-            flags: wgpu::ShaderFlags::all(),
         })
     }
 
@@ -529,7 +528,6 @@ impl WgpuGraphics {
         device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
             source: ShaderSource::Wgsl(Cow::Borrowed(shader)),
-            flags: wgpu::ShaderFlags::all(),
         })
     }
 
@@ -674,7 +672,7 @@ impl WgpuGraphics {
         }
 
         {
-            let frame = self.wsd.swap_chain.get_current_frame().unwrap().output;
+            let frame = self.surface.get_current_frame().unwrap().output;
 
             let draws = match render.render_type {
                 RenderType::Game(game) => self.game_render(game, &render.command_output),
@@ -699,7 +697,7 @@ impl WgpuGraphics {
                 self.uniforms_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: &uniforms_bytes,
-                    usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
                 });
                 self.uniforms_buffer_len = uniforms_bytes.len();
             }
@@ -707,12 +705,13 @@ impl WgpuGraphics {
                 self.queue.write_buffer(&self.uniforms_buffer, 0, &uniforms_bytes);
             }
 
+            let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
             let mut bind_groups = vec!();
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     color_attachments: &[wgpu::RenderPassColorAttachment {
                         view: &self.wsd.multisampled_framebuffer,
-                        resolve_target: Some(&frame.view),
+                        resolve_target: Some(view),
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
@@ -787,8 +786,14 @@ impl WgpuGraphics {
                     rpass.draw_indexed(0..draw.buffers.index_count as u32, 0, 0..1);
                 }
             }
-
-            self.glyph_brush.draw_queued(&self.device, &mut self.staging_belt.staging_belt, &mut encoder, &frame.view, self.width, self.height).unwrap();
+            self.glyph_brush.draw_queued(
+                &self.device,
+                &mut self.staging_belt.staging_belt,
+                &mut encoder,
+                view,
+                self.width,
+                self.height
+            ).unwrap();
             self.staging_belt.finish();
 
             self.queue.submit(Some(encoder.finish()));
@@ -1842,7 +1847,6 @@ L-Cancel Success: {}%",
 }
 
 struct WindowSizeDependent {
-    swap_chain:               SwapChain,
     multisampled_framebuffer: TextureView,
     depth_stencil:            TextureView,
 }
@@ -1850,10 +1854,10 @@ struct WindowSizeDependent {
 impl WindowSizeDependent {
     /// This method is called once during initialization, then again whenever the window is resized
     fn new(device: &Device, surface: &Surface, width: u32, height: u32) -> WindowSizeDependent {
-        let swap_chain = device.create_swap_chain(
-            &surface,
-            &wgpu::SwapChainDescriptor {
-                usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        surface.configure(
+            device,
+            &wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 format: wgpu::TextureFormat::Bgra8Unorm,
                 present_mode: wgpu::PresentMode::Mailbox,
                 width,
@@ -1868,7 +1872,7 @@ impl WindowSizeDependent {
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Bgra8Unorm,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         };
         let multisampled_framebuffer = device.create_texture(multisampled_frame_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -1879,12 +1883,11 @@ impl WindowSizeDependent {
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         };
         let depth_stencil = device.create_texture(depth_stencil_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
 
         WindowSizeDependent {
-            swap_chain,
             multisampled_framebuffer,
             depth_stencil,
         }

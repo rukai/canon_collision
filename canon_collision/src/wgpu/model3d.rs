@@ -248,7 +248,7 @@ impl Model3D {
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu::TextureFormat::Rgba8Unorm,
-                        usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                     });
 
                     // copy buffer to texture
@@ -256,6 +256,7 @@ impl Model3D {
                         texture: &texture,
                         mip_level: 0,
                         origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+                        aspect: wgpu::TextureAspect::All
                     };
                     let texture_data_layout = wgpu::ImageDataLayout {
                         offset: 0,
