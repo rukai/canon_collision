@@ -10,7 +10,7 @@ struct Locals {
     frame_count: f32;
 };
 [[group(0), binding(0)]]
-var locals: Locals;
+var<uniform> locals: Locals;
 
 [[stage(vertex)]]
 fn vs_main_animated(
@@ -32,9 +32,9 @@ fn vs_main_animated(
 }
 
 [[group(0), binding(1)]]
-var texture: texture_2d<f32>;
+var<uniform> texture: texture_2d<f32>;
 [[group(0), binding(2)]]
-var sampler: sampler;
+var<uniform> sampler: sampler;
 
 [[stage(fragment)]]
 fn fs_standard_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {

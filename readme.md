@@ -1,6 +1,5 @@
 # Canon Collision
 [![dependency status](https://deps.rs/repo/github/rukai/canon_collision/status.svg)](https://deps.rs/repo/github/rukai/canon_collision)
-[![Build Status](https://travis-ci.com/rukai/canon_collision.svg?branch=master)](https://travis-ci.com/rukai/canon_collision)
 [![Build status](https://ci.appveyor.com/api/projects/status/dusvmy0sl4t9nyjv?svg=true)](https://ci.appveyor.com/project/rukai/canon-collision)
 
 ## Quick links

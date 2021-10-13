@@ -14,8 +14,8 @@ edition = "2018"
 canon_collision_lib = { path = "../canon_collision_lib" }
 byteorder = "1"
 chrono = { version = "0.4", features = ["serde"] }
-strum = "0.21"
-strum_macros = "0.21"
+strum = "0.22"
+strum_macros = "0.22"
 getopts = "0.2"
 log = "0.4"
 lyon = "0.17"
@@ -35,8 +35,8 @@ cgmath = { version = "0.18" }
 futures = "0.3"
 bytemuck = { version = "1", features = ["derive"] }
 vk-shader-macros = { version = "0.2", optional = true }
-wgpu_glyph = { version = "0.14.1", optional = true }
-wgpu = { version = "0.10", optional = true, features = ["spirv"] }
+wgpu_glyph = { version = "0.15.1", optional = true }
+wgpu = { version = "0.11", optional = true, features = ["spirv"] }
 raw-window-handle = "0.3"
 spin_sleep = "1"
 kira = "0.5"

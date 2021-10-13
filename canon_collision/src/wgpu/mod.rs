@@ -91,6 +91,7 @@ impl WgpuGraphics {
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             }
         ).await.unwrap();
 
@@ -671,134 +672,133 @@ impl WgpuGraphics {
             }
         }
 
-        {
-            let frame = self.surface.get_current_frame().unwrap().output;
+        let frame = self.surface.get_current_texture().unwrap();
 
-            let draws = match render.render_type {
-                RenderType::Game(game) => self.game_render(game, &render.command_output),
-                RenderType::Menu(menu) => self.menu_render(menu, &render.command_output)
-            };
+        let draws = match render.render_type {
+            RenderType::Game(game) => self.game_render(game, &render.command_output),
+            RenderType::Menu(menu) => self.menu_render(menu, &render.command_output)
+        };
 
-            let uniforms_bytes = {
-                let uniforms_size = draws.iter().map(|x| x.ty.uniform_size_padded()).sum();
-                let mut uniforms_bytes = vec!(0; uniforms_size);
-                let mut uniforms_offset = 0;
-                for draw in &draws {
-                    let size        = draw.ty.uniform_size();
-                    let size_padded = draw.ty.uniform_size_padded();
+        let uniforms_bytes = {
+            let uniforms_size = draws.iter().map(|x| x.ty.uniform_size_padded()).sum();
+            let mut uniforms_bytes = vec!(0; uniforms_size);
+            let mut uniforms_offset = 0;
+            for draw in &draws {
+                let size        = draw.ty.uniform_size();
+                let size_padded = draw.ty.uniform_size_padded();
 
-                    uniforms_bytes[uniforms_offset..uniforms_offset+size].copy_from_slice(draw.ty.uniform_bytes());
-                    uniforms_offset += size_padded;
-                }
-                uniforms_bytes
-            };
-
-            if uniforms_bytes.len() > self.uniforms_buffer_len {
-                self.uniforms_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: &uniforms_bytes,
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-                });
-                self.uniforms_buffer_len = uniforms_bytes.len();
+                uniforms_bytes[uniforms_offset..uniforms_offset+size].copy_from_slice(draw.ty.uniform_bytes());
+                uniforms_offset += size_padded;
             }
-            else {
-                self.queue.write_buffer(&self.uniforms_buffer, 0, &uniforms_bytes);
-            }
+            uniforms_bytes
+        };
 
-            let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let mut bind_groups = vec!();
-            {
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    color_attachments: &[wgpu::RenderPassColorAttachment {
-                        view: &self.wsd.multisampled_framebuffer,
-                        resolve_target: Some(view),
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: true,
-                        },
-                    }],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.wsd.depth_stencil,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: true,
-                        }),
-                        stencil_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0),
-                            store: true,
-                        }),
-                    }),
-                    label: None,
-                });
-
-                let mut uniforms_offset = 0;
-                for draw in &draws {
-                    let uniform_resource = wgpu::BindingResource::Buffer(BufferBinding{
-                        buffer: &self.uniforms_buffer,
-                        offset: uniforms_offset,
-                        size: NonZeroU64::new(draw.ty.uniform_size() as u64),
-                    });
-                    let bind_group = match &draw.ty {
-                        DrawType::Color { .. } => {
-                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout: &self.bind_group_layout_generic,
-                                entries: &[wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: uniform_resource,
-                                }]
-                            })
-                        }
-                        DrawType::Hitbox { .. } => {
-                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: None,
-                                layout: &self.bind_group_layout_generic,
-                                entries: &[wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: uniform_resource,
-                                }]
-                            })
-                        }
-                        DrawType::ModelAnimated { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                        DrawType::Fireball      { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                        DrawType::ModelStatic   { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                        DrawType::Lava          { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                    };
-                    bind_groups.push(bind_group);
-                    uniforms_offset += draw.ty.uniform_size_padded() as u64;
-                }
-
-                for (i, draw) in draws.iter().enumerate() {
-                    let pipeline = match &draw.ty {
-                        DrawType::Color         { debug: false, dimension3: false, .. } => &self.pipeline_color_2d,
-                        DrawType::Color         { debug: false, dimension3: true,  .. } => &self.pipeline_color_3d,
-                        DrawType::Color         { debug: true,                     .. } => &self.pipeline_debug,
-                        DrawType::Hitbox        {                                  .. } => &self.pipeline_hitbox,
-                        DrawType::ModelAnimated {                                  .. } => &self.pipeline_model3d_animated,
-                        DrawType::ModelStatic   {                                  .. } => &self.pipeline_model3d_static,
-                        DrawType::Lava          {                                  .. } => &self.pipeline_model3d_static_lava,
-                        DrawType::Fireball      {                                  .. } => &self.pipeline_model3d_fireball,
-                    };
-                    rpass.set_pipeline(pipeline);
-                    rpass.set_bind_group(0, &bind_groups[i], &[]);
-                    rpass.set_index_buffer(draw.buffers.index.slice(..), wgpu::IndexFormat::Uint16);
-                    rpass.set_vertex_buffer(0, draw.buffers.vertex.slice(..));
-                    rpass.draw_indexed(0..draw.buffers.index_count as u32, 0, 0..1);
-                }
-            }
-            self.glyph_brush.draw_queued(
-                &self.device,
-                &mut self.staging_belt.staging_belt,
-                &mut encoder,
-                view,
-                self.width,
-                self.height
-            ).unwrap();
-            self.staging_belt.finish();
-
-            self.queue.submit(Some(encoder.finish()));
-            self.staging_belt.recall();
+        if uniforms_bytes.len() > self.uniforms_buffer_len {
+            self.uniforms_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: &uniforms_bytes,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
+            });
+            self.uniforms_buffer_len = uniforms_bytes.len();
         }
+        else {
+            self.queue.write_buffer(&self.uniforms_buffer, 0, &uniforms_bytes);
+        }
+
+        let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut bind_groups = vec!();
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view: &self.wsd.multisampled_framebuffer,
+                    resolve_target: Some(view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.wsd.depth_stencil,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: true,
+                    }),
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0),
+                        store: true,
+                    }),
+                }),
+                label: None,
+            });
+
+            let mut uniforms_offset = 0;
+            for draw in &draws {
+                let uniform_resource = wgpu::BindingResource::Buffer(BufferBinding{
+                    buffer: &self.uniforms_buffer,
+                    offset: uniforms_offset,
+                    size: NonZeroU64::new(draw.ty.uniform_size() as u64),
+                });
+                let bind_group = match &draw.ty {
+                    DrawType::Color { .. } => {
+                        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: None,
+                            layout: &self.bind_group_layout_generic,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: uniform_resource,
+                            }]
+                        })
+                    }
+                    DrawType::Hitbox { .. } => {
+                        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: None,
+                            layout: &self.bind_group_layout_generic,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: uniform_resource,
+                            }]
+                        })
+                    }
+                    DrawType::ModelAnimated { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                    DrawType::Fireball      { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                    DrawType::ModelStatic   { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                    DrawType::Lava          { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                };
+                bind_groups.push(bind_group);
+                uniforms_offset += draw.ty.uniform_size_padded() as u64;
+            }
+
+            for (i, draw) in draws.iter().enumerate() {
+                let pipeline = match &draw.ty {
+                    DrawType::Color         { debug: false, dimension3: false, .. } => &self.pipeline_color_2d,
+                    DrawType::Color         { debug: false, dimension3: true,  .. } => &self.pipeline_color_3d,
+                    DrawType::Color         { debug: true,                     .. } => &self.pipeline_debug,
+                    DrawType::Hitbox        {                                  .. } => &self.pipeline_hitbox,
+                    DrawType::ModelAnimated {                                  .. } => &self.pipeline_model3d_animated,
+                    DrawType::ModelStatic   {                                  .. } => &self.pipeline_model3d_static,
+                    DrawType::Lava          {                                  .. } => &self.pipeline_model3d_static_lava,
+                    DrawType::Fireball      {                                  .. } => &self.pipeline_model3d_fireball,
+                };
+                rpass.set_pipeline(pipeline);
+                rpass.set_bind_group(0, &bind_groups[i], &[]);
+                rpass.set_index_buffer(draw.buffers.index.slice(..), wgpu::IndexFormat::Uint16);
+                rpass.set_vertex_buffer(0, draw.buffers.vertex.slice(..));
+                rpass.draw_indexed(0..draw.buffers.index_count as u32, 0, 0..1);
+            }
+        }
+        self.glyph_brush.draw_queued(
+            &self.device,
+            &mut self.staging_belt.staging_belt,
+            &mut encoder,
+            view,
+            self.width,
+            self.height
+        ).unwrap();
+        self.staging_belt.finish();
+
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+        self.staging_belt.recall();
     }
 
     fn create_bind_group_model3d(&self, uniform: wgpu::BindingResource, texture: &Rc<Texture>) -> wgpu::BindGroup {
