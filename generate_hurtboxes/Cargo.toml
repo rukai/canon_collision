@@ -2,7 +2,8 @@
 name = "generate_hurtboxes"
 version = "0.1.0"
 authors = ["Rukai <rubickent@gmail.com>"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.56"
 description = "generate hurtboxes from animation data"
 license = "MIT"
 repository = "https://github.com/rukai/canon_collision"

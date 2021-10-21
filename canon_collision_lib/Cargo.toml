@@ -8,7 +8,8 @@ repository = "https://github.com/rukai/canon_collision"
 homepage = "https://pfsandbox.net"
 keywords = ["pf", "sandbox", "platform", "fighter", "game"]
 categories = ["games", "game-engines"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.56"
 
 [dependencies]
 backtrace = "0.3"
