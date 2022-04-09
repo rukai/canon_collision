@@ -7,7 +7,7 @@ use kira::instance::handle::InstanceHandle;
 use kira::manager::{AudioManager, AudioManagerSettings};
 use kira::sound::SoundSettings;
 use rand::seq::IteratorRandom;
-use rand;
+
 use treeflection::{Node, NodeRunner, NodeToken};
 
 use canon_collision_lib::assets::Assets;
@@ -57,7 +57,7 @@ impl Audio {
     }
 
     fn play_bgm_inner(&mut self, folder: &str) -> Result<BGMMetadata, String> {
-        let folder = folder.replace(" ", "");
+        let folder = folder.replace(' ', "");
         let read_dir = fs::read_dir(self.path.join("music").join(&folder)).map_err(|x| x.to_string())?;
         let chosen_file = read_dir
             .filter_map(|x| x.ok())

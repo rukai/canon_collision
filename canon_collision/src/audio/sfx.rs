@@ -81,7 +81,7 @@ impl SFX {
 
     /// TODO: How to handle rollback?
     pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SFXType) {
-        let entity_name = entity.name.replace(" ", "");
+        let entity_name = entity.name.replace(' ', "");
 
         let sfx_id = match (&entity_name, &sfx) {
             //(_, SFXType::Walk) => ["Common/walk1.ogg", "Common/walk2.ogg"].choose(&mut rand::thread_rng()).unwrap(), // TODO: This is possible

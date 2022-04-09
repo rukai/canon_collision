@@ -65,7 +65,7 @@ impl Replay {
         };
 
         Replay {
-            init_seed:                 game.init_seed.clone(),
+            init_seed:                 game.init_seed,
             timestamp:                 Local::now(),
             input_history:             input.get_history(),
             entity_history:            game.entity_history(),
@@ -149,7 +149,7 @@ impl Replay {
             max_history_frames:     self.max_history_frames,
             deleted_history_frames: self.deleted_history_frames,
             edit:                   self.hot_reload_edit,
-            current_frame:          current_frame,
+            current_frame,
             debug:                  false,
             camera,
             debug_entities,

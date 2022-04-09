@@ -417,55 +417,55 @@ impl Game {
             self.edit = Edit::Stage;
         }
         else if os_input.key_pressed(VirtualKeyCode::Key1) {
-            if let Some(i) = self.entities.keys().skip(0).next() {
+            if let Some(i) = self.entities.keys().next() {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key2) {
-            if let Some(i) = self.entities.keys().skip(1).next() {
+            if let Some(i) = self.entities.keys().nth(1) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key3) {
-            if let Some(i) = self.entities.keys().skip(2).next() {
+            if let Some(i) = self.entities.keys().nth(2) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key4) {
-            if let Some(i) = self.entities.keys().skip(3).next() {
+            if let Some(i) = self.entities.keys().nth(3) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key5) {
-            if let Some(i) = self.entities.keys().skip(4).next() {
+            if let Some(i) = self.entities.keys().nth(4) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key6) {
-            if let Some(i) = self.entities.keys().skip(5).next() {
+            if let Some(i) = self.entities.keys().nth(5) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key7) {
-            if let Some(i) = self.entities.keys().skip(6).next() {
+            if let Some(i) = self.entities.keys().nth(6) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key8) {
-            if let Some(i) = self.entities.keys().skip(7).next() {
+            if let Some(i) = self.entities.keys().nth(7) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
         }
         else if os_input.key_pressed(VirtualKeyCode::Key9) {
-            if let Some(i) = self.entities.keys().skip(8).next() {
+            if let Some(i) = self.entities.keys().nth(8) {
                 self.edit = Edit::Entity (i);
             }
             self.update_frame();
@@ -606,10 +606,8 @@ impl Game {
                         }
 
                         // start move collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::A) {
-                            if self.selector.colboxes.len() > 0 {
-                                self.selector.moving = true;
-                            }
+                        if os_input.key_pressed(VirtualKeyCode::A) && !self.selector.colboxes.is_empty() {
+                            self.selector.moving = true;
                         }
                         // enter pivot mode
                         if os_input.key_pressed(VirtualKeyCode::S) {
@@ -694,7 +692,7 @@ impl Game {
                             // TODO: Broken by the addition of ActionFrame.render_order, fix by taking it into account
                             if os_input.held_control() {
                                 let mut selector_vec = self.selector.colboxes_vec();
-                                selector_vec.sort();
+                                selector_vec.sort_unstable();
                                 selector_vec.reverse();
                                 selector_vec.truncate(1);
                                 self.selector.colboxes = selector_vec.into_iter().collect();
@@ -759,30 +757,28 @@ impl Game {
                 }
                 else {
                     // start move elements
-                    if os_input.key_pressed(VirtualKeyCode::A) {
-                        if self.selector.surfaces.len() + self.selector.spawn_points.len() + self.selector.respawn_points.len() > 0 {
-                            self.selector.moving = true;
-                        }
+                    if os_input.key_pressed(VirtualKeyCode::A) && self.selector.surfaces.len() + self.selector.spawn_points.len() + self.selector.respawn_points.len() > 0 {
+                        self.selector.moving = true;
                     }
                     // delete elements
                     if os_input.key_pressed(VirtualKeyCode::D) {
                         // the indexes are sorted in reverse order to preserve index order while deleting.
                         let mut spawns_to_delete: Vec<usize> = self.selector.spawn_points.iter().cloned().collect();
-                        spawns_to_delete.sort();
+                        spawns_to_delete.sort_unstable();
                         spawns_to_delete.reverse();
                         for spawn_i in spawns_to_delete {
                             self.stage.spawn_points.remove(spawn_i);
                         }
 
                         let mut respawns_to_delete: Vec<usize> = self.selector.respawn_points.iter().cloned().collect();
-                        respawns_to_delete.sort();
+                        respawns_to_delete.sort_unstable();
                         respawns_to_delete.reverse();
                         for respawn_i in respawns_to_delete {
                             self.stage.respawn_points.remove(respawn_i);
                         }
 
                         let mut surfaces_to_delete = self.selector.surfaces_vec();
-                        surfaces_to_delete.sort();
+                        surfaces_to_delete.sort_unstable();
                         surfaces_to_delete.reverse();
                         let entities = self.entities.clone();
                         for surface_i in surfaces_to_delete {
@@ -1011,7 +1007,7 @@ impl Game {
                 self.selector.surfaces.insert(SurfaceSelection::P2(self.stage.surfaces.len()));
                 self.stage.surfaces.push(Surface { x1, y1, x2: m_x, y2: m_y, .. surface });
             }
-            else if self.selector.surfaces.len() == 0 {
+            else if self.selector.surfaces.is_empty() {
                 // create new surface, p1 is current mouse, p2 is moving
                 self.selector.clear();
                 self.selector.surfaces.insert(SurfaceSelection::P2(self.stage.surfaces.len()));
@@ -1388,7 +1384,7 @@ impl Game {
                 place:           places[i],
                 kills:           vec!(), // TODO
                 deaths:          raw_player_result.deaths.clone(),
-                lcancel_percent: lcancel_percent,
+                lcancel_percent,
             });
         }
         player_results.sort_by_key(|x| x.place);
@@ -1525,7 +1521,7 @@ impl Game {
             state:             self.state.clone(),
             camera:            self.camera.clone(),
             debug_lines:       self.debug_lines.clone(),
-            timer:             timer,
+            timer,
             bgm_metadata:      self.bgm_metadata.clone(),
         }
     }
@@ -1541,7 +1537,7 @@ impl Game {
 
         GraphicsMessage {
             package_updates: self.package.updates(),
-            render:          render,
+            render,
         }
     }
 
@@ -1641,7 +1637,7 @@ impl Selector {
         let mut result = vec!();
         let mut prev_i: Option<usize> = None;
         let mut surfaces: Vec<usize> = self.surfaces.iter().map(|x| x.index()).collect();
-        surfaces.sort();
+        surfaces.sort_unstable();
 
         for surface_i in surfaces {
             if let Some(prev_i) = prev_i {

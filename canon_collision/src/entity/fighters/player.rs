@@ -124,9 +124,9 @@ impl Player {
             stocks:             rules.stock_count,
             ledge_idle_timer:   0,
             fastfalled:         false,
-            air_jumps_left:     package.entities[entity_def_key.as_ref()].fighter().map(|x| x.air_jumps).unwrap_or(1),
+            air_jumps_left:     package.entities[entity_def_key].fighter().map(|x| x.air_jumps).unwrap_or(1),
             jumpsquat_button:   false,
-            shield_hp:          package.entities[entity_def_key.as_ref()].shield.as_ref().map_or(60.0, |x| x.hp_max),
+            shield_hp:          package.entities[entity_def_key].shield.as_ref().map_or(60.0, |x| x.hp_max),
             shield_analog:      0.0,
             shield_offset_x:    0.0,
             shield_offset_y:    0.0,
@@ -156,7 +156,7 @@ impl Player {
 
     pub fn bps_xy(&self, context: &StepContext, state: &ActionState) -> (f32, f32) {
         let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
-        self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
+        self.body.public_bps_xy(context.entities, context.entity_defs, action_frame, context.surfaces, state)
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
@@ -250,7 +250,7 @@ impl Player {
         for col_result in col_results {
             match col_result {
                 &CollisionResult::HitAtk { ref hitbox, ref point, .. } => {
-                    self.hit_particles(point.clone(), hitbox);
+                    self.hit_particles(*point, hitbox);
                 }
                 &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
                     set_action = self.launch(context, state, hitbox, hurtbox, entity_atk_i);
@@ -564,18 +564,16 @@ impl Player {
         else if context.input.a.press || context.input.b.press {
             ActionResult::set_action(PlayerAction::MissedTechAttack)
         }
-        else {
-            if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
-                if state.frame_no_restart > getup_frame as i64 {
-                    ActionResult::set_action(PlayerAction::MissedTechGetupN)
-                } else {
-                    self.apply_friction(context.entity_def, state);
-                    None
-                }
+        else if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
+            if state.frame_no_restart > getup_frame as i64 {
+                ActionResult::set_action(PlayerAction::MissedTechGetupN)
             } else {
                 self.apply_friction(context.entity_def, state);
                 None
             }
+        } else {
+            self.apply_friction(context.entity_def, state);
+            None
         }
     }
 
@@ -667,7 +665,7 @@ impl Player {
 
     fn jump_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Jump);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Jump);
         }
         None
             .or_else(|| self.check_attacks_aerial(context))
@@ -701,18 +699,15 @@ impl Player {
             }
         }
 
-        if drift {
-            if (term_vel < 0.0 && self.body.x_vel > term_vel) ||
-               (term_vel > 0.0 && self.body.x_vel < term_vel) {
-                self.body.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
-            }
+        if drift && ((term_vel < 0.0 && self.body.x_vel > term_vel) || (term_vel > 0.0 && self.body.x_vel < term_vel)) {
+            self.body.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
         }
     }
 
     fn tilt_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
-            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && state.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && state.last_frame(context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
@@ -727,7 +722,7 @@ impl Player {
             .or_else(|| self.check_grab(context))
             .or_else(|| self.check_taunt(context))
             .or_else(|| {
-                self.apply_friction(&context.entity_def, state);
+                self.apply_friction(context.entity_def, state);
                 None
             })
     }
@@ -754,7 +749,7 @@ impl Player {
             .or_else(|| self.check_grab(context))
             .or_else(|| self.check_taunt(context))
             .or_else(|| {
-                self.apply_friction(&context.entity_def, state);
+                self.apply_friction(context.entity_def, state);
                 None
             })
     }
@@ -770,20 +765,20 @@ impl Player {
     fn run_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
         if state.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
-            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && state.last_frame(&context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && state.last_frame(context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
 
         self.check_jump(context)
         .or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
 
     fn crouch_start_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_pass_platform(context, state))
                 .or_else(|| self.check_shield(context))
@@ -797,13 +792,13 @@ impl Player {
             None
         }
         .or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
 
     fn crouch_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -826,13 +821,13 @@ impl Player {
             None
         }
         .or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
 
     fn dtilt_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -849,7 +844,7 @@ impl Player {
             None
         }
         .or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
@@ -875,7 +870,7 @@ impl Player {
             }
         }
 
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -892,7 +887,7 @@ impl Player {
         } else {
             None
         }.or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
@@ -904,7 +899,7 @@ impl Player {
 
     fn item_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 4 {
-            if let Some(item) = self.get_held_item(&context.entities) {
+            if let Some(item) = self.get_held_item(context.entities) {
                 let message_item = match state.get_action() {
                     Some(PlayerAction::ItemThrowF) | Some(PlayerAction::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
                     Some(PlayerAction::ItemThrowB) | Some(PlayerAction::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
@@ -923,7 +918,7 @@ impl Player {
 
     fn attack_land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Land);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Land);
         }
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
@@ -933,11 +928,11 @@ impl Player {
 
     fn land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Land);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Land);
         }
         self.land_particles(context, state);
 
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -950,7 +945,7 @@ impl Player {
                 .or_else(|| self.check_smash_turn(context))
                 .or_else(|| self.check_tilt_turn(context))
                 .or_else(|| self.check_walk(context))
-                .or_else(|| if state.first_interruptible(&context.entity_def) && context.input[0].stick_y < -0.5 {
+                .or_else(|| if state.first_interruptible(context.entity_def) && context.input[0].stick_y < -0.5 {
                         ActionResult::set_action(PlayerAction::Crouch)
                     } else {
                         None
@@ -959,13 +954,13 @@ impl Player {
         } else {
             None
         }.or_else(|| {
-            self.apply_friction(&context.entity_def, state);
+            self.apply_friction(context.entity_def, state);
             None
         })
     }
 
     fn teeter_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.interruptible(&context.entity_def) {
+        if state.interruptible(context.entity_def) {
             None
                 .or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
@@ -986,7 +981,7 @@ impl Player {
 
     fn walk_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame_no_restart % 20 == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Walk);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Walk);
         }
 
         if context.input[0].stick_x == 0.0 {
@@ -1009,7 +1004,7 @@ impl Player {
                 let vel_max = context.entity_def.walk_max_vel * context.input[0].stick_x;
 
                 if self.body.x_vel.abs() > vel_max.abs() {
-                    self.apply_friction(&context.entity_def, state);
+                    self.apply_friction(context.entity_def, state);
                 }
                 else {
                     let acc = (vel_max - self.body.x_vel) * (2.0/context.entity_def.walk_max_vel) * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
@@ -1024,7 +1019,7 @@ impl Player {
 
     fn dash_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Dash);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Dash);
         }
         self.dash_particles(context, state);
         if state.frame == 1 {
@@ -1036,7 +1031,7 @@ impl Player {
 
         if state.frame > 0 {
             if context.input[0].stick_x.abs() < 0.3 {
-                self.apply_friction(&context.entity_def, state);
+                self.apply_friction(context.entity_def, state);
             }
             else {
                 let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
@@ -1044,7 +1039,7 @@ impl Player {
 
                 self.body.x_vel += acc;
                 if (vel_max > 0.0 && self.body.x_vel > vel_max) || (vel_max < 0.0 && self.body.x_vel < vel_max) {
-                    self.apply_friction(&context.entity_def, state);
+                    self.apply_friction(context.entity_def, state);
                     if (vel_max > 0.0 && self.body.x_vel < vel_max) || (vel_max < 0.0 && self.body.x_vel > vel_max) {
                         self.body.x_vel = vel_max;
                     }
@@ -1060,7 +1055,7 @@ impl Player {
 
         let run_frame = 13; // TODO: Variable per character
         let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
-        if (state.frame >= run_frame || (run_frame > last_action_frame && state.last_frame(&context.entity_def)))
+        if (state.frame >= run_frame || (run_frame > last_action_frame && state.last_frame(context.entity_def)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
             ActionResult::set_action(PlayerAction::Run)
@@ -1082,7 +1077,7 @@ impl Player {
 
     fn run_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if state.frame_no_restart % 17 == 0 {
-            context.audio.play_sound_effect(&context.entity_def, SFXType::Run);
+            context.audio.play_sound_effect(context.entity_def, SFXType::Run);
         }
         None
             .or_else(|| self.check_jump(context))
@@ -1419,7 +1414,7 @@ impl Player {
     }
 
     fn check_jump(&mut self, context: &mut StepContext) -> Option<ActionResult> {
-        match self.jump_input(&context.input) {
+        match self.jump_input(context.input) {
             JumpResult::Button => {
                 self.jumpsquat_button = true;
                 ActionResult::set_action(PlayerAction::JumpSquat)
@@ -1433,7 +1428,7 @@ impl Player {
     }
 
     fn check_jump_aerial(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if self.jump_input(&context.input).jump() && self.air_jumps_left > 0 {
+        if self.jump_input(context.input).jump() && self.air_jumps_left > 0 {
             self.air_jump_particles(context, state);
             self.air_jumps_left -= 1;
             self.body.y_vel = context.entity_def.air_jump_y_vel;
@@ -1453,35 +1448,35 @@ impl Player {
     fn check_attacks_aerial(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press || context.input.z.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
-                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirF)
                 } else {
                     ActionResult::set_action(PlayerAction::Fair)
                 }
             }
             else if self.relative_f(context.input[0].stick_x) < -0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
-                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirB)
                 } else {
                     ActionResult::set_action(PlayerAction::Bair)
                 }
             }
             else if context.input[0].stick_y < -0.3 {
-                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirD)
                 } else {
                     ActionResult::set_action(PlayerAction::Dair)
                 }
             }
             else if context.input[0].stick_y > 0.3 {
-                if context.input.z.press && self.get_held_item(&context.entities).is_some() {
+                if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirU)
                 } else {
                     ActionResult::set_action(PlayerAction::Uair)
                 }
             }
-            else if context.input.z.press && self.get_held_item(&context.entities).is_some() {
-                if let Some(item) = self.get_held_item(&context.entities) {
+            else if context.input.z.press && self.get_held_item(context.entities).is_some() {
+                if let Some(item) = self.get_held_item(context.entities) {
                     context.messages.push(Message {
                         recipient: item,
                         contents:  MessageContents::Item(MessageItem::Dropped)
@@ -1495,7 +1490,7 @@ impl Player {
         else if self.relative_f(context.input[0].c_stick_x) >= 0.3 && self.relative_f(context.input[1].c_stick_x) < 0.3 
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
-            if self.get_held_item(&context.entities).is_some() {
+            if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirF)
             } else {
                 ActionResult::set_action(PlayerAction::Fair)
@@ -1504,21 +1499,21 @@ impl Player {
         else if self.relative_f(context.input[0].c_stick_x) <= -0.3 && self.relative_f(context.input[1].c_stick_x) > -0.3
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
-            if self.get_held_item(&context.entities).is_some() {
+            if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirB)
             } else {
                 ActionResult::set_action(PlayerAction::Bair)
             }
         }
         else if context.input[0].c_stick_y < -0.3 && context.input[1].c_stick_y > -0.3 {
-            if self.get_held_item(&context.entities).is_some() {
+            if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirD)
             } else {
                 ActionResult::set_action(PlayerAction::Dair)
             }
         }
         else if context.input[0].c_stick_y >= 0.3 && context.input[1].c_stick_y < 0.3 {
-            if self.get_held_item(&context.entities).is_some() {
+            if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirU)
             } else {
                 ActionResult::set_action(PlayerAction::Uair)
@@ -1532,32 +1527,30 @@ impl Player {
     fn check_attacks(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press {
             if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() - context.input[0].stick_y.abs() > -0.05 {
-                if self.get_held_item(&context.entities).is_some() {
+                if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowF)
                 } else {
                     ActionResult::set_action(PlayerAction::Ftilt)
                 }
             }
             else if context.input[0].stick_y < -0.3 {
-                if self.get_held_item(&context.entities).is_some() {
+                if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowD)
                 } else {
                     ActionResult::set_action(PlayerAction::Dtilt)
                 }
             }
             else if context.input[0].stick_y > 0.3 {
-                if self.get_held_item(&context.entities).is_some() {
+                if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowU)
                 } else {
                     ActionResult::set_action(PlayerAction::Utilt)
                 }
             }
-            else {
-                if self.get_held_item(&context.entities).is_some() {
-                    ActionResult::set_action(PlayerAction::ItemThrowF)
-                } else {
-                    ActionResult::set_action(PlayerAction::Jab)
-                }
+            else if self.get_held_item(context.entities).is_some() {
+                ActionResult::set_action(PlayerAction::ItemThrowF)
+            } else {
+                ActionResult::set_action(PlayerAction::Jab)
             }
         } else {
             None
@@ -2161,7 +2154,7 @@ impl Player {
     }
 
     fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) -> Option<ActionResult> {
-        context.audio.play_sound_effect(&context.entity_def, SFXType::Die);
+        context.audio.play_sound_effect(context.entity_def, SFXType::Die);
         self.body = if context.stage.respawn_points.len() == 0 {
             Body::new(
                 Location::Airbourne { x: 0.0, y: 0.0 },
@@ -2270,8 +2263,8 @@ impl Player {
             color:       graphics::get_team_color3(self.team),
             counter:     0,
             counter_max: 40,
-            x:           x,
-            y:           y,
+            x,
+            y,
             z:           0.0,
             angle:       0.0,
             p_type:      ParticleType::AirJump
@@ -2295,7 +2288,7 @@ impl Player {
                 color:       graphics::get_team_color3(self.team),
                 counter:     0,
                 counter_max: 30,
-                x:           x,
+                x,
                 y:           y + self.body.ecb.top / 2.0,
                 z,
                 angle:       context.rng.gen_range(0.0..=2.0 * PI),
@@ -2339,8 +2332,8 @@ impl Player {
                 color,
                 counter:     0,
                 counter_max: 40,
-                x:           x,
-                y:           y,
+                x,
+                y,
                 z,
                 angle:       context.rng.gen_range(0.0..=2.0 * PI),
                 p_type:      ParticleType::Spark {
@@ -2376,7 +2369,7 @@ impl Player {
                 counter:     0,
                 counter_max: 40,
                 x:           x + x_offset,
-                y:           y,
+                y,
                 z,
                 angle:       context.rng.gen_range(0.0..=2.0 * PI),
                 p_type:      ParticleType::Spark {

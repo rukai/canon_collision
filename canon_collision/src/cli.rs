@@ -93,7 +93,7 @@ pub fn cli() -> CLIResults {
     }
 
     if let Some(fighter_names) = matches.opt_str("f") {
-        for fighter_name in fighter_names.split(",") {
+        for fighter_name in fighter_names.split(',') {
             results.continue_from = ContinueFrom::Game;
             results.fighter_names.push(fighter_name.to_string());
         }

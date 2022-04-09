@@ -55,10 +55,10 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
 
                                             if damage_diff >= 9 {
                                                 result[entity_atk_i].push(CollisionResult::Clang { rebound: hitbox_atk.enable_rebound });
-                                                result[entity_defend_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
+                                                result[entity_defend_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i, point });
                                             }
                                             else if damage_diff <= -9 {
-                                                result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
+                                                result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i, point });
                                                 result[entity_defend_i].push(CollisionResult::Clang { rebound: hitbox_def.enable_rebound });
                                             }
                                             else {
@@ -78,12 +78,12 @@ pub fn collision_check(entities: &Entities, entity_definitions: &KeyedContextVec
                                 ColBoxCollisionResult::Hit (point) => {
                                     match &colbox_def.role {
                                         &CollisionBoxRole::Hurt (ref hurtbox) => {
-                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
-                                            result[entity_defend_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), entity_atk_i: entity_atk_i });
+                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i, point });
+                                            result[entity_defend_i].push(CollisionResult::HitDef { hitbox: hitbox_atk.clone(), hurtbox: hurtbox.clone(), entity_atk_i });
                                             break 'entity_atk;
                                         }
                                         &CollisionBoxRole::Invincible => {
-                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i: entity_defend_i, point });
+                                            result[entity_atk_i].push(CollisionResult::HitAtk { hitbox: hitbox_atk.clone(), entity_defend_i, point });
                                             break 'entity_atk;
                                         }
                                         _ => { }

@@ -125,7 +125,7 @@ impl Buffers {
     }
 
     pub fn new_selected_surfaces(device: &Device, surfaces: &[Surface], selected_surfaces: &HashSet<SurfaceSelection>) -> Option<Rc<Buffers>> {
-        if surfaces.len() == 0 {
+        if surfaces.is_empty() {
             return None;
         }
 
@@ -175,7 +175,7 @@ impl Buffers {
     }
 
     pub fn new_surfaces(device: &Device, surfaces: &[Surface]) -> Option<Rc<Buffers>> {
-        if surfaces.len() == 0 {
+        if surfaces.is_empty() {
             return None;
         }
 
@@ -212,7 +212,7 @@ impl Buffers {
 
     // TODO: Combine new_surfaces(..) and new_surfaces_fill(..), waiting on: https://github.com/nical/lyon/issues/224
     pub fn new_surfaces_fill(device: &Device, surfaces: &[Surface]) -> Option<Rc<Buffers>> {
-        if surfaces.len() == 0 {
+        if surfaces.is_empty() {
             return None;
         }
 

@@ -59,7 +59,7 @@ impl TorielOven {
             Some(TorielOvenAction::AttackExtended) => None,
             Some(TorielOvenAction::Attack) => {
                 if state.frame == 40 {
-                    context.audio.play_sound_effect(&context.entity_def, SFXType::Custom {
+                    context.audio.play_sound_effect(context.entity_def, SFXType::Custom {
                         filename: "ovenTimer.ogg".into(),
                         volume:   Value::Fixed(0.3),
                         pitch:    Value::Fixed(1.0),

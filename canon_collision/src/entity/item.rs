@@ -45,7 +45,7 @@ impl Item {
                 ItemAction::Spawn |
                 ItemAction::Idle => {
                     self.owner_id = None;
-                    self.body.apply_friction_strong(&context.entity_def);
+                    self.body.apply_friction_strong(context.entity_def);
                 }
 
                 ItemAction::Thrown |
@@ -88,7 +88,7 @@ impl Item {
 
     pub fn bps_xy(&self, context: &StepContext, state: &ActionState) -> (f32, f32) {
         let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
-        self.body.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
+        self.body.public_bps_xy(context.entities, context.entity_defs, action_frame, context.surfaces, state)
     }
 
     fn action_expired(&mut self, state: &ActionState) -> Option<ActionResult> {
@@ -152,15 +152,12 @@ impl Item {
                     let dir = Quaternion::from_angle_y(angle_y);
 
                     player.get_entity_frame(&entity_defs[player.state.entity_def_key.as_ref()])
-                        .and_then(|action_frame| action_frame.item_hold.as_ref())
-                        .and_then(|item_hold|
-                            Some(dir * Quaternion::new(
+                        .and_then(|action_frame| action_frame.item_hold.as_ref()).map(|item_hold| dir * Quaternion::new(
                                 item_hold.quaternion_rotation,
                                 item_hold.quaternion_x,
                                 item_hold.quaternion_y,
                                 item_hold.quaternion_z,
                             ))
-                        )
                 } else {
                     None
                 }

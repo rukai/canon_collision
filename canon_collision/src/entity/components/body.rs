@@ -122,7 +122,7 @@ impl Body {
     }
 
     fn bps_xy(&self, context: &mut StepContext, action_frame: Option<&ActionFrame>, state: &ActionState) -> (f32, f32) {
-        self.public_bps_xy(&context.entities, &context.entity_defs, action_frame, &context.surfaces, state)
+        self.public_bps_xy(context.entities, context.entity_defs, action_frame, context.surfaces, state)
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, action_frame: Option<&ActionFrame>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
@@ -304,7 +304,7 @@ impl Body {
             // ledge grabs
             if self.frames_since_ledge >= 30 && self.y_vel < 0.0 && context.input.stick_y.value > -0.5 {
                 if let Some(ref ledge_grab_box) = action_frame.ledge_grab_box {
-                    self.check_ledge_grab(context, &ledge_grab_box)
+                    self.check_ledge_grab(context, ledge_grab_box)
                 } else {
                     None
                 }
@@ -508,7 +508,7 @@ impl Body {
         let angle = if (kb_vel >= 80.0 || self.is_airbourne() || (angle != 0.0 && angle != PI)) // can di
             && !(context.input[0].stick_x == 0.0 && context.input[0].stick_y == 0.0) // not deadzone
         {
-            Body::di(&context.input, angle)
+            Body::di(context.input, angle)
         } else {
             angle
         };

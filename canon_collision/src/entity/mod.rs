@@ -50,7 +50,7 @@ pub enum EntityType {
 impl EntityType {
     pub fn get_player(&self) -> Option<&Player> {
         match self {
-            EntityType::Fighter(fighter) => Some(&fighter.get_player()),
+            EntityType::Fighter(fighter) => Some(fighter.get_player()),
             _ => None
         }
     }
@@ -98,7 +98,7 @@ impl Entity {
     }
 
     pub fn bps_xy(&self, context: &StepContext) -> (f32, f32) {
-        self.public_bps_xy(&context.entities, &context.entity_defs, &context.surfaces)
+        self.public_bps_xy(context.entities, context.entity_defs, context.surfaces)
     }
 
     pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> (f32, f32) {
@@ -156,12 +156,12 @@ impl Entity {
         for col_result in col_results {
             match col_result {
                 &CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
-                    context.audio.play_sound_effect(&context.entity_def, SFXType::Hit(HitBoxSFX::Punch));
+                    context.audio.play_sound_effect(context.entity_def, SFXType::Hit(HitBoxSFX::Punch));
                     self.state.hitlist.push(entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
                 &CollisionResult::HitShieldAtk { entity_defend_i, ref hitbox, .. } => {
-                    context.audio.play_sound_effect(&context.entity_def, SFXType::Hit(HitBoxSFX::Sword));
+                    context.audio.play_sound_effect(context.entity_def, SFXType::Hit(HitBoxSFX::Sword));
                     self.state.hitlist.push(entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
@@ -198,11 +198,11 @@ impl Entity {
             }
         }
 
-        self.state.hitlag.step(&mut context.rng);
+        self.state.hitlag.step(context.rng);
         if let Hitlag::None = self.state.hitlag {
             let main_action_result = self.action_step(context)
                 .or_else(||
-                    if self.state.last_frame(&context.entity_def) {
+                    if self.state.last_frame(context.entity_def) {
                         self.action_expired(context)
                     } else {
                         None
@@ -445,7 +445,7 @@ impl Entity {
 
         RenderEntity {
             frame_data:  self.relative_frame(entity_def, surfaces),
-            particles:   self.particles().clone(),
+            particles:   self.particles(),
             visible,
             render_type,
             frames,
@@ -508,7 +508,7 @@ impl Entity {
             }
             Some(ActionResult::SetFrame (frame)) => {
                 self.state.frame = frame;
-                if self.state.past_last_frame(&context.entity_def) {
+                if self.state.past_last_frame(context.entity_def) {
                     let next_action = self.action_expired(context);
                     match next_action {
                         Some(ActionResult::SetAction (_)) | None => self.process_action_result(context, next_action),

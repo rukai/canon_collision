@@ -118,28 +118,26 @@ impl Toriel {
             });
         }
 
-        for oven_key in self.get_ovens(&context.entities) {
+        for oven_key in self.get_ovens(context.entities) {
             context.messages.push(Message {
                 recipient: oven_key,
                 contents: MessageContents::TorielOven(MessageTorielOven::KeepAlive),
             });
 
             if let Some(TorielOvenAction::Attack) = context.entities.get(oven_key).and_then(|x| x.state.get_action()) {
-                if self.player.get_held_item(&context.entities).is_none() {
-                    if state.frame == 59 {
-                        context.new_entities.push(Entity {
-                            ty: EntityType::Item(
-                                Item {
-                                    owner_id: Some(self.player.id),
-                                    body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
-                                }
-                            ),
-                            state: ActionState::new(
-                                "TorielButterscotchCinnamonPie.cbor".to_string(),
-                                ItemAction::Held
-                            ),
-                        });
-                    }
+                if self.player.get_held_item(context.entities).is_none() && state.frame == 59 {
+                    context.new_entities.push(Entity {
+                        ty: EntityType::Item(
+                            Item {
+                                owner_id: Some(self.player.id),
+                                body: Body::new(Location::ItemHeldByPlayer (context.entity_key), true),
+                            }
+                        ),
+                        state: ActionState::new(
+                            "TorielButterscotchCinnamonPie.cbor".to_string(),
+                            ItemAction::Held
+                        ),
+                    });
                 }
             }
         }

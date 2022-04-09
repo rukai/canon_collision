@@ -39,7 +39,7 @@ impl Models {
     }
 
     pub fn get(&self, key: &str) -> Option<&Model3D> {
-        self.models.get(&key.replace(" ", ""))
+        self.models.get(&key.replace(' ', ""))
     }
 
     pub fn load_game(&mut self, device: &Device, queue: &Queue, render: &RenderGame) {
@@ -53,7 +53,7 @@ impl Models {
 
         // load current stage
         // if a new stage is used, unload old stage and load new stage
-        let new_name = render.stage_model_name.replace(" ", "");
+        let new_name = render.stage_model_name.replace(' ', "");
         if let Some(ref old_name) = self.stage_model_name {
             if old_name != &new_name {
                 self.models.remove(old_name);
@@ -67,7 +67,7 @@ impl Models {
         // load current fighters
         for entity in render.entities.iter() {
             if let RenderObject::Entity(entity) = entity {
-                let fighter_model_name = entity.frames[0].model_name.replace(" ", "");
+                let fighter_model_name = entity.frames[0].model_name.replace(' ', "");
                 // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
                 self.load_fighter(device, queue, fighter_model_name);
             }
@@ -91,7 +91,7 @@ impl Models {
                 for selection in selections {
                     if let Some(index) = selection.fighter {
                         let fighter = fighters[index].1;
-                        let fighter_model_name = fighter.name.replace(" ", "");
+                        let fighter_model_name = fighter.name.replace(' ', "");
                         // TODO: Dont reload every frame if the model doesnt exist, probs just do another hashmap
                         self.load_fighter(device, queue, fighter_model_name);
                     }
@@ -207,7 +207,7 @@ impl Joint {
 
 impl Model3D {
     pub fn from_gltf(device: &Device, queue: &Queue, data: &[u8]) -> Model3D {
-        let gltf = Gltf::from_slice(&data).unwrap();
+        let gltf = Gltf::from_slice(data).unwrap();
         let blob = gltf.blob.as_ref().unwrap();
         let scene = gltf.default_scene().unwrap();
 
@@ -293,7 +293,7 @@ impl Model3D {
                             BufferSource::Bin => { }
                             _ => unimplemented!("It is assumed that gltf buffers use only bin source.")
                         }
-                        Some(&blob)
+                        Some(blob)
                     });
                     let inputs: Vec<_> = reader.read_inputs().unwrap().collect();
                     let outputs = match reader.read_outputs().unwrap() {
@@ -345,13 +345,13 @@ impl Model3D {
             if let Some(skin) = node.skin() {
                 // You might think that skin.skeleton() would return the root_node, but you would be wrong.
                 let joints: Vec<_> = skin.joints().collect();
-                if joints.len() > 0 {
+                if !joints.is_empty() {
                     let reader = skin.reader(|buffer| {
                         match buffer.source() {
                             BufferSource::Bin => { }
                             _ => unimplemented!("It is assumed that gltf buffers use only bin source.")
                         }
-                        Some(&blob)
+                        Some(blob)
                     });
                     let ibm: Vec<Matrix4<f32>> = reader.read_inverse_bind_matrices().unwrap().map(|x| x.into()).collect();
                     let node_to_joints_lookup: Vec<_> = joints.iter().map(|x| x.index()).collect();
@@ -374,7 +374,7 @@ impl Model3D {
                         BufferSource::Bin => { }
                         _ => unimplemented!("It is assumed that gltf buffers use only bin source.")
                     }
-                    Some(&blob)
+                    Some(blob)
                 });
 
                 let index: Vec<u16> = reader
@@ -456,16 +456,16 @@ impl Model3D {
         let pose_transform = parent_transform * Model3D::transform_to_matrix4(node.transform());
 
         for child in node.children() {
-            children.push(Model3D::skeleton_from_gltf_node(&child, node_to_joints_lookup, ibms, pose_transform.clone()));
+            children.push(Model3D::skeleton_from_gltf_node(&child, node_to_joints_lookup, ibms, pose_transform));
         }
 
-        let ibm = ibm.clone();
+        let ibm = *ibm;
 
         let (translation, rotation, scale) = match node.transform() {
             Transform::Matrix { .. } => unimplemented!("It is assumed that gltf node transforms only use decomposed form."),
             Transform::Decomposed { translation, rotation, scale } => {
                 let translation: Vector3<f32> = translation.into();
-                let rotation = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
+                let rotation = Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]);
                 let scale: Vector3<f32> = scale.into();
                 (translation, rotation, scale)
             }

@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
-use std;
+
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
@@ -104,7 +104,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 }
 
                 // handle missing and invalid cli input
-                if cli_results.fighter_names.len() == 0 {
+                if cli_results.fighter_names.is_empty() {
                     cli_results.fighter_names.push(package.as_ref().unwrap().entities.index_to_key(0).unwrap());
                 }
 
@@ -183,7 +183,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 match replays::load_replay(&file_name) {
                     Ok(replay) => {
                         let mut game_setup = replay.into_game_setup(true);
-                        input.set_history(std::mem::replace(&mut game_setup.input_history, vec!()));
+                        input.set_history(std::mem::take(&mut game_setup.input_history));
                         (
                             Menu::new(MenuState::character_select()),
                             Some(Game::new(package.take().unwrap(), game_setup, &mut audio)),
@@ -250,7 +250,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             if let NetplayState::Disconnected { reason } = netplay.state() {
                 resume_menu = Some(ResumeMenu::NetplayDisconnect { reason });
             } else {
-                let ai_inputs = ai::gen_inputs(&game);
+                let ai_inputs = ai::gen_inputs(game);
                 let reset_deadzones = game.check_reset_deadzones();
                 input.step(&game.tas, &ai_inputs, &mut netplay, reset_deadzones);
 
@@ -269,13 +269,11 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
         else {
             input.step(&[], &[], &mut netplay, false);
             if let Some(mut menu_game_setup) = menu.step(package.as_ref().unwrap(), &mut config, &mut input, &os_input, &mut netplay) {
-                input.set_history(std::mem::replace(&mut menu_game_setup.input_history, vec!()));
+                input.set_history(std::mem::take(&mut menu_game_setup.input_history));
                 game = Some(Game::new(package.take().unwrap(), menu_game_setup, &mut audio));
             }
-            else {
-                if let Err(_) = render_tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
-                    return;
-                }
+            else if let Err(_) = render_tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
+                return;
             }
         }
 

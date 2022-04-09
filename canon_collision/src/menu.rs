@@ -125,7 +125,7 @@ impl Menu {
                 ticker.reset();
             }
 
-            if (player_inputs.iter().any(|x| x.start.press || x.a.press)) && replays.len() > 0 {
+            if (player_inputs.iter().any(|x| x.start.press || x.a.press)) && !replays.is_empty() {
                 let name = &replays[ticker.cursor];
                 match replays::load_replay(&format!("{}.zip", name)) {
                     Ok(replay) => {
@@ -166,7 +166,7 @@ impl Menu {
                     controller:      Some((i, MenuTicker::new(1))),
                     fighter:         None,
                     cpu_ai:          None,
-                    ui:              ui,
+                    ui,
                     animation_frame: 0,
                     team
                 });
@@ -175,7 +175,7 @@ impl Menu {
     }
 
     fn step_fighter_select(&mut self, package: &Package, player_inputs: &[PlayerInput], netplay: &mut Netplay) {
-        self.add_remove_fighter_selections(&package, &player_inputs);
+        self.add_remove_fighter_selections(package, player_inputs);
         let fighters = package.fighters();
 
         let mut new_state: Option<MenuState> = None;
@@ -202,23 +202,21 @@ impl Menu {
                         selection.controller = Some((input_i, MenuTicker::new(1)));
                     }
                 }
-                else {
-                    if let PlayerSelectUi::HumanFighter (_) = self.fighter_selections[input_i].ui {
-                        self.fighter_selections[input_i].ui = PlayerSelectUi::HumanUnplugged;
+                else if let PlayerSelectUi::HumanFighter (_) = self.fighter_selections[input_i].ui {
+                    self.fighter_selections[input_i].ui = PlayerSelectUi::HumanUnplugged;
 
-                        // Handle CPU's who are currently manipulated by the input
-                        for selection in &mut self.fighter_selections {
-                            if let Some((controller, _)) = selection.controller.clone() {
-                                if controller == input_i {
-                                    selection.controller = None
-                                }
+                    // Handle CPU's who are currently manipulated by the input
+                    for selection in &mut self.fighter_selections {
+                        if let Some((controller, _)) = selection.controller.clone() {
+                            if controller == input_i {
+                                selection.controller = None
                             }
                         }
                     }
                 }
             }
 
-            for (controller_i, ref input) in player_inputs.iter().enumerate() {
+            for (controller_i, input) in player_inputs.iter().enumerate() {
                 if !input.plugged_in {
                     continue;
                 }
@@ -393,23 +391,21 @@ impl Menu {
                 self.fighter_selections.remove(selection_i);
             }
 
-            if add_cpu {
-                if self.fighter_selections.iter().filter(|x| x.ui.is_visible()).count() < 4 {
-                    let team = Menu::get_free_team(&self.fighter_selections);
-                    self.fighter_selections.push(PlayerSelect {
-                        controller:      None,
-                        fighter:         None,
-                        cpu_ai:          None,
-                        ui:              PlayerSelectUi::cpu_fighter(package),
-                        animation_frame: 0,
-                        team
-                    });
-                }
+            if add_cpu && self.fighter_selections.iter().filter(|x| x.ui.is_visible()).count() < 4 {
+                let team = Menu::get_free_team(&self.fighter_selections);
+                self.fighter_selections.push(PlayerSelect {
+                    controller:      None,
+                    fighter:         None,
+                    cpu_ai:          None,
+                    ui:              PlayerSelectUi::cpu_fighter(package),
+                    animation_frame: 0,
+                    team
+                });
             }
 
-            if player_inputs.iter().any(|x| x.start.press) && fighters.len() > 0 {
+            if player_inputs.iter().any(|x| x.start.press) && !fighters.is_empty() {
                 new_state = Some(MenuState::StageSelect);
-                if let None = self.stage_ticker {
+                if self.stage_ticker.is_none() {
                     self.stage_ticker = Some(MenuTicker::new(package.stages.len()));
                 }
             }
@@ -540,11 +536,9 @@ impl Menu {
         // *    Dont use remote peers inputs
         // *    move replay_saved into its own non-rollbacked state
         if let &mut MenuState::GameResults { ref mut replay_saved, .. } = &mut self.state {
-            if !*replay_saved {
-                if config.auto_save_replay || player_inputs.iter().any(|x| x.l.press && x.r.press) {
-                    replays::save_replay(&self.game_results.as_ref().unwrap().replay);
-                    *replay_saved = true;
-                }
+            if !*replay_saved && (config.auto_save_replay || player_inputs.iter().any(|x| x.l.press && x.r.press)) {
+                replays::save_replay(&self.game_results.as_ref().unwrap().replay);
+                *replay_saved = true;
             }
         }
     }
@@ -674,7 +668,7 @@ impl Menu {
 
         GraphicsMessage {
             package_updates: updates,
-            render:          render,
+            render,
         }
     }
 }
