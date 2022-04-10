@@ -5,4 +5,3 @@ pub enum ProjectileAction {
     Travel,
     Hit,
 }
-

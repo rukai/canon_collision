@@ -22,8 +22,7 @@ pub fn segments_intersect(p1: (f32, f32), q1: (f32, f32), p2: (f32, f32), q2: (f
 /// 1 - clockwise
 /// 2 - counter clockwise
 fn triplet_orientation(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> u8 {
-    let val = (q.1 - p.1) * (r.0 - q.0) -
-              (q.0 - p.0) * (r.1 - q.1);
+    let val = (q.1 - p.1) * (r.0 - q.0) - (q.0 - p.0) * (r.1 - q.1);
 
     if val > 0.0 {
         1
@@ -37,8 +36,7 @@ fn triplet_orientation(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> u8 {
 /// Given p, q, r are colinear,
 /// checks if point q lies on segment pr
 fn point_on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
-    q.0 <= p.0.max(r.0) && q.0 >= p.0.min(r.0) && 
-    q.1 <= p.1.max(r.1) && q.1 >= p.1.min(r.1)
+    q.0 <= p.0.max(r.0) && q.0 >= p.0.min(r.0) && q.1 <= p.1.max(r.1) && q.1 >= p.1.min(r.1)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
@@ -46,7 +44,7 @@ pub struct Rect {
     pub x1: f32,
     pub y1: f32,
     pub x2: f32,
-    pub y2: f32
+    pub y2: f32,
 }
 
 impl Rect {
@@ -55,7 +53,7 @@ impl Rect {
             x1: p1.0,
             y1: p1.1,
             x2: p2.0,
-            y2: p2.1
+            y2: p2.1,
         }
     }
 
@@ -78,8 +76,7 @@ impl Rect {
     /// Returns true iff the passed point is within this Rect
     pub fn contains_point(&self, x: f32, y: f32) -> bool {
         ((x > self.x1 && x < self.x2) || (x > self.x2 && x < self.x1))
-        &&
-        ((y > self.y1 && y < self.y2) || (y > self.y2 && y < self.y1))
+            && ((y > self.y1 && y < self.y2) || (y > self.y2 && y < self.y1))
     }
 
     pub fn offset(&self, x: f32, y: f32) -> Rect {
@@ -92,9 +89,9 @@ impl Rect {
     }
 
     pub fn collision(&self, other_rect: &Rect) -> bool {
-        self.left() < other_rect.right() &&
-        self.right() > other_rect.left() &&
-        self.bot() < other_rect.top() &&
-        self.top() > other_rect.bot()
+        self.left() < other_rect.right()
+            && self.right() > other_rect.left()
+            && self.bot() < other_rect.top()
+            && self.top() > other_rect.bot()
     }
 }

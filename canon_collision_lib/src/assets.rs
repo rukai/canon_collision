@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use hotwatch::{Hotwatch, Event};
+use hotwatch::{Event, Hotwatch};
 
 /// Hot reloadable assets
 pub struct Assets {
@@ -24,8 +24,7 @@ impl Assets {
                 models_reload_tx,
                 hotwatch: Hotwatch::new().unwrap(),
             })
-        }
-        else {
+        } else {
             None
         }
     }
@@ -33,17 +32,13 @@ impl Assets {
     fn find_assets_in_parent_dirs_core(path: &Path) -> Option<PathBuf> {
         let assets_path = path.join("assets");
         match fs::metadata(&assets_path) {
-            Ok(_) => {
-                Some(assets_path.to_path_buf())
-            }
-            Err(_) => {
-                Assets::find_assets_in_parent_dirs_core(path.parent()?)
-            }
+            Ok(_) => Some(assets_path.to_path_buf()),
+            Err(_) => Assets::find_assets_in_parent_dirs_core(path.parent()?),
         }
     }
 
     pub fn models_reloads(&self) -> Vec<Reload> {
-        let mut reloads = vec!();
+        let mut reloads = vec![];
 
         while let Ok(reload) = self.models_reload_rx.try_recv() {
             reloads.push(reload);
@@ -70,7 +65,7 @@ impl Assets {
         });
 
         match result {
-            Ok(_)  => Assets::load_file(path),
+            Ok(_) => Assets::load_file(path),
             Err(err) => {
                 error!("Failed to load or setup hotreloading for '{}'. You will need to restart the game to reattempt loading this file. error: {}", path.to_str().unwrap(), err);
                 None
@@ -81,7 +76,13 @@ impl Assets {
     /// On failure to read from disk, logs the error and returns None
     fn load_file(path: PathBuf) -> Option<Vec<u8>> {
         std::fs::read(&path)
-            .map_err(|err| error!("Failed to read file '{}' because: {}", path.to_str().unwrap(), err))
+            .map_err(|err| {
+                error!(
+                    "Failed to read file '{}' because: {}",
+                    path.to_str().unwrap(),
+                    err
+                )
+            })
             .ok()
     }
 

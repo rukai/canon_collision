@@ -1,6 +1,6 @@
 use crate::collision::collision_box::CollisionResult;
-use crate::entity::{StepContext, ActionResult};
 use crate::entity::components::action_state::ActionState;
+use crate::entity::{ActionResult, StepContext};
 
 use canon_collision_lib::entity_def::toriel_fireball::TorielFireballAction;
 
@@ -17,7 +17,11 @@ pub struct TorielFireball {
 }
 
 impl TorielFireball {
-    pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn action_step(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         match state.get_action() {
             Some(TorielFireballAction::Travel) => {
                 if self.y_vel < -0.2 {
@@ -30,15 +34,21 @@ impl TorielFireball {
                 }
                 self.y += self.y_vel;
             }
-            _ => { }
+            _ => {}
         }
 
         let blast = &context.stage.blast;
-        if self.x < blast.left() || self.x > blast.right() || self.y < blast.bot() || self.y > blast.top() {
+        if self.x < blast.left()
+            || self.x > blast.right()
+            || self.y < blast.bot()
+            || self.y > blast.top()
+        {
             context.delete_self = true;
         }
 
-        let action_frames = context.entity_def.actions[state.action.as_ref()].frames.len() as i64;
+        let action_frames = context.entity_def.actions[state.action.as_ref()]
+            .frames
+            .len() as i64;
         if state.frame + 1 >= action_frames {
             self.action_expired(context, state)
         } else {
@@ -50,13 +60,17 @@ impl TorielFireball {
         input * if self.face_right { 1.0 } else { -1.0 }
     }
 
-    fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn action_expired(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         ActionResult::set_action(match state.get_action() {
             None => panic!("Custom defined action expirations have not been implemented"),
 
             // Idle
-            Some(TorielFireballAction::Spawn)    => TorielFireballAction::Travel,
-            Some(TorielFireballAction::Travel)   => TorielFireballAction::Travel,
+            Some(TorielFireballAction::Spawn) => TorielFireballAction::Travel,
+            Some(TorielFireballAction::Travel) => TorielFireballAction::Travel,
             Some(TorielFireballAction::Hit) => {
                 context.delete_self = true;
                 TorielFireballAction::Hit
@@ -85,7 +99,7 @@ impl TorielFireball {
                 &CollisionResult::AbsorbAtk { .. } => {
                     set_action = ActionResult::set_action(TorielFireballAction::Hit);
                 }
-                _ => { }
+                _ => {}
             }
         }
         set_action

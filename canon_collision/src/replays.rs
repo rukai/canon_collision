@@ -1,15 +1,15 @@
 use crate::camera::Camera;
-use crate::game::{Game, GameSetup, PlayerSetup, GameState, Edit};
-use crate::entity::{Entities, DebugEntities};
+use crate::entity::{DebugEntities, Entities};
+use crate::game::{Edit, Game, GameSetup, GameState, PlayerSetup};
 use crate::rules::Rules;
 
 use canon_collision_lib::files;
-use canon_collision_lib::input::Input;
 use canon_collision_lib::input::state::ControllerInput;
-use canon_collision_lib::stage::{Stage, DebugStage};
+use canon_collision_lib::input::Input;
 use canon_collision_lib::replays_files;
+use canon_collision_lib::stage::{DebugStage, Stage};
 
-use chrono::{Local, DateTime};
+use chrono::{DateTime, Local};
 
 pub fn load_replay(name: &str) -> Result<Replay, String> {
     let replay_path = replays_files::get_replay_path(name);
@@ -17,72 +17,71 @@ pub fn load_replay(name: &str) -> Result<Replay, String> {
 }
 
 pub fn save_replay(replay: &Replay) {
-    let replay_path = replays_files::get_replay_path(&format!("{}.zip", replay.timestamp.to_rfc2822())); // TODO: could still collide under strange circumstances: check and handle
+    let replay_path =
+        replays_files::get_replay_path(&format!("{}.zip", replay.timestamp.to_rfc2822())); // TODO: could still collide under strange circumstances: check and handle
     files::save_struct_bincode(&replay_path, &replay)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Replay {
-    pub init_seed:                 u64,
-    pub timestamp:                 DateTime<Local>,
-    pub input_history:             Vec<Vec<ControllerInput>>,
-    pub entity_history:            Vec<Entities>,
-    pub stage_history:             Vec<Stage>,
-    pub selected_controllers:      Vec<usize>,
-    pub selected_players:          Vec<PlayerSetup>,
-    pub selected_ais:              Vec<usize>,
-    pub selected_stage:            String,
-    pub rules:                     Rules,
-    pub max_history_frames:        Option<usize>,
-    pub deleted_history_frames:    usize,
-    pub hot_reload_current_frame:  usize,
-    pub hot_reload_camera:         Camera,
+    pub init_seed: u64,
+    pub timestamp: DateTime<Local>,
+    pub input_history: Vec<Vec<ControllerInput>>,
+    pub entity_history: Vec<Entities>,
+    pub stage_history: Vec<Stage>,
+    pub selected_controllers: Vec<usize>,
+    pub selected_players: Vec<PlayerSetup>,
+    pub selected_ais: Vec<usize>,
+    pub selected_stage: String,
+    pub rules: Rules,
+    pub max_history_frames: Option<usize>,
+    pub deleted_history_frames: usize,
+    pub hot_reload_current_frame: usize,
+    pub hot_reload_camera: Camera,
     pub hot_reload_debug_entities: DebugEntities,
-    pub hot_reload_debug_stage:    DebugStage,
-    pub hot_reload_entities:       Entities,
-    pub hot_reload_stage:          Stage,
-    pub hot_reload_as_running:     bool,
-    pub hot_reload_edit:           Edit,
+    pub hot_reload_debug_stage: DebugStage,
+    pub hot_reload_entities: Entities,
+    pub hot_reload_stage: Stage,
+    pub hot_reload_as_running: bool,
+    pub hot_reload_edit: Edit,
 }
 
 impl Replay {
     pub fn new(game: &Game, input: &Input) -> Replay {
-        let mut selected_players = vec!();
+        let mut selected_players = vec![];
         for (_, entity) in &game.entities() {
             if let Some(fighter) = entity.ty.get_player() {
-                selected_players.push(
-                    PlayerSetup {
-                        fighter: entity.state.entity_def_key.clone(),
-                        team:    fighter.team,
-                    }
-                );
+                selected_players.push(PlayerSetup {
+                    fighter: entity.state.entity_def_key.clone(),
+                    team: fighter.team,
+                });
             }
         }
 
         let hot_reload_as_running = match game.state {
             GameState::Local => true,
-            _ => false
+            _ => false,
         };
 
         Replay {
-            init_seed:                 game.init_seed,
-            timestamp:                 Local::now(),
-            input_history:             input.get_history(),
-            entity_history:            game.entity_history(),
-            stage_history:             game.stage_history.clone(),
-            selected_controllers:      game.selected_controllers.clone(),
-            selected_ais:              game.selected_ais.clone(),
-            selected_stage:            game.selected_stage.clone(),
-            rules:                     game.rules.clone(),
-            max_history_frames:        game.max_history_frames,
-            deleted_history_frames:    game.deleted_history_frames,
-            hot_reload_current_frame:  game.current_frame,
-            hot_reload_camera:         game.camera.clone(),
+            init_seed: game.init_seed,
+            timestamp: Local::now(),
+            input_history: input.get_history(),
+            entity_history: game.entity_history(),
+            stage_history: game.stage_history.clone(),
+            selected_controllers: game.selected_controllers.clone(),
+            selected_ais: game.selected_ais.clone(),
+            selected_stage: game.selected_stage.clone(),
+            rules: game.rules.clone(),
+            max_history_frames: game.max_history_frames,
+            deleted_history_frames: game.deleted_history_frames,
+            hot_reload_current_frame: game.current_frame,
+            hot_reload_camera: game.camera.clone(),
             hot_reload_debug_entities: game.debug_entities(),
-            hot_reload_debug_stage:    game.debug_stage.clone(),
-            hot_reload_entities:       game.entities(),
-            hot_reload_stage:          game.stage.clone(),
-            hot_reload_edit:           game.edit(),
+            hot_reload_debug_stage: game.debug_stage.clone(),
+            hot_reload_entities: game.entities(),
+            hot_reload_stage: game.stage.clone(),
+            hot_reload_edit: game.edit(),
             hot_reload_as_running,
             selected_players,
         }
@@ -137,20 +136,20 @@ impl Replay {
         };
 
         GameSetup {
-            init_seed:              self.init_seed,
-            input_history:          self.input_history,
-            entity_history:         self.entity_history,
-            stage_history:          self.stage_history,
-            controllers:            self.selected_controllers,
-            players:                self.selected_players,
-            ais:                    self.selected_ais,
-            stage:                  self.selected_stage,
-            rules:                  self.rules,
-            max_history_frames:     self.max_history_frames,
+            init_seed: self.init_seed,
+            input_history: self.input_history,
+            entity_history: self.entity_history,
+            stage_history: self.stage_history,
+            controllers: self.selected_controllers,
+            players: self.selected_players,
+            ais: self.selected_ais,
+            stage: self.selected_stage,
+            rules: self.rules,
+            max_history_frames: self.max_history_frames,
             deleted_history_frames: self.deleted_history_frames,
-            edit:                   self.hot_reload_edit,
+            edit: self.hot_reload_edit,
             current_frame,
-            debug:                  false,
+            debug: false,
             camera,
             debug_entities,
             debug_stage,

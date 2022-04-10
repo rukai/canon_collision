@@ -1,19 +1,19 @@
-use treeflection::{NodeRunner, Node};
-use bincode;
-use rand::Rng;
-use rand;
 use crate::files::build_version;
+use bincode;
+use rand;
+use rand::Rng;
+use treeflection::{Node, NodeRunner};
 
-use std::net::{TcpListener, UdpSocket, IpAddr, SocketAddr};
 use std::io::Read;
 use std::io::Write;
+use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::str;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use crate::input::state::ControllerInput;
 
 pub struct NetCommandLine {
-    listener: TcpListener
+    listener: TcpListener,
 }
 
 impl NetCommandLine {
@@ -29,19 +29,21 @@ impl NetCommandLine {
 
         listener.set_nonblocking(true).unwrap();
 
-        NetCommandLine {
-            listener: listener,
-        }
+        NetCommandLine { listener: listener }
     }
 
-    pub fn step<T>(&mut self, root_node: &mut T) where T: Node {
+    pub fn step<T>(&mut self, root_node: &mut T)
+    where
+        T: Node,
+    {
         let mut buf = [0; 1024];
         if let Ok((mut stream, _)) = self.listener.accept() {
             match stream.read(&mut buf) {
                 Ok(amt) => {
                     if amt > 1 {
                         if let Ok(string) = str::from_utf8(&buf[1..amt]) {
-                            if buf[0] == 0x43 { // 'C'
+                            if buf[0] == 0x43 {
+                                // 'C'
                                 let out = NetCommandLine::run_inner(&string, root_node);
                                 if let Err(e) = stream.write(out.as_bytes()) {
                                     println!("command send failed {}", e);
@@ -57,13 +59,16 @@ impl NetCommandLine {
         }
     }
 
-    fn run_inner<T>(command: &str, package: &mut T) -> String where T: Node {
+    fn run_inner<T>(command: &str, package: &mut T) -> String
+    where
+        T: Node,
+    {
         match NodeRunner::new(command) {
             Ok(runner) => {
                 let result = package.node_step(runner);
                 result
-            },
-            Err(msg) => msg
+            }
+            Err(msg) => msg,
         }
     }
 }
@@ -96,20 +101,20 @@ impl NetCommandLine {
 pub struct Netplay {
     // structure: peers Vec<frames Vec<controllers Vec<ControllerInput>>>
     // frame 0 has index 2
-    pub confirmed_inputs:  Vec<Vec<Vec<ControllerInput>>>,
+    pub confirmed_inputs: Vec<Vec<Vec<ControllerInput>>>,
     match_making_response: Option<MatchMakingResponse>,
-    peers:                 Vec<SocketAddr>,
-    seed:                  u64,
-    socket:                UdpSocket,
-    state:                 NetplayState,
-    state_frame:           usize,
-    last_received_frame:   usize,
-    index:                 usize,
-    init_msgs:             Vec<InitConnection>,
-    ping_msgs:             Vec<u8>,
-    start_request_msgs:    Vec<usize>,
-    start_confirm_msgs:    Vec<usize>,
-    running_msgs:          Vec<InputConfirm>,
+    peers: Vec<SocketAddr>,
+    seed: u64,
+    socket: UdpSocket,
+    state: NetplayState,
+    state_frame: usize,
+    last_received_frame: usize,
+    index: usize,
+    init_msgs: Vec<InitConnection>,
+    ping_msgs: Vec<u8>,
+    start_request_msgs: Vec<usize>,
+    start_confirm_msgs: Vec<usize>,
+    running_msgs: Vec<InputConfirm>,
 }
 
 impl Netplay {
@@ -117,19 +122,19 @@ impl Netplay {
         let socket = UdpSocket::bind("0.0.0.0:8413").unwrap();
         socket.set_nonblocking(true).unwrap();
         Netplay {
-            state:                 NetplayState::Offline,
-            state_frame:           0,
-            last_received_frame:   0,
-            confirmed_inputs:      vec!(),
+            state: NetplayState::Offline,
+            state_frame: 0,
+            last_received_frame: 0,
+            confirmed_inputs: vec![],
             match_making_response: None,
-            peers:                 vec!(),
-            seed:                  0,
-            index:                 0,
-            init_msgs:             vec!(),
-            ping_msgs:             vec!(),
-            start_request_msgs:    vec!(),
-            start_confirm_msgs:    vec!(),
-            running_msgs:          vec!(),
+            peers: vec![],
+            seed: 0,
+            index: 0,
+            init_msgs: vec![],
+            ping_msgs: vec![],
+            start_request_msgs: vec![],
+            start_confirm_msgs: vec![],
+            running_msgs: vec![],
             socket,
         }
     }
@@ -143,7 +148,8 @@ impl Netplay {
         // receive messages
         loop {
             let mut buf = [0; 1024];
-            if let Ok((_, addr)) = self.socket.recv_from(&mut buf) { // returns Err if there is no packet waiting
+            if let Ok((_, addr)) = self.socket.recv_from(&mut buf) {
+                // returns Err if there is no packet waiting
                 match buf[0] {
                     0x00 => {
                         if let Ok(data) = bincode::deserialize(&buf[1..]) {
@@ -178,48 +184,58 @@ impl Netplay {
                         self.disconnect_with_reason("Peer disconnected");
                     }
                     _ => {
-                        println!("Couldn't process netplay message starting with: {:?}", &buf[0..32]);
+                        println!(
+                            "Couldn't process netplay message starting with: {:?}",
+                            &buf[0..32]
+                        );
                     }
                 }
                 self.last_received_frame = self.state_frame;
-            }
-            else {
+            } else {
                 break;
             }
         }
 
         if self.peers.len() > 0 && self.state_frame - self.last_received_frame > 600 {
-            self.disconnect_with_reason("Connection timed out: no packets received in the last 10 seconds");
+            self.disconnect_with_reason(
+                "Connection timed out: no packets received in the last 10 seconds",
+            );
         }
 
         // process messages
         match self.state.clone() {
-            NetplayState::Offline => { }
-            NetplayState::Disconnected { .. } => { }
-            NetplayState::MatchMaking { request, } => {
-                if self.state_frame % 600 == 1 { // Send a request every 10 seconds
+            NetplayState::Offline => {}
+            NetplayState::Disconnected { .. } => {}
+            NetplayState::MatchMaking { request } => {
+                if self.state_frame % 600 == 1 {
+                    // Send a request every 10 seconds
                     let mut data = bincode::serialize(&request).unwrap();
                     data.insert(0, 0x00);
-                    if let Err(_) = self.socket.send_to(&data, "matchmaking.canoncollision.com:8413") {
-                        self.disconnect_with_reason("matchmaking.canoncollision.com:8413 is inaccessible");
+                    if let Err(_) = self
+                        .socket
+                        .send_to(&data, "matchmaking.canoncollision.com:8413")
+                    {
+                        self.disconnect_with_reason(
+                            "matchmaking.canoncollision.com:8413 is inaccessible",
+                        );
                     }
                 }
                 if let &Some(ref response) = &self.match_making_response {
                     for peer in response.addresses.iter() {
                         if !self.peers.contains(peer) {
                             self.peers.push(peer.clone());
-                            self.confirmed_inputs.push(vec!());
+                            self.confirmed_inputs.push(vec![]);
                         }
                     }
                 }
                 if self.peers.len() as u8 + 1 == request.num_players {
-                    self.set_state(NetplayState::InitConnection (InitConnection {
-                        random:        rand::thread_rng().gen::<u64>(),
+                    self.set_state(NetplayState::InitConnection(InitConnection {
+                        random: rand::thread_rng().gen::<u64>(),
                         build_version: request.build_version.clone(),
                     }));
                 }
             }
-            NetplayState::InitConnection (local) => {
+            NetplayState::InitConnection(local) => {
                 // send init
                 let mut data = bincode::serialize(&local).unwrap();
                 data.insert(0, 0x01);
@@ -229,9 +245,11 @@ impl Netplay {
                 if let Some(init) = self.init_msgs.pop() {
                     if init.build_version != local.build_version {
                         self.disconnect_with_reason("Build versions did not match, ensure everyone is using the same Canon Collision build.");
-                    }
-                    else {
-                        self.set_state(NetplayState::PingTest { local_init: local.clone(), pings: [Ping::default(); 255] });
+                    } else {
+                        self.set_state(NetplayState::PingTest {
+                            local_init: local.clone(),
+                            pings: [Ping::default(); 255],
+                        });
                     }
 
                     // Use peer 0's random value to generate the game seed for all games in the current session.
@@ -240,14 +258,16 @@ impl Netplay {
                     if local.random < init.random {
                         self.index = 0;
                         self.seed = local.random;
-                    }
-                    else {
+                    } else {
                         self.index = 1;
                         self.seed = init.random;
                     }
                 }
             }
-            NetplayState::PingTest { local_init, mut pings } => {
+            NetplayState::PingTest {
+                local_init,
+                mut pings,
+            } => {
                 // if we havnt received a ping yet then resend init message
                 if pings.iter().all(|x| x.time_received.is_none()) {
                     let mut data = bincode::serialize(&local_init).unwrap();
@@ -256,7 +276,12 @@ impl Netplay {
                 }
 
                 // request a ping from peer and record the time_sent
-                if let Some(next_ping) = pings.iter().enumerate().find(|x| x.1.time_sent.is_none()).map(|x| x.0) {
+                if let Some(next_ping) = pings
+                    .iter()
+                    .enumerate()
+                    .find(|x| x.1.time_sent.is_none())
+                    .map(|x| x.0)
+                {
                     self.broadcast(&[2, next_ping as u8], "ping");
                     pings[next_ping].time_sent = Some(Instant::now());
 
@@ -265,22 +290,31 @@ impl Netplay {
                         pings[*ping_msg as usize].time_received = Some(Instant::now());
                     }
                     self.state = NetplayState::PingTest { local_init, pings };
-                }
-                else {
+                } else {
                     let mut ping_total = Duration::from_secs(0);
-                    for ping in pings.iter().take(225) { // skip the last 30 as we dont want the most recent packets showing up as dropped.
-                        if let (Some(time_sent), Some(time_received)) = (ping.time_sent, ping.time_received) {
+                    for ping in pings.iter().take(225) {
+                        // skip the last 30 as we dont want the most recent packets showing up as dropped.
+                        if let (Some(time_sent), Some(time_received)) =
+                            (ping.time_sent, ping.time_received)
+                        {
                             ping_total += time_received.duration_since(time_sent);
                         } else {
                             ping_total += Duration::from_millis(200); // punish for dropping packet
                         }
                     }
 
-                    let ping_total = ping_total.as_secs() as f64 + ping_total.subsec_nanos() as f64 / 1_000_000_000.0;
+                    let ping_total = ping_total.as_secs() as f64
+                        + ping_total.subsec_nanos() as f64 / 1_000_000_000.0;
                     let ping_avg = ping_total / 255.0;
                     let ping_max = 100.0; // TODO: Grab from config
                     if ping_avg > ping_max {
-                        self.disconnect_with_reason(format!("The ping was '{}' which was above the limit of '{}'", ping_avg, ping_max).as_ref());
+                        self.disconnect_with_reason(
+                            format!(
+                                "The ping was '{}' which was above the limit of '{}'",
+                                ping_avg, ping_max
+                            )
+                            .as_ref(),
+                        );
                     } else {
                         self.set_state(NetplayState::Running);
                         // TODO: Need to force input reset all history at this point
@@ -290,7 +324,7 @@ impl Netplay {
             NetplayState::Running => {
                 let peer = 0; // TODO: handle multiple peers
                 let mut found_msg = true;
-                let mut to_delete = vec!();
+                let mut to_delete = vec![];
                 while found_msg {
                     found_msg = false;
                     for (i, msg) in self.running_msgs.iter().enumerate() {
@@ -313,7 +347,7 @@ impl Netplay {
         }
         debug!("state: {}", self.state.to_string());
         debug!("number_of_peers: {}", self.number_of_peers());
-        debug!("local_index: {}",  self.local_index());
+        debug!("local_index: {}", self.local_index());
         debug!("frame: {}", self.frame());
         debug!("frames_to_step: {}", self.frames_to_step());
         debug!("skip_frame: {}", self.skip_frame());
@@ -327,7 +361,7 @@ impl Netplay {
     pub fn local_index(&self) -> usize {
         match &self.state {
             &NetplayState::Running { .. } => self.index,
-            _ => 0
+            _ => 0,
         }
     }
 
@@ -339,37 +373,45 @@ impl Netplay {
     // TODO: Optimize by only starting from a frame where the inputs differ
     /// Returns the number of frames that need to be stepped/restepped including the current frame
     pub fn frames_to_step(&self) -> usize {
-        let input_frames = self.confirmed_inputs.iter().map(|x| x.len()).min().unwrap_or(1);
+        let input_frames = self
+            .confirmed_inputs
+            .iter()
+            .map(|x| x.len())
+            .min()
+            .unwrap_or(1);
         match &self.state {
             &NetplayState::Running => self.state_frame.saturating_sub(input_frames).max(1),
-            _ => 1
+            _ => 1,
         }
     }
 
     pub fn frame(&self) -> usize {
         match &self.state {
             &NetplayState::Running => self.state_frame,
-            _ => 0
+            _ => 0,
         }
     }
 
     // TODO: take ping into account
     /// Returns true if the local machine should do nothing for a frame so that peers can catch up.
     pub fn skip_frame(&self) -> bool {
-        let input_frames = self.confirmed_inputs.iter().map(|x| x.len()).min().unwrap_or(1);
+        let input_frames = self
+            .confirmed_inputs
+            .iter()
+            .map(|x| x.len())
+            .min()
+            .unwrap_or(1);
         match &self.state {
             &NetplayState::Running => self.state_frame > input_frames + 1,
-            _ => false
+            _ => false,
         }
     }
 
     /// Return the seed used for this netplay session
     pub fn get_seed(&self) -> Option<u64> {
         match &self.state {
-            &NetplayState::Running { .. } => {
-                Some(self.seed)
-            }
-            _ => None
+            &NetplayState::Running { .. } => Some(self.seed),
+            _ => None,
         }
     }
 
@@ -382,7 +424,9 @@ impl Netplay {
             }
         }
         if fail {
-            self.disconnect_with_reason(format!("Peer is inaccessible: failed to send {}", message_name).as_ref());
+            self.disconnect_with_reason(
+                format!("Peer is inaccessible: failed to send {}", message_name).as_ref(),
+            );
         }
     }
 
@@ -404,9 +448,9 @@ impl Netplay {
     pub fn direct_connect(&mut self, address: IpAddr) {
         self.clear();
         self.peers.push(SocketAddr::new(address, 8413));
-        self.confirmed_inputs.push(vec!());
-        self.set_state(NetplayState::InitConnection (InitConnection {
-            random:        rand::thread_rng().gen::<u64>(),
+        self.confirmed_inputs.push(vec![]);
+        self.set_state(NetplayState::InitConnection(InitConnection {
+            random: rand::thread_rng().gen::<u64>(),
             build_version: build_version(),
         }));
     }
@@ -429,13 +473,14 @@ impl Netplay {
 
     fn disconnect_with_reason(&mut self, reason: &str) {
         match &self.state {
-            &NetplayState::Offline |
-            &NetplayState::Disconnected { .. } => { }
+            &NetplayState::Offline | &NetplayState::Disconnected { .. } => {}
             _ => {
                 for peer in self.peers.iter() {
                     self.socket.send_to(&[0xAA], peer).ok();
                 }
-                self.set_state(NetplayState::Disconnected { reason: String::from(reason) });
+                self.set_state(NetplayState::Disconnected {
+                    reason: String::from(reason),
+                });
                 self.clear();
             }
         }
@@ -443,7 +488,7 @@ impl Netplay {
 
     pub fn set_offline(&mut self) {
         match &self.state {
-            &NetplayState::Offline => { }
+            &NetplayState::Offline => {}
             _ => {
                 for peer in self.peers.iter() {
                     self.socket.send_to(&[0xAA], peer).ok();
@@ -458,7 +503,7 @@ impl Netplay {
         if let &NetplayState::Running = &self.state {
             let input_confirm = InputConfirm {
                 frame: self.state_frame,
-                inputs
+                inputs,
             };
             let mut data = bincode::serialize(&input_confirm).unwrap();
             data.insert(0, 0x04);
@@ -474,51 +519,58 @@ impl Netplay {
 pub enum NetplayState {
     Offline,
     Running,
-    InitConnection (InitConnection),
-    MatchMaking    { request: MatchMakingRequest },
-    Disconnected   { reason: String },
-    PingTest       { local_init: InitConnection, pings:  [Ping; 255] },
+    InitConnection(InitConnection),
+    MatchMaking {
+        request: MatchMakingRequest,
+    },
+    Disconnected {
+        reason: String,
+    },
+    PingTest {
+        local_init: InitConnection,
+        pings: [Ping; 255],
+    },
 }
 
 impl NetplayState {
     pub fn to_string(&self) -> String {
         match self {
-            &NetplayState::Offline               => String::from("Offline"),
-            &NetplayState::Running               => String::from("Running"),
-            &NetplayState::InitConnection (_)    => String::from("InitConnection"),
-            &NetplayState::MatchMaking    { .. } => String::from("MatchMaking"),
-            &NetplayState::Disconnected   { .. } => String::from("Disconnected"),
-            &NetplayState::PingTest       { .. } => String::from("PingTest"),
+            &NetplayState::Offline => String::from("Offline"),
+            &NetplayState::Running => String::from("Running"),
+            &NetplayState::InitConnection(_) => String::from("InitConnection"),
+            &NetplayState::MatchMaking { .. } => String::from("MatchMaking"),
+            &NetplayState::Disconnected { .. } => String::from("Disconnected"),
+            &NetplayState::PingTest { .. } => String::from("PingTest"),
         }
     }
 }
 
 #[derive(Clone, Serialize)]
 pub struct MatchMakingRequest {
-    pub region:    String,
+    pub region: String,
     build_version: String,
-    num_players:   u8
+    num_players: u8,
 }
 
 #[derive(Clone, Deserialize)]
 struct MatchMakingResponse {
-    addresses: Vec<SocketAddr>
+    addresses: Vec<SocketAddr>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InitConnection {
-    build_version:  String,
-    random:         u64
+    build_version: String,
+    random: u64,
 }
 
 #[derive(Clone, Default, Copy)]
 pub struct Ping {
-    time_sent:     Option<Instant>,
+    time_sent: Option<Instant>,
     time_received: Option<Instant>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 struct InputConfirm {
     inputs: Vec<ControllerInput>,
-    frame:  usize,
+    frame: usize,
 }

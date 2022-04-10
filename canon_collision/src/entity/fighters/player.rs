@@ -2,83 +2,99 @@ use crate::audio::sfx::SFXType;
 use crate::collision::collision_box::CollisionResult;
 use crate::entity::components::action_state::ActionState;
 use crate::entity::components::body::{Body, Location, PhysicsResult};
-use crate::entity::item::{MessageItem, Item};
-use crate::entity::{Entity, EntityType, StepContext, DebugEntity, VectorArrow, Entities, EntityKey, Message, MessageContents, ActionResult};
+use crate::entity::item::{Item, MessageItem};
+use crate::entity::{
+    ActionResult, DebugEntity, Entities, Entity, EntityKey, EntityType, Message, MessageContents,
+    StepContext, VectorArrow,
+};
 use crate::graphics;
 use crate::particle::{Particle, ParticleType};
-use crate::results::{RawPlayerResult, DeathRecord};
+use crate::results::{DeathRecord, RawPlayerResult};
 use crate::rules::{Goal, Rules};
 
-use canon_collision_lib::entity_def::{EntityDef, HitStun, Shield, HitBox, HurtBox, HitboxEffect};
-use canon_collision_lib::entity_def::player::PlayerAction;
 use canon_collision_lib::entity_def::item::ItemAction;
+use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::{EntityDef, HitBox, HitStun, HitboxEffect, HurtBox, Shield};
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::input::state::PlayerInput;
 use canon_collision_lib::package::Package;
 use canon_collision_lib::stage::{Stage, Surface};
 
-use treeflection::KeyedContextVec;
 use rand::Rng;
+use treeflection::KeyedContextVec;
 
 use std::f32;
 use std::f32::consts::PI;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LockTimer {
-    Active (u64),
-    Locked (u64),
-    Free
+    Active(u64),
+    Locked(u64),
+    Free,
 }
 
 impl LockTimer {
     pub fn is_active(&self) -> bool {
         match self {
-            &LockTimer::Active (_) => true,
-            _                      => false
+            &LockTimer::Active(_) => true,
+            _ => false,
         }
     }
 }
 
 pub enum MessagePlayer {
-    Thrown { angle: f32, damage: f32, bkb: f32, kbg: f32, entity_atk_i: EntityKey },
+    Thrown {
+        angle: f32,
+        damage: f32,
+        bkb: f32,
+        kbg: f32,
+        entity_atk_i: EntityKey,
+    },
     #[allow(dead_code)]
     Released,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Player {
-    pub id:                 usize, // unique id among players
-    pub team:               usize,
-    pub body:               Body,
-    pub stocks:             Option<u64>,
-    pub ledge_idle_timer:   u64,
-    pub fastfalled:         bool,
-    pub air_jumps_left:     u64,
-    pub jumpsquat_button:   bool,
-    pub shield_hp:          f32,
-    pub shield_analog:      f32,
-    pub shield_offset_x:    f32,
-    pub shield_offset_y:    f32,
-    pub stun_timer:         u64,
-    pub shield_stun_timer:  u64,
-    pub parry_timer:        u64,
-    pub tech_timer:         LockTimer,
-    pub lcancel_timer:      u64,
-    pub land_frame_skip:    u8,
-    pub hitstun:            f32,
+    pub id: usize, // unique id among players
+    pub team: usize,
+    pub body: Body,
+    pub stocks: Option<u64>,
+    pub ledge_idle_timer: u64,
+    pub fastfalled: bool,
+    pub air_jumps_left: u64,
+    pub jumpsquat_button: bool,
+    pub shield_hp: f32,
+    pub shield_analog: f32,
+    pub shield_offset_x: f32,
+    pub shield_offset_y: f32,
+    pub stun_timer: u64,
+    pub shield_stun_timer: u64,
+    pub parry_timer: u64,
+    pub tech_timer: LockTimer,
+    pub lcancel_timer: u64,
+    pub land_frame_skip: u8,
+    pub hitstun: f32,
     /// this is only used for end-game statistics so player id is fine
-    pub hit_by:             Option<usize>,
-    pub particles:          Vec<Particle>,
+    pub hit_by: Option<usize>,
+    pub particles: Vec<Particle>,
     pub aerial_dodge_frame: Option<u64>,
-    pub result:             RawPlayerResult,
+    pub result: RawPlayerResult,
 
     // Only use for debug display
-    pub stick:   Option<(f32, f32)>,
+    pub stick: Option<(f32, f32)>,
     pub c_stick: Option<(f32, f32)>,
 }
 
 impl Player {
-    pub fn new(entity_def_key: &str, team: usize, id: usize, stage: &Stage, package: &Package, rules: &Rules) -> Player {
+    pub fn new(
+        entity_def_key: &str,
+        team: usize,
+        id: usize,
+        stage: &Stage,
+        package: &Package,
+        rules: &Rules,
+    ) -> Player {
         // get the spawn point
         let spawn = if stage.spawn_points.len() == 0 {
             None
@@ -90,14 +106,17 @@ impl Player {
             // find the floor directly beneath the player
             struct FoundFloor {
                 surface_i: usize,
-                world_y:   f32, // The y coordinate of the point on the floor corresponding to the spawnpoints x coordinate.
+                world_y: f32, // The y coordinate of the point on the floor corresponding to the spawnpoints x coordinate.
             }
             let mut found_floor = None;
             for (surface_i, surface) in stage.surfaces.iter().enumerate() {
                 let spawn_x_in_bounds = surface.world_x_in_bounds(spawn.x);
                 let world_y = surface.world_x_to_world_y(spawn.x);
                 let above_plat = world_y <= spawn.y;
-                let closest = found_floor.as_ref().map(|x: &FoundFloor| x.world_y < world_y).unwrap_or(true);
+                let closest = found_floor
+                    .as_ref()
+                    .map(|x: &FoundFloor| x.world_y < world_y)
+                    .unwrap_or(true);
 
                 if surface.floor.is_some() && spawn_x_in_bounds && above_plat && closest {
                     found_floor = Some(FoundFloor { surface_i, world_y });
@@ -107,10 +126,16 @@ impl Player {
             if let Some(floor) = found_floor {
                 let surface = &stage.surfaces[floor.surface_i];
                 // place the player on the platform
-                Location::Surface { platform_i: floor.surface_i, x: surface.world_x_to_plat_x(spawn.x) }
+                Location::Surface {
+                    platform_i: floor.surface_i,
+                    x: surface.world_x_to_plat_x(spawn.x),
+                }
             } else {
                 // no platform just make them airbourne at the exact spawnpoint
-                Location::Airbourne { x: spawn.x, y: spawn.y }
+                Location::Airbourne {
+                    x: spawn.x,
+                    y: spawn.y,
+                }
             }
         } else {
             // There are no spawn points, we could attempt to find a floor surface and put the
@@ -121,53 +146,81 @@ impl Player {
         };
 
         Player {
-            stocks:             rules.stock_count,
-            ledge_idle_timer:   0,
-            fastfalled:         false,
-            air_jumps_left:     package.entities[entity_def_key].fighter().map(|x| x.air_jumps).unwrap_or(1),
-            jumpsquat_button:   false,
-            shield_hp:          package.entities[entity_def_key].shield.as_ref().map_or(60.0, |x| x.hp_max),
-            shield_analog:      0.0,
-            shield_offset_x:    0.0,
-            shield_offset_y:    0.0,
-            stun_timer:         0,
-            shield_stun_timer:  0,
-            parry_timer:        0,
-            tech_timer:         LockTimer::Free,
-            lcancel_timer:      0,
-            land_frame_skip:    0,
-            hitstun:            0.0,
-            hit_by:             None,
-            particles:          vec!(),
+            stocks: rules.stock_count,
+            ledge_idle_timer: 0,
+            fastfalled: false,
+            air_jumps_left: package.entities[entity_def_key]
+                .fighter()
+                .map(|x| x.air_jumps)
+                .unwrap_or(1),
+            jumpsquat_button: false,
+            shield_hp: package.entities[entity_def_key]
+                .shield
+                .as_ref()
+                .map_or(60.0, |x| x.hp_max),
+            shield_analog: 0.0,
+            shield_offset_x: 0.0,
+            shield_offset_y: 0.0,
+            stun_timer: 0,
+            shield_stun_timer: 0,
+            parry_timer: 0,
+            tech_timer: LockTimer::Free,
+            lcancel_timer: 0,
+            land_frame_skip: 0,
+            hitstun: 0.0,
+            hit_by: None,
+            particles: vec![],
             aerial_dodge_frame: None,
-            result:             RawPlayerResult::default(),
-            body: Body::new(
-                location,
-                spawn.map(|x| x.face_right).unwrap_or(false)
-            ),
+            result: RawPlayerResult::default(),
+            body: Body::new(location, spawn.map(|x| x.face_right).unwrap_or(false)),
             id,
             team,
 
             // Only use for debug display
-            stick:   None,
+            stick: None,
             c_stick: None,
         }
     }
 
     pub fn bps_xy(&self, context: &StepContext, state: &ActionState) -> (f32, f32) {
-        let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
-        self.body.public_bps_xy(context.entities, context.entity_defs, action_frame, context.surfaces, state)
+        let action_frame =
+            state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
+        self.body.public_bps_xy(
+            context.entities,
+            context.entity_defs,
+            action_frame,
+            context.surfaces,
+            state,
+        )
     }
 
-    pub fn public_bps_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
+    pub fn public_bps_xy(
+        &self,
+        entities: &Entities,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+        state: &ActionState,
+    ) -> (f32, f32) {
         let action_frame = state.get_entity_frame(&entity_defs[state.entity_def_key.as_ref()]);
-        self.body.public_bps_xy(entities, entity_defs, action_frame, surfaces, state)
+        self.body
+            .public_bps_xy(entities, entity_defs, action_frame, surfaces, state)
     }
 
-    pub fn grabbing_xy(&self, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
+    pub fn grabbing_xy(
+        &self,
+        entities: &Entities,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+        state: &ActionState,
+    ) -> (f32, f32) {
         let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces, state);
-        if let Some(entity_frame) = state.get_entity_frame(&entity_defs[state.entity_def_key.as_ref()]) {
-            (x + self.relative_f(entity_frame.grabbing_x), y + entity_frame.grabbing_y)
+        if let Some(entity_frame) =
+            state.get_entity_frame(&entity_defs[state.entity_def_key.as_ref()])
+        {
+            (
+                x + self.relative_f(entity_frame.grabbing_x),
+                y + entity_frame.grabbing_y,
+            )
         } else {
             (x, y)
         }
@@ -175,12 +228,11 @@ impl Player {
 
     pub fn is_shielding(&self, state: &ActionState) -> bool {
         match state.get_action() {
-            Some(PlayerAction::Shield) |
-            Some(PlayerAction::ShieldOn) |
-            Some(PlayerAction::ShieldOff) |
-            Some(PlayerAction::PowerShield)
-              => true,
-            _ => false
+            Some(PlayerAction::Shield)
+            | Some(PlayerAction::ShieldOn)
+            | Some(PlayerAction::ShieldOff)
+            | Some(PlayerAction::PowerShield) => true,
+            _ => false,
         }
     }
 
@@ -190,18 +242,31 @@ impl Player {
         self.body.location = Location::Airbourne { x, y };
     }
 
-    pub fn platform_deleted(&mut self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], deleted_platform_i: usize, state: &ActionState) -> Option<ActionResult> {
+    pub fn platform_deleted(
+        &mut self,
+        entities: &Entities,
+        fighters: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+        deleted_platform_i: usize,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         let fall = match &mut self.body.location {
-            &mut Location::Surface     { ref mut platform_i, .. } |
-            &mut Location::GrabbedLedge { ref mut platform_i, .. } => {
+            &mut Location::Surface {
+                ref mut platform_i, ..
+            }
+            | &mut Location::GrabbedLedge {
+                ref mut platform_i, ..
+            } => {
                 if *platform_i == deleted_platform_i {
                     true
                 } else if *platform_i > deleted_platform_i {
                     *platform_i -= 1;
                     false
-                } else { false }
+                } else {
+                    false
+                }
             }
-            _ => { false }
+            _ => false,
         };
 
         if fall {
@@ -216,22 +281,41 @@ impl Player {
         }
     }
 
-    fn launch(&mut self, context: &mut StepContext, state: &ActionState, hitbox: &HitBox, hurtbox: &HurtBox, entity_atk_i: EntityKey) -> Option<ActionResult> {
-        self.hit_by = context.entities.get(entity_atk_i).and_then(|x| x.player_id());
+    fn launch(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+        hitbox: &HitBox,
+        hurtbox: &HurtBox,
+        entity_atk_i: EntityKey,
+    ) -> Option<ActionResult> {
+        self.hit_by = context
+            .entities
+            .get(entity_atk_i)
+            .and_then(|x| x.player_id());
         let kb_vel_mult = if let Some(PlayerAction::Crouch) = state.get_action() {
             0.67
         } else {
             1.0
         };
 
-        let action_frame = state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
-        let kb_vel = self.body.launch(context, state, action_frame, hitbox, hurtbox, entity_atk_i, kb_vel_mult);
+        let action_frame =
+            state.get_entity_frame(&context.entity_defs[state.entity_def_key.as_ref()]);
+        let kb_vel = self.body.launch(
+            context,
+            state,
+            action_frame,
+            hitbox,
+            hurtbox,
+            entity_atk_i,
+            kb_vel_mult,
+        );
 
         if let Location::Airbourne { .. } = self.body.location {
             self.fastfalled = false;
             self.hitstun = match hitbox.hitstun {
-                HitStun::FramesTimesKnockback (frames) => { frames * kb_vel }
-                HitStun::Frames               (frames) => { frames as f32 }
+                HitStun::FramesTimesKnockback(frames) => frames * kb_vel,
+                HitStun::Frames(frames) => frames as f32,
             };
         }
 
@@ -242,40 +326,67 @@ impl Player {
         }
     }
 
-    pub fn step_collision(&mut self, context: &mut StepContext, state: &ActionState, col_results: &[CollisionResult]) -> Option<ActionResult> {
+    pub fn step_collision(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+        col_results: &[CollisionResult],
+    ) -> Option<ActionResult> {
         // TODO: Maybe we should provide a single col_result at a time so that we can handle all ActionResults.
         //       Ah! or maybe we should filter out the collisions that can should override other
         //       collisions, consistently giving priority to a specific type of collision.
         let mut set_action = None;
         for col_result in col_results {
             match col_result {
-                &CollisionResult::HitAtk { ref hitbox, ref point, .. } => {
+                &CollisionResult::HitAtk {
+                    ref hitbox,
+                    ref point,
+                    ..
+                } => {
                     self.hit_particles(*point, hitbox);
                 }
-                &CollisionResult::HitDef { ref hitbox, ref hurtbox, entity_atk_i } => {
+                &CollisionResult::HitDef {
+                    ref hitbox,
+                    ref hurtbox,
+                    entity_atk_i,
+                } => {
                     set_action = self.launch(context, state, hitbox, hurtbox, entity_atk_i);
                 }
-                &CollisionResult::HitShieldAtk { ref hitbox, ref power_shield, entity_defend_i } => {
+                &CollisionResult::HitShieldAtk {
+                    ref hitbox,
+                    ref power_shield,
+                    entity_defend_i,
+                } => {
                     let entity_def = &context.entities[entity_defend_i];
                     if let Some(player_def) = &entity_def.ty.get_player() {
                         if let &Some(ref power_shield) = power_shield {
-                            if let (Some(PlayerAction::PowerShield), &Some(ref stun)) = (state.get_action(), &power_shield.enemy_stun) {
+                            if let (Some(PlayerAction::PowerShield), &Some(ref stun)) =
+                                (state.get_action(), &power_shield.enemy_stun)
+                            {
                                 if stun.window > entity_def.state.frame as u64 {
                                     self.stun_timer = stun.duration;
                                 }
                             }
                         }
 
-                        let x_diff = self.bps_xy(context, state).0 - player_def.bps_xy(context, state).0;
-                        let vel = hitbox.damage.floor() * (player_def.shield_analog - 0.3) * 0.1 + 0.02;
+                        let x_diff =
+                            self.bps_xy(context, state).0 - player_def.bps_xy(context, state).0;
+                        let vel =
+                            hitbox.damage.floor() * (player_def.shield_analog - 0.3) * 0.1 + 0.02;
                         if self.body.is_platform() {
                             self.body.x_vel += vel * x_diff.signum();
                         }
                     }
                 }
-                &CollisionResult::HitShieldDef { ref hitbox, ref power_shield, entity_atk_i } => {
+                &CollisionResult::HitShieldDef {
+                    ref hitbox,
+                    ref power_shield,
+                    entity_atk_i,
+                } => {
                     if let &Some(ref power_shield) = power_shield {
-                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) = (state.get_action(), &power_shield.parry) {
+                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) =
+                            (state.get_action(), &power_shield.parry)
+                        {
                             if parry.window > state.frame as u64 {
                                 self.parry_timer = parry.duration;
                             }
@@ -291,20 +402,23 @@ impl Player {
 
                     let analog_mult = 1.0 - (self.shield_analog - 0.3) / 0.7;
                     let vel_mult = if self.parry_timer > 0 { 1.0 } else { 0.6 };
-                    let x_diff = self.bps_xy(context, state).0 - context.entities[entity_atk_i].bps_xy(context).0;
-                    let vel = (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
+                    let x_diff = self.bps_xy(context, state).0
+                        - context.entities[entity_atk_i].bps_xy(context).0;
+                    let vel =
+                        (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
                     self.body.x_vel = vel.min(2.0) * x_diff.signum();
-                    self.shield_stun_timer = (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
+                    self.shield_stun_timer =
+                        (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                 }
-                &CollisionResult::GrabAtk (_entity_defend_i) => {
+                &CollisionResult::GrabAtk(_entity_defend_i) => {
                     set_action = ActionResult::set_action(PlayerAction::GrabbingIdle)
                 }
-                &CollisionResult::GrabDef (entity_atk_i) => {
+                &CollisionResult::GrabDef(entity_atk_i) => {
                     self.body.face_right = !context.entities[entity_atk_i].face_right();
                     self.body.location = Location::GrabbedByPlayer(entity_atk_i);
                     set_action = ActionResult::set_action(PlayerAction::GrabbedIdle)
                 }
-                _ => { }
+                _ => {}
             }
         }
         set_action
@@ -318,7 +432,7 @@ impl Player {
         self.knockback_particles(context, state);
 
         // TODO: Gankra plz ... https://github.com/rust-lang/rust/issues/43244
-        let mut new_particles = vec!();
+        let mut new_particles = vec![];
         for mut particle in self.particles.drain(..) {
             if !particle.step() {
                 new_particles.push(particle);
@@ -342,9 +456,17 @@ impl Player {
 
         if self.lcancel_timer > 0 {
             self.lcancel_timer -= 1;
-        }
-        else if context.input.l.press || context.input.r.press || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 ||
-            context.input.z.press && !(state.frame == 0 && state.get_action::<PlayerAction>().as_ref().map_or(false, |x| x.is_air_attack())) // only register z press if its not from an attack
+        } else if context.input.l.press
+            || context.input.r.press
+            || context.input[0].l_trigger > 0.165
+            || context.input[0].r_trigger > 0.165
+            || context.input.z.press
+                && !(state.frame == 0
+                    && state
+                        .get_action::<PlayerAction>()
+                        .as_ref()
+                        .map_or(false, |x| x.is_air_attack()))
+        // only register z press if its not from an attack
         {
             if let &Some(ref lcancel) = &context.entity_def.lcancel {
                 self.lcancel_timer = lcancel.active_window;
@@ -352,14 +474,14 @@ impl Player {
         }
 
         self.tech_timer = match (self.tech_timer.clone(), context.entity_def.tech.clone()) {
-            (LockTimer::Active (timer), Some(tech)) => {
+            (LockTimer::Active(timer), Some(tech)) => {
                 if timer > tech.active_window {
                     LockTimer::Locked(0)
                 } else {
                     LockTimer::Active(timer + 1)
                 }
             }
-            (LockTimer::Locked (timer), Some(tech)) => {
+            (LockTimer::Locked(timer), Some(tech)) => {
                 if timer > tech.locked_window {
                     LockTimer::Free
                 } else {
@@ -373,37 +495,41 @@ impl Player {
                     LockTimer::Free
                 }
             }
-            _ => {
-                LockTimer::Free
-            }
+            _ => LockTimer::Free,
         };
 
         if context.input[0].stick_x == 0.0 && context.input[0].stick_y == 0.0 {
             self.stick = None;
-        }
-        else {
+        } else {
             self.stick = Some((context.input[0].stick_x, context.input[0].stick_y));
         }
 
         if context.input[0].c_stick_x == 0.0 && context.input[0].c_stick_y == 0.0 {
             self.c_stick = None;
-        }
-        else {
+        } else {
             self.c_stick = Some((context.input[0].c_stick_x, context.input[0].c_stick_y));
         }
 
-        let fighter_frame = &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
+        let fighter_frame =
+            &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
 
         // update ecb
         let prev_bottom = self.body.ecb.bottom;
         self.body.ecb = fighter_frame.ecb.clone();
         match state.get_action() {
-            Some(PlayerAction::JumpF) | Some(PlayerAction::JumpB) | Some(PlayerAction::JumpAerialF) | Some(PlayerAction::JumpAerialB) if state.frame < 10
-                => { self.body.ecb.bottom = prev_bottom }
-            _   => { }
+            Some(PlayerAction::JumpF)
+            | Some(PlayerAction::JumpB)
+            | Some(PlayerAction::JumpAerialF)
+            | Some(PlayerAction::JumpAerialB)
+                if state.frame < 10 =>
+            {
+                self.body.ecb.bottom = prev_bottom
+            }
+            _ => {}
         }
     }
 
+    #[rustfmt::skip]
     pub fn frame_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         if let Some(action) = state.get_action() {
             match action {
@@ -482,66 +608,73 @@ impl Player {
         }
     }
 
-    fn ledge_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if
-            (context.input[0].  stick_y < -0.2 && context.input[1].  stick_y >= -0.2) ||
-            (context.input[0].c_stick_y < -0.2 && context.input[1].c_stick_y >= -0.2) ||
-            (self.relative_f(context.input[0].  stick_x) < -0.2 && self.relative_f(context.input[1].  stick_x) >= -0.2) ||
-            (self.relative_f(context.input[0].c_stick_x) < -0.2 && self.relative_f(context.input[1].c_stick_x) >= -0.2)
+    fn ledge_idle_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        if (context.input[0].stick_y < -0.2 && context.input[1].stick_y >= -0.2)
+            || (context.input[0].c_stick_y < -0.2 && context.input[1].c_stick_y >= -0.2)
+            || (self.relative_f(context.input[0].stick_x) < -0.2
+                && self.relative_f(context.input[1].stick_x) >= -0.2)
+            || (self.relative_f(context.input[0].c_stick_x) < -0.2
+                && self.relative_f(context.input[1].c_stick_x) >= -0.2)
         {
             self.set_airbourne(context, state);
             ActionResult::set_action(PlayerAction::Fall)
-        }
-        else if context.input.x.press || context.input.y.press || (context.input[0].stick_y > 0.65 && context.input[1].stick_y <= 0.65) {
+        } else if context.input.x.press
+            || context.input.y.press
+            || (context.input[0].stick_y > 0.65 && context.input[1].stick_y <= 0.65)
+        {
             if self.body.damage < 100.0 {
                 ActionResult::set_action(PlayerAction::LedgeJump)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::LedgeJumpSlow)
             }
-        }
-        else if
-            (self.relative_f(context.input[0].stick_x) > 0.2 && self.relative_f(context.input[1].stick_x) <= 0.2) ||
-            (context.input[0].stick_y > 0.2 && context.input[1].stick_y <= 0.2)
+        } else if (self.relative_f(context.input[0].stick_x) > 0.2
+            && self.relative_f(context.input[1].stick_x) <= 0.2)
+            || (context.input[0].stick_y > 0.2 && context.input[1].stick_y <= 0.2)
         {
             if self.body.damage < 100.0 {
                 ActionResult::set_action(PlayerAction::LedgeGetup)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::LedgeGetupSlow)
             }
-        }
-        else if context.input.a.press || context.input.b.press || (context.input[0].c_stick_y > 0.65 && context.input[1].c_stick_x <= 0.65) {
+        } else if context.input.a.press
+            || context.input.b.press
+            || (context.input[0].c_stick_y > 0.65 && context.input[1].c_stick_x <= 0.65)
+        {
             if self.body.damage < 100.0 {
                 ActionResult::set_action(PlayerAction::LedgeAttack)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::LedgeAttackSlow)
             }
-        }
-        else if
-            context.input.l.press || context.input.r.press ||
-            (context.input[0].l_trigger > 0.3 && context.input[1].l_trigger <= 0.3) || (context.input[0].r_trigger > 0.3 && context.input[1].r_trigger <= 0.3) ||
-            (self.relative_f(context.input[0].c_stick_x) > 0.8 && self.relative_f(context.input[1].c_stick_x) <= 0.8)
+        } else if context.input.l.press
+            || context.input.r.press
+            || (context.input[0].l_trigger > 0.3 && context.input[1].l_trigger <= 0.3)
+            || (context.input[0].r_trigger > 0.3 && context.input[1].r_trigger <= 0.3)
+            || (self.relative_f(context.input[0].c_stick_x) > 0.8
+                && self.relative_f(context.input[1].c_stick_x) <= 0.8)
         {
             if self.body.damage < 100.0 {
                 ActionResult::set_action(PlayerAction::LedgeRoll)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::LedgeRollSlow)
             }
-        }
-        else if self.ledge_idle_timer > 600 {
+        } else if self.ledge_idle_timer > 600 {
             self.set_airbourne(context, state);
             ActionResult::set_action(PlayerAction::DamageFall)
-        }
-        else {
+        } else {
             self.ledge_idle_timer += 1;
             None
         }
     }
 
-    fn missed_tech_start_action(&mut self, fighter: &EntityDef, state: &ActionState) -> Option<ActionResult> {
+    fn missed_tech_start_action(
+        &mut self,
+        fighter: &EntityDef,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 {
             self.body.x_vel = 0.0;
         } else {
@@ -550,21 +683,21 @@ impl Player {
         None
     }
 
-    fn missed_tech_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn missed_tech_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.hitstun -= 1.0;
         if self.relative_f(context.input[0].stick_x) < -0.7 {
             ActionResult::set_action(PlayerAction::MissedTechGetupB)
-        }
-        else if self.relative_f(context.input[0].stick_x) > 0.7 {
+        } else if self.relative_f(context.input[0].stick_x) > 0.7 {
             ActionResult::set_action(PlayerAction::MissedTechGetupF)
-        }
-        else if context.input[0].stick_y > 0.7 {
+        } else if context.input[0].stick_y > 0.7 {
             ActionResult::set_action(PlayerAction::MissedTechGetupN)
-        }
-        else if context.input.a.press || context.input.b.press {
+        } else if context.input.a.press || context.input.b.press {
             ActionResult::set_action(PlayerAction::MissedTechAttack)
-        }
-        else if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
+        } else if let Some(getup_frame) = context.entity_def.missed_tech_forced_getup {
             if state.frame_no_restart > getup_frame as i64 {
                 ActionResult::set_action(PlayerAction::MissedTechGetupN)
             } else {
@@ -577,7 +710,11 @@ impl Player {
         }
     }
 
-    fn damage_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn damage_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.hitstun -= 1.0;
         if self.hitstun <= 0.0 {
             if self.body.is_airbourne() {
@@ -588,8 +725,7 @@ impl Player {
         } else {
             if self.body.is_airbourne() {
                 self.fall_action(context.entity_def);
-            }
-            else {
+            } else {
                 self.apply_friction(context.entity_def, state);
             }
             None
@@ -606,23 +742,26 @@ impl Player {
         }
     }
 
-    fn damage_fall_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn damage_fall_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_attacks_aerial(context))
+            None.or_else(|| self.check_attacks_aerial(context))
                 .or_else(|| self.check_special_air(context))
                 .or_else(|| self.check_jump_aerial(context, state))
-                .or_else(|| if
-                    (context.input[0].stick_x >  0.7 && context.input[1].stick_x <  0.7) ||
-                    (context.input[0].stick_x < -0.7 && context.input[1].stick_x > -0.7) ||
-                    (context.input[0].stick_y >  0.7 && context.input[1].stick_y <  0.7) ||
-                    (context.input[0].stick_y < -0.7 && context.input[1].stick_y > -0.7)
+                .or_else(|| {
+                    if (context.input[0].stick_x > 0.7 && context.input[1].stick_x < 0.7)
+                        || (context.input[0].stick_x < -0.7 && context.input[1].stick_x > -0.7)
+                        || (context.input[0].stick_y > 0.7 && context.input[1].stick_y < 0.7)
+                        || (context.input[0].stick_y < -0.7 && context.input[1].stick_y > -0.7)
                     {
                         ActionResult::set_action(PlayerAction::Fall)
                     } else {
                         None
                     }
-                )
+                })
         } else {
             None
         }
@@ -633,23 +772,34 @@ impl Player {
         })
     }
 
-    fn spawn_idle(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        None
-            .or_else(|| self.check_attacks_aerial(context))
+    fn spawn_idle(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        None.or_else(|| self.check_attacks_aerial(context))
             .or_else(|| self.check_special_ground(context))
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
-            .or_else(|| if context.input[0].stick_x.abs() > 0.2 || context.input[0].stick_y.abs() > 0.2 || state.frame_no_restart >= 1000 {
-                ActionResult::set_action(PlayerAction::Fall)
-            } else {
-                None
+            .or_else(|| {
+                if context.input[0].stick_x.abs() > 0.2
+                    || context.input[0].stick_y.abs() > 0.2
+                    || state.frame_no_restart >= 1000
+                {
+                    ActionResult::set_action(PlayerAction::Fall)
+                } else {
+                    None
+                }
             })
     }
 
-    pub fn aerial_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn aerial_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_attacks_aerial(context))
+            None.or_else(|| self.check_attacks_aerial(context))
                 .or_else(|| self.check_special_air(context))
                 .or_else(|| self.check_jump_aerial(context, state))
                 .or_else(|| self.check_aerialdodge(context))
@@ -663,12 +813,17 @@ impl Player {
         })
     }
 
-    fn jump_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn jump_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Jump);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Jump);
         }
-        None
-            .or_else(|| self.check_attacks_aerial(context))
+        None.or_else(|| self.check_attacks_aerial(context))
             .or_else(|| self.check_special_air(context))
             .or_else(|| self.check_jump_aerial(context, state))
             .or_else(|| self.check_aerialdodge(context))
@@ -682,16 +837,16 @@ impl Player {
     fn air_drift(&mut self, context: &mut StepContext) {
         let term_vel = context.entity_def.air_x_term_vel * context.input[0].stick_x;
         let drift = context.input[0].stick_x.abs() >= 0.3;
-        if !drift ||
-           (term_vel < 0.0 && self.body.x_vel < term_vel) ||
-           (term_vel > 0.0 && self.body.x_vel > term_vel) {
+        if !drift
+            || (term_vel < 0.0 && self.body.x_vel < term_vel)
+            || (term_vel > 0.0 && self.body.x_vel > term_vel)
+        {
             if self.body.x_vel > 0.0 {
                 self.body.x_vel -= context.entity_def.air_friction;
                 if self.body.x_vel < 0.0 {
                     self.body.x_vel = 0.0;
                 }
-            }
-            else if self.body.x_vel < 0.0 {
+            } else if self.body.x_vel < 0.0 {
                 self.body.x_vel += context.entity_def.air_friction;
                 if self.body.x_vel > 0.0 {
                     self.body.x_vel = 0.0;
@@ -699,21 +854,33 @@ impl Player {
             }
         }
 
-        if drift && ((term_vel < 0.0 && self.body.x_vel > term_vel) || (term_vel > 0.0 && self.body.x_vel < term_vel)) {
-            self.body.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
+        if drift
+            && ((term_vel < 0.0 && self.body.x_vel > term_vel)
+                || (term_vel > 0.0 && self.body.x_vel < term_vel))
+        {
+            self.body.x_vel += context.entity_def.air_mobility_a * context.input[0].stick_x
+                + context.entity_def.air_mobility_b * context.input[0].stick_x.signum();
         }
     }
 
-    fn tilt_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
-        if state.frame == context.entity_def.tilt_turn_flip_dir_frame as i64 ||
-            (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame && state.last_frame(context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+    fn tilt_turn_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()]
+            .frames
+            .len() as u64
+            - 1;
+        if state.frame == context.entity_def.tilt_turn_flip_dir_frame as i64
+            || (context.entity_def.tilt_turn_flip_dir_frame > last_action_frame
+                && state.last_frame(context.entity_def))
+        // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
 
-        None
-            .or_else(|| self.check_dash_out_of_tilt_turn(context, state))
+        None.or_else(|| self.check_dash_out_of_tilt_turn(context, state))
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
             .or_else(|| self.check_special_ground(context)) // TODO: No neutral special
@@ -727,9 +894,18 @@ impl Player {
             })
     }
 
-    fn check_dash_out_of_tilt_turn(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if context.entity_def.tilt_turn_into_dash_iasa as i64 >= state.frame && self.relative_f(context.input[0].stick_x) > 0.79 {
-            if context.entity_def.tilt_turn_flip_dir_frame > context.entity_def.tilt_turn_into_dash_iasa { // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
+    fn check_dash_out_of_tilt_turn(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        if context.entity_def.tilt_turn_into_dash_iasa as i64 >= state.frame
+            && self.relative_f(context.input[0].stick_x) > 0.79
+        {
+            if context.entity_def.tilt_turn_flip_dir_frame
+                > context.entity_def.tilt_turn_into_dash_iasa
+            {
+                // ensure turn still occurs even if tilt_turn_flip_dir_frame is invalid
                 self.body.face_right = !self.body.face_right
             }
             ActionResult::set_action(PlayerAction::Dash)
@@ -738,9 +914,12 @@ impl Player {
         }
     }
 
-    fn smash_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        None
-            .or_else(|| self.check_dash_out_of_smash_turn(context, state))
+    fn smash_turn_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        None.or_else(|| self.check_dash_out_of_smash_turn(context, state))
             .or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
             .or_else(|| self.check_special_ground(context)) // TODO: No neutral special
@@ -754,7 +933,11 @@ impl Player {
             })
     }
 
-    fn check_dash_out_of_smash_turn(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn check_dash_out_of_smash_turn(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 && self.relative_f(context.input[0].stick_x) > 0.79 {
             ActionResult::set_action(PlayerAction::Dash)
         } else {
@@ -762,25 +945,36 @@ impl Player {
         }
     }
 
-    fn run_turn_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as u64 - 1;
-        if state.frame == context.entity_def.run_turn_flip_dir_frame as i64 ||
-            (context.entity_def.run_turn_flip_dir_frame > last_action_frame && state.last_frame(context.entity_def)) // ensure turn still occurs if run_turn_flip_dir_frame is invalid
+    fn run_turn_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()]
+            .frames
+            .len() as u64
+            - 1;
+        if state.frame == context.entity_def.run_turn_flip_dir_frame as i64
+            || (context.entity_def.run_turn_flip_dir_frame > last_action_frame
+                && state.last_frame(context.entity_def))
+        // ensure turn still occurs if run_turn_flip_dir_frame is invalid
         {
             self.body.face_right = !self.body.face_right;
         }
 
-        self.check_jump(context)
-        .or_else(|| {
+        self.check_jump(context).or_else(|| {
             self.apply_friction(context.entity_def, state);
             None
         })
     }
 
-    fn crouch_start_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn crouch_start_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_pass_platform(context, state))
+            None.or_else(|| self.check_pass_platform(context, state))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
@@ -797,10 +991,13 @@ impl Player {
         })
     }
 
-    fn crouch_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn crouch_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_jump(context))
+            None.or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
@@ -810,13 +1007,13 @@ impl Player {
                 .or_else(|| self.check_dash(context))
                 .or_else(|| self.check_smash_turn(context))
                 .or_else(|| self.check_tilt_turn(context))
-                .or_else(||
+                .or_else(|| {
                     if context.input.stick_y.value > -0.61 {
                         ActionResult::set_action(PlayerAction::CrouchEnd)
                     } else {
                         None
                     }
-                )
+                })
         } else {
             None
         }
@@ -826,10 +1023,13 @@ impl Player {
         })
     }
 
-    fn dtilt_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn dtilt_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_jump(context))
+            None.or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context)) // TODO: no neutral/side special
                 .or_else(|| self.check_smash(context))
@@ -849,30 +1049,31 @@ impl Player {
         })
     }
 
-    pub fn ground_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn ground_idle_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if let Some(PlayerAction::TauntDown) = state.get_action() {
             if state.frame == 0 && context.input.b.value {
                 let (x, y) = self.bps_xy(context, state);
                 let x = x + 15.0;
                 let y = y + 10.0;
                 context.new_entities.push(Entity {
-                    ty: EntityType::Item(
-                        Item {
-                            owner_id: None,
-                            body: Body::new(Location::Airbourne { x, y }, true),
-                        }
-                    ),
+                    ty: EntityType::Item(Item {
+                        owner_id: None,
+                        body: Body::new(Location::Airbourne { x, y }, true),
+                    }),
                     state: ActionState::new(
                         "PerfectlyGenericObject.cbor".to_string(),
-                        ItemAction::Fall
+                        ItemAction::Fall,
                     ),
                 });
             }
         }
 
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_jump(context))
+            None.or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
@@ -886,39 +1087,74 @@ impl Player {
                 .or_else(|| self.check_walk(context))
         } else {
             None
-        }.or_else(|| {
+        }
+        .or_else(|| {
             self.apply_friction(context.entity_def, state);
             None
         })
     }
 
-    fn item_throw_air_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn item_throw_air_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.item_throw_action(context, state);
         self.aerial_action(context, state)
     }
 
-    fn item_throw_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn item_throw_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 4 {
             if let Some(item) = self.get_held_item(context.entities) {
                 let message_item = match state.get_action() {
-                    Some(PlayerAction::ItemThrowF) | Some(PlayerAction::ItemThrowAirF) => MessageItem::Thrown { x_vel: self.relative_f(3.0),  y_vel: 0.0 },
-                    Some(PlayerAction::ItemThrowB) | Some(PlayerAction::ItemThrowAirB) => MessageItem::Thrown { x_vel: self.relative_f(-3.0), y_vel: 0.0 },
-                    Some(PlayerAction::ItemThrowU) | Some(PlayerAction::ItemThrowAirU) => MessageItem::Thrown { x_vel: 0.0,  y_vel: 4.0 },
-                    Some(PlayerAction::ItemThrowD) | Some(PlayerAction::ItemThrowAirD) => MessageItem::Thrown { x_vel: 0.0,  y_vel: -4.0 },
+                    Some(PlayerAction::ItemThrowF) | Some(PlayerAction::ItemThrowAirF) => {
+                        MessageItem::Thrown {
+                            x_vel: self.relative_f(3.0),
+                            y_vel: 0.0,
+                        }
+                    }
+                    Some(PlayerAction::ItemThrowB) | Some(PlayerAction::ItemThrowAirB) => {
+                        MessageItem::Thrown {
+                            x_vel: self.relative_f(-3.0),
+                            y_vel: 0.0,
+                        }
+                    }
+                    Some(PlayerAction::ItemThrowU) | Some(PlayerAction::ItemThrowAirU) => {
+                        MessageItem::Thrown {
+                            x_vel: 0.0,
+                            y_vel: 4.0,
+                        }
+                    }
+                    Some(PlayerAction::ItemThrowD) | Some(PlayerAction::ItemThrowAirD) => {
+                        MessageItem::Thrown {
+                            x_vel: 0.0,
+                            y_vel: -4.0,
+                        }
+                    }
                     _ => MessageItem::Dropped,
                 };
                 context.messages.push(Message {
                     recipient: item,
-                    contents:  MessageContents::Item(message_item)
+                    contents: MessageContents::Item(message_item),
                 });
             }
         }
         None
     }
 
-    fn attack_land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn attack_land_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Land);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Land);
         }
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
@@ -926,15 +1162,20 @@ impl Player {
             .or_else(|| ActionResult::set_frame(frame))
     }
 
-    fn land_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn land_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Land);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Land);
         }
         self.land_particles(context, state);
 
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_jump(context))
+            None.or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
@@ -945,24 +1186,31 @@ impl Player {
                 .or_else(|| self.check_smash_turn(context))
                 .or_else(|| self.check_tilt_turn(context))
                 .or_else(|| self.check_walk(context))
-                .or_else(|| if state.first_interruptible(context.entity_def) && context.input[0].stick_y < -0.5 {
+                .or_else(|| {
+                    if state.first_interruptible(context.entity_def)
+                        && context.input[0].stick_y < -0.5
+                    {
                         ActionResult::set_action(PlayerAction::Crouch)
                     } else {
                         None
                     }
-                )
+                })
         } else {
             None
-        }.or_else(|| {
+        }
+        .or_else(|| {
             self.apply_friction(context.entity_def, state);
             None
         })
     }
 
-    fn teeter_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn teeter_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.interruptible(context.entity_def) {
-            None
-                .or_else(|| self.check_jump(context))
+            None.or_else(|| self.check_jump(context))
                 .or_else(|| self.check_shield(context))
                 .or_else(|| self.check_special_ground(context))
                 .or_else(|| self.check_smash(context))
@@ -979,9 +1227,15 @@ impl Player {
         }
     }
 
-    fn walk_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn walk_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame_no_restart % 20 == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Walk);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Walk);
         }
 
         if context.input[0].stick_x == 0.0 {
@@ -989,37 +1243,44 @@ impl Player {
         } else {
             None
         }
-            .or_else(|| self.check_jump(context))
-            .or_else(|| self.check_shield(context))
-            .or_else(|| self.check_special_ground(context))
-            .or_else(|| self.check_smash(context))
-            .or_else(|| self.check_attacks(context))
-            .or_else(|| self.check_grab(context))
-            .or_else(|| self.check_crouch(context, state))
-            .or_else(|| self.check_dash(context))
-            .or_else(|| self.check_smash_turn(context))
-            .or_else(|| self.check_tilt_turn(context))
-            .or_else(|| self.check_taunt(context))
-            .or_else(|| {
-                let vel_max = context.entity_def.walk_max_vel * context.input[0].stick_x;
+        .or_else(|| self.check_jump(context))
+        .or_else(|| self.check_shield(context))
+        .or_else(|| self.check_special_ground(context))
+        .or_else(|| self.check_smash(context))
+        .or_else(|| self.check_attacks(context))
+        .or_else(|| self.check_grab(context))
+        .or_else(|| self.check_crouch(context, state))
+        .or_else(|| self.check_dash(context))
+        .or_else(|| self.check_smash_turn(context))
+        .or_else(|| self.check_tilt_turn(context))
+        .or_else(|| self.check_taunt(context))
+        .or_else(|| {
+            let vel_max = context.entity_def.walk_max_vel * context.input[0].stick_x;
 
-                if self.body.x_vel.abs() > vel_max.abs() {
-                    self.apply_friction(context.entity_def, state);
+            if self.body.x_vel.abs() > vel_max.abs() {
+                self.apply_friction(context.entity_def, state);
+            } else {
+                let acc = (vel_max - self.body.x_vel)
+                    * (2.0 / context.entity_def.walk_max_vel)
+                    * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
+                self.body.x_vel += acc;
+                if self.relative_f(self.body.x_vel) > self.relative_f(vel_max) {
+                    self.body.x_vel = vel_max;
                 }
-                else {
-                    let acc = (vel_max - self.body.x_vel) * (2.0/context.entity_def.walk_max_vel) * (context.entity_def.walk_init_vel + context.entity_def.walk_acc);
-                    self.body.x_vel += acc;
-                    if self.relative_f(self.body.x_vel) > self.relative_f(vel_max) {
-                        self.body.x_vel = vel_max;
-                    }
-                }
-                None
-            })
+            }
+            None
+        })
     }
 
-    fn dash_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn dash_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Dash);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Dash);
         }
         self.dash_particles(context, state);
         if state.frame == 1 {
@@ -1032,21 +1293,25 @@ impl Player {
         if state.frame > 0 {
             if context.input[0].stick_x.abs() < 0.3 {
                 self.apply_friction(context.entity_def, state);
-            }
-            else {
+            } else {
                 let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
-                let acc     = context.input[0].stick_x * context.entity_def.dash_run_acc_a;
+                let acc = context.input[0].stick_x * context.entity_def.dash_run_acc_a;
 
                 self.body.x_vel += acc;
-                if (vel_max > 0.0 && self.body.x_vel > vel_max) || (vel_max < 0.0 && self.body.x_vel < vel_max) {
+                if (vel_max > 0.0 && self.body.x_vel > vel_max)
+                    || (vel_max < 0.0 && self.body.x_vel < vel_max)
+                {
                     self.apply_friction(context.entity_def, state);
-                    if (vel_max > 0.0 && self.body.x_vel < vel_max) || (vel_max < 0.0 && self.body.x_vel > vel_max) {
+                    if (vel_max > 0.0 && self.body.x_vel < vel_max)
+                        || (vel_max < 0.0 && self.body.x_vel > vel_max)
+                    {
                         self.body.x_vel = vel_max;
                     }
-                }
-                else {
+                } else {
                     self.body.x_vel += acc;
-                    if (vel_max > 0.0 && self.body.x_vel > vel_max) || (vel_max < 0.0 && self.body.x_vel < vel_max) {
+                    if (vel_max > 0.0 && self.body.x_vel > vel_max)
+                        || (vel_max < 0.0 && self.body.x_vel < vel_max)
+                    {
                         self.body.x_vel = vel_max;
                     }
                 }
@@ -1054,8 +1319,12 @@ impl Player {
         }
 
         let run_frame = 13; // TODO: Variable per character
-        let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
-        if (state.frame >= run_frame || (run_frame > last_action_frame && state.last_frame(context.entity_def)))
+        let last_action_frame = context.entity_def.actions[state.action.as_ref()]
+            .frames
+            .len() as i64
+            - 1;
+        if (state.frame >= run_frame
+            || (run_frame > last_action_frame && state.last_frame(context.entity_def)))
             && self.relative_f(context.input.stick_x.value) >= 0.62
         {
             ActionResult::set_action(PlayerAction::Run)
@@ -1075,35 +1344,41 @@ impl Player {
         .or_else(|| self.check_smash_turn(context))
     }
 
-    fn run_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn run_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame_no_restart % 17 == 0 {
-            context.audio.play_sound_effect(context.entity_def, SFXType::Run);
+            context
+                .audio
+                .play_sound_effect(context.entity_def, SFXType::Run);
         }
-        None
-            .or_else(|| self.check_jump(context))
+        None.or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
-            .or_else(||
+            .or_else(|| {
                 if self.relative_f(context.input.stick_x.value) <= -0.3 {
                     ActionResult::set_action(PlayerAction::RunTurn)
                 } else {
                     None
                 }
-            )
-            .or_else(||
+            })
+            .or_else(|| {
                 if self.relative_f(context.input.stick_x.value) < 0.62 {
                     ActionResult::set_action(PlayerAction::RunEnd)
                 } else {
                     None
                 }
-            )
+            })
             .or_else(|| self.check_dash_grab(context))
             .or_else(|| self.check_dash_attack(context))
             .or_else(|| self.check_special_ground(context))
             .or_else(|| {
                 let vel_max = context.input[0].stick_x * context.entity_def.dash_run_term_vel;
                 let acc = (vel_max - self.body.x_vel)
-                        * (context.entity_def.dash_run_acc_a + (context.entity_def.dash_run_acc_b / context.input[0].stick_x.abs()))
-                        / (context.entity_def.dash_run_term_vel * 2.5);
+                    * (context.entity_def.dash_run_acc_a
+                        + (context.entity_def.dash_run_acc_b / context.input[0].stick_x.abs()))
+                    / (context.entity_def.dash_run_term_vel * 2.5);
 
                 self.body.x_vel += acc;
                 if self.relative_f(self.body.x_vel) > self.relative_f(vel_max) {
@@ -1113,21 +1388,26 @@ impl Player {
             })
     }
 
-    fn run_end_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        None
-            .or_else(|| self.check_jump(context))
-            .or_else(|| if state.frame > 1 {
+    fn run_end_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        None.or_else(|| self.check_jump(context))
+            .or_else(|| {
+                if state.frame > 1 {
                     self.check_crouch(context, state)
                 } else {
                     None
                 }
-            )
-            .or_else(|| if self.relative_f(context.input.stick_x.value) <= -0.3 {
+            })
+            .or_else(|| {
+                if self.relative_f(context.input.stick_x.value) <= -0.3 {
                     ActionResult::set_action(PlayerAction::RunTurn)
                 } else {
                     None
                 }
-            )
+            })
             .or_else(|| {
                 self.apply_friction(context.entity_def, state);
                 None
@@ -1157,46 +1437,74 @@ impl Player {
         ActionResult::set_action(PlayerAction::AerialDodge)
     }
 
-    fn aerialdodge_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn aerialdodge_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if state.frame < context.entity_def.aerialdodge_drift_frame as i64 {
             self.body.x_vel *= 0.9;
             self.body.y_vel *= 0.9;
-        }
-        else {
+        } else {
             self.air_drift(context);
             self.fastfall_action(context);
         }
         None
     }
 
-    fn shield_on_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn shield_on_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.shield_shared_action(context, state)
     }
 
-    fn shield_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        self.shield_shared_action(context, state)
-            .or_else(|| {
-                let stun_lock = self.shield_stun_timer > 0;
-                if !stun_lock && context.input[0].l_trigger < 0.165 && context.input[0].r_trigger < 0.165 && !context.input[0].l && !context.input[0].r {
-                    if self.parry_timer > 0 {
-                        ActionResult::set_action(PlayerAction::Idle)
-                    } else {
-                        ActionResult::set_action(PlayerAction::ShieldOff)
-                    }
+    fn shield_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        self.shield_shared_action(context, state).or_else(|| {
+            let stun_lock = self.shield_stun_timer > 0;
+            if !stun_lock
+                && context.input[0].l_trigger < 0.165
+                && context.input[0].r_trigger < 0.165
+                && !context.input[0].l
+                && !context.input[0].r
+            {
+                if self.parry_timer > 0 {
+                    ActionResult::set_action(PlayerAction::Idle)
                 } else {
-                    None
+                    ActionResult::set_action(PlayerAction::ShieldOff)
                 }
-            })
+            } else {
+                None
+            }
+        })
     }
 
-    fn shield_off_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn shield_off_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.shield_shared_action(context, state)
     }
 
-    fn shield_shared_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn shield_shared_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.apply_friction(context.entity_def, state);
         if let Some(ref shield) = context.entity_def.shield {
-            let stick_lock = context.entity_def.shield.as_ref().map_or(false, |x| x.stick_lock) && context.input[0].b;
+            let stick_lock = context
+                .entity_def
+                .shield
+                .as_ref()
+                .map_or(false, |x| x.stick_lock)
+                && context.input[0].b;
             let stun_lock = self.shield_stun_timer > 0;
             let lock = stun_lock && stick_lock;
 
@@ -1210,7 +1518,12 @@ impl Player {
             // shield offset
             let stick_x = context.input[0].stick_x;
             let stick_y = context.input[0].stick_y;
-            let target_offset = (stick_x * stick_x + stick_y * stick_y).sqrt() * context.entity_def.shield.as_ref().map_or(1.0, |x| x.stick_mult);
+            let target_offset = (stick_x * stick_x + stick_y * stick_y).sqrt()
+                * context
+                    .entity_def
+                    .shield
+                    .as_ref()
+                    .map_or(1.0, |x| x.stick_mult);
             let target_angle = stick_y.atan2(stick_x);
             let target_x = target_angle.cos() * target_offset;
             let target_y = target_angle.sin() * target_offset;
@@ -1218,7 +1531,8 @@ impl Player {
             self.shield_offset_y += (target_y - self.shield_offset_y) / 5.0 + 0.01;
 
             // shield hp
-            self.shield_hp -= shield.hp_cost * self.shield_analog - (1.0 - self.shield_analog) / 10.0;
+            self.shield_hp -=
+                shield.hp_cost * self.shield_analog - (1.0 - self.shield_analog) / 10.0;
             let result = if self.shield_hp <= 0.0 {
                 self.shield_hp = 0.0;
                 self.body.kb_y_vel = shield.break_vel;
@@ -1253,7 +1567,11 @@ impl Player {
         None
     }
 
-    fn stun_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn stun_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.apply_friction(context.entity_def, state);
         if self.shield_hp > 30.0 {
             self.shield_hp = 30.0;
@@ -1270,25 +1588,38 @@ impl Player {
         }
     }
 
-    fn grabbing_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn grabbing_idle_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         self.apply_friction(context.entity_def, state);
-        if (self.relative_f(context.input[0].stick_x)   <= -0.66 && self.relative_f(context.input[1].stick_x)   > -0.66 && context.input[0].stick_x  .abs() > context.input[0].stick_y  .abs() - 0.1)
-        || (self.relative_f(context.input[0].c_stick_x) <= -0.66 && self.relative_f(context.input[1].c_stick_x) > -0.66 && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1) {
+        if (self.relative_f(context.input[0].stick_x) <= -0.66
+            && self.relative_f(context.input[1].stick_x) > -0.66
+            && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1)
+            || (self.relative_f(context.input[0].c_stick_x) <= -0.66
+                && self.relative_f(context.input[1].c_stick_x) > -0.66
+                && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1)
+        {
             ActionResult::set_action(PlayerAction::Bthrow)
-        }
-        else if (self.relative_f(context.input[0].stick_x)   >= 0.66 && self.relative_f(context.input[1].stick_x)   < 0.66 && context.input[0].stick_x  .abs() > context.input[0].stick_y  .abs() - 0.1)
-             || (self.relative_f(context.input[0].c_stick_x) >= 0.66 && self.relative_f(context.input[1].c_stick_x) < 0.66 && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1) {
+        } else if (self.relative_f(context.input[0].stick_x) >= 0.66
+            && self.relative_f(context.input[1].stick_x) < 0.66
+            && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1)
+            || (self.relative_f(context.input[0].c_stick_x) >= 0.66
+                && self.relative_f(context.input[1].c_stick_x) < 0.66
+                && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1)
+        {
             ActionResult::set_action(PlayerAction::Fthrow)
-        }
-        else if (context.input[0].stick_y   >= 0.66 && context.input[1].stick_y   < 0.66)
-             || (context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66) {
+        } else if (context.input[0].stick_y >= 0.66 && context.input[1].stick_y < 0.66)
+            || (context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66)
+        {
             ActionResult::set_action(PlayerAction::Uthrow)
-        }
-        else if (context.input[0].stick_y   <= -0.66 && context.input[1].stick_y   > -0.66)
-             || (context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66) {
+        } else if (context.input[0].stick_y <= -0.66 && context.input[1].stick_y > -0.66)
+            || (context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66)
+        {
             ActionResult::set_action(PlayerAction::Dthrow)
-        }
-        else if state.frame_no_restart > 60 { // TODO: additionally check if grabbed player is still in a grabbed state
+        } else if state.frame_no_restart > 60 {
+            // TODO: additionally check if grabbed player is still in a grabbed state
             ActionResult::set_action(PlayerAction::GrabbingEnd)
         } else {
             None
@@ -1297,19 +1628,26 @@ impl Player {
 
     // TODO: this state should probably be split into standing and airbourne versions
     //       for now lets try to squash both cases into this one action
-    fn grabbed_idle_action(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        if state.frame_no_restart > 60 { // TODO: instead check if grabbing player is still in a grabbing state
+    fn grabbed_idle_action(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        if state.frame_no_restart > 60 {
+            // TODO: instead check if grabbing player is still in a grabbing state
             let bps_xy = self.bps_xy(context, state);
             if let Some(frame) = state.get_entity_frame(context.entity_def) {
                 // ignore the x offset, we only want to check straight down.
                 let bps_xy_grab_point = (bps_xy.0, bps_xy.1 + frame.grabbed_y);
-                if let Some(platform_i) = self.body.land_stage_collision(context, frame, bps_xy_grab_point, bps_xy) {
+                if let Some(platform_i) =
+                    self.body
+                        .land_stage_collision(context, frame, bps_xy_grab_point, bps_xy)
+                {
                     let x = context.stage.surfaces[platform_i].world_x_to_plat_x(bps_xy.0);
                     self.body.location = Location::Surface { platform_i, x };
                     self.land(context, state);
                     ActionResult::set_action(PlayerAction::GrabbedEnd)
-                }
-                else {
+                } else {
                     self.set_airbourne(context, state);
                     ActionResult::set_action(PlayerAction::Fall)
                 }
@@ -1329,24 +1667,33 @@ impl Player {
         shield.scaling * (analog_size + hp_size) + hp_size_unscaled
     }
 
-    fn shield_pos(&self, shield: &Shield, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> (f32, f32) {
+    fn shield_pos(
+        &self,
+        shield: &Shield,
+        entities: &Entities,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+        state: &ActionState,
+    ) -> (f32, f32) {
         let xy = self.public_bps_xy(entities, entity_defs, surfaces, state);
         (
             xy.0 + self.shield_offset_x + self.relative_f(shield.offset_x),
-            xy.1 + self.shield_offset_y + shield.offset_y
+            xy.1 + self.shield_offset_y + shield.offset_y,
         )
     }
 
-    fn check_crouch(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn check_crouch(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if context.input[0].stick_y < -0.77 {
             if let Some(action) = state.get_action() {
                 match action {
                     PlayerAction::CrouchStart | PlayerAction::Crouch | PlayerAction::CrouchEnd => {
                         None // TODO: used to block action change do we want to restore that?
                     }
-                    _ => {
-                        ActionResult::set_action(PlayerAction::CrouchStart)
-                    }
+                    _ => ActionResult::set_action(PlayerAction::CrouchStart),
                 }
             } else {
                 None // TODO: used to block action change do we want to restore that?
@@ -1356,14 +1703,25 @@ impl Player {
         }
     }
 
-    fn check_pass_platform(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn check_pass_platform(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if let Location::Surface { platform_i, .. } = self.body.location {
             if let Some(platform) = context.surfaces.get(platform_i) {
-                let last_action_frame = context.entity_def.actions[state.action.as_ref()].frames.len() as i64 - 1;
+                let last_action_frame = context.entity_def.actions[state.action.as_ref()]
+                    .frames
+                    .len() as i64
+                    - 1;
                 let pass_frame = last_action_frame.min(4);
-                if platform.is_pass_through() && state.frame == pass_frame && (context.input[0].stick_y < -0.77 || context.input[2].stick_y < -0.77) && context.input[6].stick_y > -0.36 {
+                if platform.is_pass_through()
+                    && state.frame == pass_frame
+                    && (context.input[0].stick_y < -0.77 || context.input[2].stick_y < -0.77)
+                    && context.input[6].stick_y > -0.36
+                {
                     self.set_airbourne(context, state);
-                    return ActionResult::set_action(PlayerAction::PassPlatform)
+                    return ActionResult::set_action(PlayerAction::PassPlatform);
                 }
             }
         }
@@ -1387,7 +1745,9 @@ impl Player {
     }
 
     fn check_dash(&mut self, context: &mut StepContext) -> Option<ActionResult> {
-        if self.relative_f(context.input[0].stick_x) > 0.79 && self.relative_f(context.input[2].stick_x) < 0.3 {
+        if self.relative_f(context.input[0].stick_x) > 0.79
+            && self.relative_f(context.input[2].stick_x) < 0.3
+        {
             self.body.x_vel = self.relative_f(context.entity_def.dash_init_vel);
             ActionResult::set_action(PlayerAction::Dash)
         } else {
@@ -1404,7 +1764,9 @@ impl Player {
     }
 
     fn check_smash_turn(&mut self, context: &mut StepContext) -> Option<ActionResult> {
-        if self.relative_f(context.input[0].stick_x) < -0.79 && self.relative_f(context.input[2].stick_x) > -0.3 {
+        if self.relative_f(context.input[0].stick_x) < -0.79
+            && self.relative_f(context.input[2].stick_x) > -0.3
+        {
             self.body.x_vel *= 0.25;
             self.body.face_right = !self.body.face_right;
             ActionResult::set_action(PlayerAction::SmashTurn)
@@ -1427,7 +1789,11 @@ impl Player {
         }
     }
 
-    fn check_jump_aerial(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    fn check_jump_aerial(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         if self.jump_input(context.input).jump() && self.air_jumps_left > 0 {
             self.air_jump_particles(context, state);
             self.air_jumps_left -= 1;
@@ -1447,47 +1813,47 @@ impl Player {
 
     fn check_attacks_aerial(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press || context.input.z.press {
-            if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
+            if self.relative_f(context.input[0].stick_x) > 0.3
+                && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1
+            {
                 if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirF)
                 } else {
                     ActionResult::set_action(PlayerAction::Fair)
                 }
-            }
-            else if self.relative_f(context.input[0].stick_x) < -0.3 && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1 {
+            } else if self.relative_f(context.input[0].stick_x) < -0.3
+                && context.input[0].stick_x.abs() > context.input[0].stick_y.abs() - 0.1
+            {
                 if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirB)
                 } else {
                     ActionResult::set_action(PlayerAction::Bair)
                 }
-            }
-            else if context.input[0].stick_y < -0.3 {
+            } else if context.input[0].stick_y < -0.3 {
                 if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirD)
                 } else {
                     ActionResult::set_action(PlayerAction::Dair)
                 }
-            }
-            else if context.input[0].stick_y > 0.3 {
+            } else if context.input[0].stick_y > 0.3 {
                 if context.input.z.press && self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowAirU)
                 } else {
                     ActionResult::set_action(PlayerAction::Uair)
                 }
-            }
-            else if context.input.z.press && self.get_held_item(context.entities).is_some() {
+            } else if context.input.z.press && self.get_held_item(context.entities).is_some() {
                 if let Some(item) = self.get_held_item(context.entities) {
                     context.messages.push(Message {
                         recipient: item,
-                        contents:  MessageContents::Item(MessageItem::Dropped)
+                        contents: MessageContents::Item(MessageItem::Dropped),
                     });
                 }
                 None
             } else {
                 ActionResult::set_action(PlayerAction::Nair)
             }
-        }
-        else if self.relative_f(context.input[0].c_stick_x) >= 0.3 && self.relative_f(context.input[1].c_stick_x) < 0.3 
+        } else if self.relative_f(context.input[0].c_stick_x) >= 0.3
+            && self.relative_f(context.input[1].c_stick_x) < 0.3
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
             if self.get_held_item(context.entities).is_some() {
@@ -1495,8 +1861,8 @@ impl Player {
             } else {
                 ActionResult::set_action(PlayerAction::Fair)
             }
-        }
-        else if self.relative_f(context.input[0].c_stick_x) <= -0.3 && self.relative_f(context.input[1].c_stick_x) > -0.3
+        } else if self.relative_f(context.input[0].c_stick_x) <= -0.3
+            && self.relative_f(context.input[1].c_stick_x) > -0.3
             && context.input[0].c_stick_x.abs() > context.input[0].c_stick_y.abs() - 0.1
         {
             if self.get_held_item(context.entities).is_some() {
@@ -1504,50 +1870,46 @@ impl Player {
             } else {
                 ActionResult::set_action(PlayerAction::Bair)
             }
-        }
-        else if context.input[0].c_stick_y < -0.3 && context.input[1].c_stick_y > -0.3 {
+        } else if context.input[0].c_stick_y < -0.3 && context.input[1].c_stick_y > -0.3 {
             if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirD)
             } else {
                 ActionResult::set_action(PlayerAction::Dair)
             }
-        }
-        else if context.input[0].c_stick_y >= 0.3 && context.input[1].c_stick_y < 0.3 {
+        } else if context.input[0].c_stick_y >= 0.3 && context.input[1].c_stick_y < 0.3 {
             if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowAirU)
             } else {
                 ActionResult::set_action(PlayerAction::Uair)
             }
-        }
-        else {
+        } else {
             None
         }
     }
 
     fn check_attacks(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.a.press {
-            if self.relative_f(context.input[0].stick_x) > 0.3 && context.input[0].stick_x.abs() - context.input[0].stick_y.abs() > -0.05 {
+            if self.relative_f(context.input[0].stick_x) > 0.3
+                && context.input[0].stick_x.abs() - context.input[0].stick_y.abs() > -0.05
+            {
                 if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowF)
                 } else {
                     ActionResult::set_action(PlayerAction::Ftilt)
                 }
-            }
-            else if context.input[0].stick_y < -0.3 {
+            } else if context.input[0].stick_y < -0.3 {
                 if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowD)
                 } else {
                     ActionResult::set_action(PlayerAction::Dtilt)
                 }
-            }
-            else if context.input[0].stick_y > 0.3 {
+            } else if context.input[0].stick_y > 0.3 {
                 if self.get_held_item(context.entities).is_some() {
                     ActionResult::set_action(PlayerAction::ItemThrowU)
                 } else {
                     ActionResult::set_action(PlayerAction::Utilt)
                 }
-            }
-            else if self.get_held_item(context.entities).is_some() {
+            } else if self.get_held_item(context.entities).is_some() {
                 ActionResult::set_action(PlayerAction::ItemThrowF)
             } else {
                 ActionResult::set_action(PlayerAction::Jab)
@@ -1594,14 +1956,11 @@ impl Player {
             if context.input[0].stick_x.abs() > 0.3 {
                 self.body.face_right = context.input.stick_x.value > 0.0;
                 ActionResult::set_action(PlayerAction::SspecialGroundStart)
-            }
-            else if context.input[0].stick_y < -0.3 {
+            } else if context.input[0].stick_y < -0.3 {
                 ActionResult::set_action(PlayerAction::DspecialGroundStart)
-            }
-            else if context.input[0].stick_y > 0.3 {
+            } else if context.input[0].stick_y > 0.3 {
                 ActionResult::set_action(PlayerAction::UspecialGroundStart)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::NspecialGroundStart)
             }
         } else {
@@ -1614,14 +1973,11 @@ impl Player {
             if context.input[0].stick_x.abs() > 0.3 {
                 self.body.face_right = context.input.stick_x.value > 0.0;
                 ActionResult::set_action(PlayerAction::SspecialAirStart)
-            }
-            else if context.input[0].stick_y < -0.3 {
+            } else if context.input[0].stick_y < -0.3 {
                 ActionResult::set_action(PlayerAction::DspecialAirStart)
-            }
-            else if context.input[0].stick_y > 0.3 {
+            } else if context.input[0].stick_y > 0.3 {
                 ActionResult::set_action(PlayerAction::UspecialAirStart)
-            }
-            else {
+            } else {
                 ActionResult::set_action(PlayerAction::NspecialAirStart)
             }
         } else {
@@ -1630,29 +1986,32 @@ impl Player {
     }
 
     fn check_smash(&mut self, context: &mut StepContext) -> Option<ActionResult> {
-        if context.input.a.press && 
-           (context.input[0].stick_x >=  0.79 && context.input[2].stick_x < 0.3) ||
-           (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > -0.3) {
+        if context.input.a.press
+            && (context.input[0].stick_x >= 0.79 && context.input[2].stick_x < 0.3)
+            || (context.input[0].stick_x <= -0.79 && context.input[2].stick_x > -0.3)
+        {
             self.body.face_right = context.input.stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
-        }
-        else if context.input.a.press && context.input[0].stick_y >= 0.66 && context.input[2].stick_y < 0.3 {
+        } else if context.input.a.press
+            && context.input[0].stick_y >= 0.66
+            && context.input[2].stick_y < 0.3
+        {
             ActionResult::set_action(PlayerAction::Usmash)
-        }
-        else if context.input.a.press && context.input[0].stick_y <= -0.66 && context.input[2].stick_y > 0.3 {
+        } else if context.input.a.press
+            && context.input[0].stick_y <= -0.66
+            && context.input[2].stick_y > 0.3
+        {
             ActionResult::set_action(PlayerAction::Dsmash)
-        }
-        else if context.input[0].c_stick_x.abs() >= 0.79 && context.input[1].c_stick_x.abs() < 0.79 {
+        } else if context.input[0].c_stick_x.abs() >= 0.79
+            && context.input[1].c_stick_x.abs() < 0.79
+        {
             self.body.face_right = context.input.c_stick_x.value > 0.0;
             ActionResult::set_action(PlayerAction::Fsmash)
-        }
-        else if context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66 {
+        } else if context.input[0].c_stick_y >= 0.66 && context.input[1].c_stick_y < 0.66 {
             ActionResult::set_action(PlayerAction::Usmash)
-        }
-        else if context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66 {
+        } else if context.input[0].c_stick_y <= -0.66 && context.input[1].c_stick_y > -0.66 {
             ActionResult::set_action(PlayerAction::Dsmash)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -1660,17 +2019,13 @@ impl Player {
     fn check_taunt(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if context.input.up.press {
             ActionResult::set_action(PlayerAction::TauntUp)
-        }
-        else if context.input.down.press {
+        } else if context.input.down.press {
             ActionResult::set_action(PlayerAction::TauntDown)
-        }
-        else if context.input.left.press {
+        } else if context.input.left.press {
             ActionResult::set_action(PlayerAction::TauntLeft)
-        }
-        else if context.input.right.press {
+        } else if context.input.right.press {
             ActionResult::set_action(PlayerAction::TauntRight)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -1680,44 +2035,53 @@ impl Player {
             (&Some(_), &Some(_)) => {
                 if context.input.l.press || context.input.r.press {
                     ActionResult::set_action(PlayerAction::PowerShield)
-                }
-                else if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
+                } else if context.input[0].l
+                    || context.input[0].r
+                    || context.input[0].l_trigger > 0.165
+                    || context.input[0].r_trigger > 0.165
+                {
                     ActionResult::set_action(PlayerAction::ShieldOn)
-                }
-                else {
+                } else {
                     None
                 }
             }
             (&None, &Some(_)) => {
-                if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
+                if context.input[0].l
+                    || context.input[0].r
+                    || context.input[0].l_trigger > 0.165
+                    || context.input[0].r_trigger > 0.165
+                {
                     ActionResult::set_action(PlayerAction::PowerShield)
                 } else {
                     None
                 }
             }
             (&Some(_), &None) => {
-                if context.input[0].l || context.input[0].r || context.input[0].l_trigger > 0.165 || context.input[0].r_trigger > 0.165 {
+                if context.input[0].l
+                    || context.input[0].r
+                    || context.input[0].l_trigger > 0.165
+                    || context.input[0].r_trigger > 0.165
+                {
                     ActionResult::set_action(PlayerAction::ShieldOn)
                 } else {
                     None
                 }
             }
-            (&None, &None) => None
+            (&None, &None) => None,
         }
     }
 
     fn jump_input(&self, input: &PlayerInput) -> JumpResult {
         if input.x.press || input.y.press {
             JumpResult::Button
-        }
-        else if input[0].stick_y > 0.66 && input[3].stick_y < 0.2 {
+        } else if input[0].stick_y > 0.66 && input[3].stick_y < 0.2 {
             JumpResult::Stick
-        }
-        else {
+        } else {
             JumpResult::None
         }
     }
 
+#[rustfmt::skip]
     pub fn action_expired(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
         ActionResult::set_action(match state.get_action() {
             None => panic!("Unknown action expired"),
@@ -1909,7 +2273,11 @@ impl Player {
         })
     }
 
-    pub fn set_action_idle_from_ledge(&mut self, context: &mut StepContext, state: &ActionState) -> PlayerAction {
+    pub fn set_action_idle_from_ledge(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> PlayerAction {
         if let Location::GrabbedLedge { platform_i, .. } = self.body.location {
             let platform = &context.surfaces[platform_i];
             let (world_x, _) = self.bps_xy(context, state);
@@ -1917,13 +2285,16 @@ impl Player {
 
             self.body.location = Location::Surface { platform_i, x };
             PlayerAction::Idle
-        }
-        else {
+        } else {
             panic!("Location must be on ledge to call this function.")
         }
     }
 
-    pub fn set_action_fall_from_ledge_jump(&mut self, context: &mut StepContext, state: &ActionState) -> PlayerAction {
+    pub fn set_action_fall_from_ledge_jump(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> PlayerAction {
         self.set_airbourne(context, state);
         PlayerAction::Fall
     }
@@ -1947,11 +2318,13 @@ impl Player {
 
     fn fastfall_action(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         if !self.fastfalled {
-            if context.input[0].stick_y < -0.65 && context.input[3].stick_y > -0.1 && self.body.y_vel < 0.0 {
+            if context.input[0].stick_y < -0.65
+                && context.input[3].stick_y > -0.1
+                && self.body.y_vel < 0.0
+            {
                 self.fastfalled = true;
                 self.body.y_vel = context.entity_def.fastfall_terminal_vel;
-            }
-            else {
+            } else {
                 self.body.y_vel += context.entity_def.gravity;
                 if self.body.y_vel < context.entity_def.terminal_vel {
                     self.body.y_vel = context.entity_def.terminal_vel;
@@ -1963,8 +2336,8 @@ impl Player {
 
     pub fn get_held_item(&self, entities: &Entities) -> Option<EntityKey> {
         for (key, entity) in entities.iter() {
-            if let EntityType::Item (item) = &entity.ty {
-                if let Location::ItemHeldByPlayer (player_entity_key) = item.body.location {
+            if let EntityType::Item(item) = &entity.ty {
+                if let Location::ItemHeldByPlayer(player_entity_key) = item.body.location {
                     if let Some(check_entity) = entities.get(player_entity_key) {
                         if let Some(check_player) = &check_entity.ty.get_player() {
                             if check_player.id == self.id {
@@ -1981,8 +2354,10 @@ impl Player {
 
     pub fn get_held_fighter(&self, entities: &Entities) -> Option<EntityKey> {
         for (key, entity) in entities.iter() {
-            if let EntityType::Fighter (fighter) = &entity.ty {
-                if let Location::GrabbedByPlayer (player_entity_key) = fighter.get_player().body.location {
+            if let EntityType::Fighter(fighter) = &entity.ty {
+                if let Location::GrabbedByPlayer(player_entity_key) =
+                    fighter.get_player().body.location
+                {
                     if let Some(check_entity) = entities.get(player_entity_key) {
                         if let Some(check_player) = &check_entity.ty.get_player() {
                             if check_player.id == self.id {
@@ -2010,8 +2385,15 @@ impl Player {
      *  Begin physics section
      */
 
-    pub fn physics_step(&mut self, context: &mut StepContext, state: &ActionState, game_frame: usize, goal: Goal) -> Option<ActionResult> {
-        let fighter_frame = &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
+    pub fn physics_step(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+        game_frame: usize,
+        goal: Goal,
+    ) -> Option<ActionResult> {
+        let fighter_frame =
+            &context.entity_def.actions[state.action.as_ref()].frames[state.frame as usize];
         match self.body.physics_step(context, state, fighter_frame) {
             Some(PhysicsResult::Fall) => {
                 self.fastfalled = false;
@@ -2021,63 +2403,67 @@ impl Player {
                 self.hitstun = 0.0;
                 self.land(context, state)
             }
-            Some(PhysicsResult::Teeter) => {
-                ActionResult::set_action(PlayerAction::Teeter)
-            }
+            Some(PhysicsResult::Teeter) => ActionResult::set_action(PlayerAction::Teeter),
             Some(PhysicsResult::LedgeGrab) => {
                 self.fastfalled = false;
-                self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
+                self.air_jumps_left = context
+                    .entity_def
+                    .fighter()
+                    .map(|x| x.air_jumps)
+                    .unwrap_or(1);
                 self.hit_by = None;
                 ActionResult::set_action(PlayerAction::LedgeGrab)
             }
-            Some(PhysicsResult::OutOfBounds) => {
-                self.die(context, game_frame, goal)
-            }
+            Some(PhysicsResult::OutOfBounds) => self.die(context, game_frame, goal),
             None => None,
         }
     }
 
     fn apply_friction(&mut self, entity: &EntityDef, state: &ActionState) {
         match state.get_action() {
-            Some(PlayerAction::Idle) |
-            Some(PlayerAction::Dash) |
-            Some(PlayerAction::Shield) |
-            Some(PlayerAction::ShieldOn) |
-            Some(PlayerAction::ShieldOff) |
-            Some(PlayerAction::Damage)
-              => { self.body.apply_friction_weak(entity) }
-            _ => { self.body.apply_friction_strong(entity) }
+            Some(PlayerAction::Idle)
+            | Some(PlayerAction::Dash)
+            | Some(PlayerAction::Shield)
+            | Some(PlayerAction::ShieldOn)
+            | Some(PlayerAction::ShieldOff)
+            | Some(PlayerAction::Damage) => self.body.apply_friction_weak(entity),
+            _ => self.body.apply_friction_strong(entity),
         }
     }
 
     /// Returns the Rect surrounding the player that the camera must include
-    pub fn cam_area(&self, state: &ActionState, cam_max: &Rect, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, surfaces: &[Surface]) -> Option<Rect> {
+    pub fn cam_area(
+        &self,
+        state: &ActionState,
+        cam_max: &Rect,
+        entities: &Entities,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+    ) -> Option<Rect> {
         match state.get_action() {
             Some(PlayerAction::Eliminated) => None,
             _ => {
                 let (x, y) = self.public_bps_xy(entities, entity_defs, surfaces, state);
-                let mut left  = x;
+                let mut left = x;
                 let mut right = x;
-                let mut bot   = y - 5.0;
-                let mut top   = y + 25.0;
+                let mut bot = y - 5.0;
+                let mut top = y + 25.0;
 
                 if self.body.face_right {
-                    left  -= 7.0;
+                    left -= 7.0;
                     right += 40.0;
-                }
-                else {
-                    left  -= 40.0;
+                } else {
+                    left -= 40.0;
                     right += 7.0;
                 }
 
                 if left < cam_max.left() {
                     let diff = left - cam_max.left();
-                    left  -= diff;
+                    left -= diff;
                     right -= diff;
-                }
-                else if right > cam_max.right() {
+                } else if right > cam_max.right() {
                     let diff = right - cam_max.right();
-                    left  -= diff;
+                    left -= diff;
                     right -= diff;
                 }
 
@@ -2085,8 +2471,7 @@ impl Player {
                     let diff = bot - cam_max.bot();
                     bot -= diff;
                     top -= diff;
-                }
-                else if top > cam_max.top() {
+                } else if top > cam_max.top() {
                     let diff = top - cam_max.top();
                     bot -= diff;
                     top -= diff;
@@ -2106,24 +2491,37 @@ impl Player {
         let action = state.get_action::<PlayerAction>();
 
         self.land_frame_skip = match action {
-            Some(_) if action.as_ref().map_or(false, |x| x.is_air_attack()) && self.lcancel_timer > 0 => 1,
+            Some(_)
+                if action.as_ref().map_or(false, |x| x.is_air_attack())
+                    && self.lcancel_timer > 0 =>
+            {
+                1
+            }
             Some(PlayerAction::AerialDodge) => 2,
             Some(PlayerAction::SpecialFall) => 2,
-            _ => 0
+            _ => 0,
         };
 
-        self.aerial_dodge_frame = if let Some(PlayerAction::AerialDodge) = action { Some(state.frame as u64 ) } else { None };
+        self.aerial_dodge_frame = if let Some(PlayerAction::AerialDodge) = action {
+            Some(state.frame as u64)
+        } else {
+            None
+        };
 
         self.fastfalled = false;
-        self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
+        self.air_jumps_left = context
+            .entity_def
+            .fighter()
+            .map(|x| x.air_jumps)
+            .unwrap_or(1);
         self.hit_by = None;
 
         ActionResult::set_action(match action {
-            Some(PlayerAction::Uair)            => PlayerAction::UairLand,
-            Some(PlayerAction::Dair)            => PlayerAction::DairLand,
-            Some(PlayerAction::Fair)            => PlayerAction::FairLand,
-            Some(PlayerAction::Bair)            => PlayerAction::BairLand,
-            Some(PlayerAction::Nair)            => PlayerAction::NairLand,
+            Some(PlayerAction::Uair) => PlayerAction::UairLand,
+            Some(PlayerAction::Dair) => PlayerAction::DairLand,
+            Some(PlayerAction::Fair) => PlayerAction::FairLand,
+            Some(PlayerAction::Bair) => PlayerAction::BairLand,
+            Some(PlayerAction::Nair) => PlayerAction::NairLand,
             Some(PlayerAction::ShieldBreakFall) => PlayerAction::ShieldBreakGetup,
             Some(PlayerAction::DamageFly) | Some(PlayerAction::DamageFall) => {
                 if self.tech_timer.is_active() {
@@ -2138,39 +2536,53 @@ impl Player {
                     PlayerAction::MissedTechStart
                 }
             }
-            Some(PlayerAction::SpecialFall) | Some(PlayerAction::AerialDodge) | None => PlayerAction::SpecialLand,
+            Some(PlayerAction::SpecialFall) | Some(PlayerAction::AerialDodge) | None => {
+                PlayerAction::SpecialLand
+            }
             Some(_) if self.body.y_vel >= -1.0 => PlayerAction::Idle, // no impact land
-            Some(_) => PlayerAction::Land
+            Some(_) => PlayerAction::Land,
         })
     }
 
     fn walk(&mut self, context: &mut StepContext) -> Option<ActionResult> {
         let walk_init_vel = self.relative_f(context.entity_def.walk_init_vel);
-        if (walk_init_vel > 0.0 && self.body.x_vel < walk_init_vel) ||
-           (walk_init_vel < 0.0 && self.body.x_vel > walk_init_vel) {
+        if (walk_init_vel > 0.0 && self.body.x_vel < walk_init_vel)
+            || (walk_init_vel < 0.0 && self.body.x_vel > walk_init_vel)
+        {
             self.body.x_vel += walk_init_vel;
         }
         ActionResult::set_action(PlayerAction::Walk)
     }
 
-    fn die(&mut self, context: &mut StepContext, game_frame: usize, goal: Goal) -> Option<ActionResult> {
-        context.audio.play_sound_effect(context.entity_def, SFXType::Die);
+    fn die(
+        &mut self,
+        context: &mut StepContext,
+        game_frame: usize,
+        goal: Goal,
+    ) -> Option<ActionResult> {
+        context
+            .audio
+            .play_sound_effect(context.entity_def, SFXType::Die);
         self.body = if context.stage.respawn_points.len() == 0 {
-            Body::new(
-                Location::Airbourne { x: 0.0, y: 0.0 },
-                true
-            )
+            Body::new(Location::Airbourne { x: 0.0, y: 0.0 }, true)
         } else {
-            let respawn = &context.stage.respawn_points[self.id % context.stage.respawn_points.len()];
+            let respawn =
+                &context.stage.respawn_points[self.id % context.stage.respawn_points.len()];
             Body::new(
-                Location::Airbourne { x: respawn.x, y: respawn.y },
-                respawn.face_right
+                Location::Airbourne {
+                    x: respawn.x,
+                    y: respawn.y,
+                },
+                respawn.face_right,
             )
         };
-        self.air_jumps_left = context.entity_def.fighter().map(|x| x.air_jumps).unwrap_or(1);
+        self.air_jumps_left = context
+            .entity_def
+            .fighter()
+            .map(|x| x.air_jumps)
+            .unwrap_or(1);
         self.fastfalled = false;
         self.hitstun = 0.0;
-
 
         self.result.deaths.push(DeathRecord {
             player: self.hit_by,
@@ -2192,14 +2604,17 @@ impl Player {
                     None
                 }
             }
-            Goal::KillDeathScore => {
-                ActionResult::set_action(PlayerAction::ReSpawn)
-            }
+            Goal::KillDeathScore => ActionResult::set_action(PlayerAction::ReSpawn),
         }
     }
 
-    pub fn debug_print(&self, player_input: &PlayerInput, debug: &DebugEntity, index: EntityKey) -> Vec<String> {
-        let mut lines: Vec<String> = vec!();
+    pub fn debug_print(
+        &self,
+        player_input: &PlayerInput,
+        debug: &DebugEntity,
+        index: EntityKey,
+    ) -> Vec<String> {
+        let mut lines: Vec<String> = vec![];
 
         if debug.frame {
             lines.push(format!("Entity: {:?}  shield HP: {:.5}  hitstun: {:.5}  tech timer: {:?}  lcancel timer: {}",
@@ -2207,8 +2622,8 @@ impl Player {
         }
 
         if debug.input {
-            let stick_x   = player_input.stick_x.value;
-            let stick_y   = player_input.stick_y.value;
+            let stick_x = player_input.stick_x.value;
+            let stick_y = player_input.stick_y.value;
             let c_stick_x = player_input.c_stick_x.value;
             let c_stick_y = player_input.c_stick_y.value;
             let l_trigger = player_input.l_trigger.value;
@@ -2219,8 +2634,8 @@ impl Player {
         }
 
         if debug.input_diff {
-            let stick_x   = player_input.stick_x.diff;
-            let stick_y   = player_input.stick_y.diff;
+            let stick_x = player_input.stick_x.diff;
+            let stick_y = player_input.stick_y.diff;
             let c_stick_x = player_input.c_stick_x.diff;
             let c_stick_y = player_input.c_stick_y.diff;
             let l_trigger = player_input.l_trigger.diff;
@@ -2243,41 +2658,44 @@ impl Player {
 
     pub fn hit_particles(&mut self, point: (f32, f32), hitbox: &HitBox) {
         self.particles.push(Particle {
-            color:       graphics::get_team_color3(self.team),
-            counter:     0,
+            color: graphics::get_team_color3(self.team),
+            counter: 0,
             counter_max: 2,
-            x:           point.0,
-            y:           point.1,
-            z:           0.0,
-            angle:       hitbox.angle.to_radians(),
-            p_type:      ParticleType::Hit {
+            x: point.0,
+            y: point.1,
+            z: 0.0,
+            angle: hitbox.angle.to_radians(),
+            p_type: ParticleType::Hit {
                 knockback: hitbox.bkb + hitbox.kbg * 70.0, // TODO: get actual knockback
-                damage:    hitbox.damage, // TODO: get actual damage
-            }
+                damage: hitbox.damage,                     // TODO: get actual damage
+            },
         });
     }
 
     pub fn air_jump_particles(&mut self, context: &mut StepContext, state: &ActionState) {
         let (x, y) = self.bps_xy(context, state);
         self.particles.push(Particle {
-            color:       graphics::get_team_color3(self.team),
-            counter:     0,
+            color: graphics::get_team_color3(self.team),
+            counter: 0,
             counter_max: 40,
             x,
             y,
-            z:           0.0,
-            angle:       0.0,
-            p_type:      ParticleType::AirJump
+            z: 0.0,
+            angle: 0.0,
+            p_type: ParticleType::AirJump,
         });
     }
 
     pub fn knockback_particles(&mut self, context: &mut StepContext, state: &ActionState) {
-        let kb_vel = (self.body.kb_x_vel * self.body.kb_x_vel + self.body.kb_y_vel * self.body.kb_y_vel).sqrt();
-        let angle = self.body.kb_y_vel.atan2(self.body.kb_x_vel) + context.rng.gen_range(-0.2..=0.2);
+        let kb_vel = (self.body.kb_x_vel * self.body.kb_x_vel
+            + self.body.kb_y_vel * self.body.kb_y_vel)
+            .sqrt();
+        let angle =
+            self.body.kb_y_vel.atan2(self.body.kb_x_vel) + context.rng.gen_range(-0.2..=0.2);
         let vec_mult = context.rng.gen_range(0.7..=1.0);
         let (x, y) = self.bps_xy(context, state);
         let num = if self.hitstun > 0.0 {
-            (kb_vel/2.0) as usize
+            (kb_vel / 2.0) as usize
         } else {
             0
         };
@@ -2285,26 +2703,27 @@ impl Player {
         for _ in 0..num {
             let z = context.rng.gen_range(-1.0..=1.0);
             self.particles.push(Particle {
-                color:       graphics::get_team_color3(self.team),
-                counter:     0,
+                color: graphics::get_team_color3(self.team),
+                counter: 0,
                 counter_max: 30,
                 x,
-                y:           y + self.body.ecb.top / 2.0,
+                y: y + self.body.ecb.top / 2.0,
                 z,
-                angle:       context.rng.gen_range(0.0..=2.0 * PI),
-                p_type:      ParticleType::Spark {
-                    x_vel:      angle.cos() * vec_mult * -1.0,
-                    y_vel:      angle.sin() * vec_mult * -1.0,
-                    z_vel:      context.rng.gen_range(0.0..=0.4) * z.signum(),
-                    size:       context.rng.gen_range(1.0..=3.0),
-                    angle_vel:  context.rng.gen_range(0.0..=1.0),
-                }
+                angle: context.rng.gen_range(0.0..=2.0 * PI),
+                p_type: ParticleType::Spark {
+                    x_vel: angle.cos() * vec_mult * -1.0,
+                    y_vel: angle.sin() * vec_mult * -1.0,
+                    z_vel: context.rng.gen_range(0.0..=0.4) * z.signum(),
+                    size: context.rng.gen_range(1.0..=3.0),
+                    angle_vel: context.rng.gen_range(0.0..=1.0),
+                },
             });
         }
     }
 
     pub fn land_particles(&mut self, context: &mut StepContext, state: &ActionState) {
-        let num = match state.frame_no_restart { // use frame_no_restart instead as it doesnt get skipped during lcancel
+        let num = match state.frame_no_restart {
+            // use frame_no_restart instead as it doesnt get skipped during lcancel
             1 => 3,
             2 => 1,
             3 => 4,
@@ -2317,9 +2736,9 @@ impl Player {
         let (x, y) = self.bps_xy(context, state);
         let action = state.get_action::<PlayerAction>();
 
-        let color = if
-            action.map_or(false, |x| x.is_attack_land()) && self.land_frame_skip == 0 || // missed LCancel
-            self.aerial_dodge_frame.map_or(false, |x| x > 0) // imperfect wavedash
+        let color = if action.map_or(false, |x| x.is_attack_land()) && self.land_frame_skip == 0 || // missed LCancel
+            self.aerial_dodge_frame.map_or(false, |x| x > 0)
+        // imperfect wavedash
         {
             [1.0, 1.0, 1.0]
         } else {
@@ -2330,19 +2749,19 @@ impl Player {
             let z = context.rng.gen_range(-3.0..=3.0);
             self.particles.push(Particle {
                 color,
-                counter:     0,
+                counter: 0,
                 counter_max: 40,
                 x,
                 y,
                 z,
-                angle:       context.rng.gen_range(0.0..=2.0 * PI),
-                p_type:      ParticleType::Spark {
-                    x_vel:      context.rng.gen_range(-0.3..=0.3),
-                    y_vel:      context.rng.gen_range(0.0..=0.2),
-                    z_vel:      context.rng.gen_range(0.0..=0.5) * z.signum(),
-                    size:       context.rng.gen_range(1.0..=3.0),
-                    angle_vel:  context.rng.gen_range(0.0..=1.0),
-                }
+                angle: context.rng.gen_range(0.0..=2.0 * PI),
+                p_type: ParticleType::Spark {
+                    x_vel: context.rng.gen_range(-0.3..=0.3),
+                    y_vel: context.rng.gen_range(0.0..=0.2),
+                    z_vel: context.rng.gen_range(0.0..=0.5) * z.signum(),
+                    size: context.rng.gen_range(1.0..=3.0),
+                    angle_vel: context.rng.gen_range(0.0..=1.0),
+                },
             });
         }
     }
@@ -2365,43 +2784,62 @@ impl Player {
         for _ in 0..num {
             let z = context.rng.gen_range(-6.0..=6.0);
             self.particles.push(Particle {
-                color:       graphics::get_team_color3(self.team),
-                counter:     0,
+                color: graphics::get_team_color3(self.team),
+                counter: 0,
                 counter_max: 40,
-                x:           x + x_offset,
+                x: x + x_offset,
                 y,
                 z,
-                angle:       context.rng.gen_range(0.0..=2.0 * PI),
-                p_type:      ParticleType::Spark {
-                    x_vel:      if self.body.face_right { context.rng.gen_range(-0.3..=0.0) } else { context.rng.gen_range(0.0..=0.3) },
-                    y_vel:      context.rng.gen_range(0.0..=0.3),
-                    z_vel:      context.rng.gen_range(0.0..=0.3) * z.signum(),
-                    size:       context.rng.gen_range(2.0..=4.0),
-                    angle_vel:  context.rng.gen_range(0.0..=1.0),
-                }
+                angle: context.rng.gen_range(0.0..=2.0 * PI),
+                p_type: ParticleType::Spark {
+                    x_vel: if self.body.face_right {
+                        context.rng.gen_range(-0.3..=0.0)
+                    } else {
+                        context.rng.gen_range(0.0..=0.3)
+                    },
+                    y_vel: context.rng.gen_range(0.0..=0.3),
+                    z_vel: context.rng.gen_range(0.0..=0.3) * z.signum(),
+                    size: context.rng.gen_range(2.0..=4.0),
+                    angle_vel: context.rng.gen_range(0.0..=1.0),
+                },
             });
         }
     }
 
-    pub fn render(&self, entities: &Entities, fighters: &KeyedContextVec<EntityDef>, surfaces: &[Surface], state: &ActionState) -> RenderPlayer {
+    pub fn render(
+        &self,
+        entities: &Entities,
+        fighters: &KeyedContextVec<EntityDef>,
+        surfaces: &[Surface],
+        state: &ActionState,
+    ) -> RenderPlayer {
         let shield = if self.is_shielding(state) {
             let fighter_color = graphics::get_team_color3(self.team);
             let fighter = &fighters[state.entity_def_key.as_ref()];
 
             if let &Some(ref shield) = &fighter.shield {
                 let c = &fighter_color;
-                let m =  1.0 - self.shield_analog;
+                let m = 1.0 - self.shield_analog;
                 Some(RenderShield {
                     distort: self.shield_stun_timer,
-                    color:   [c[0] + (1.0 - c[0]) * m, c[1] + (1.0 - c[1]) * m, c[2] + (1.0 - c[2]) * m, 0.2 + self.shield_analog / 2.0],
-                    radius:  self.shield_size(shield),
-                    pos:     self.shield_pos(shield, entities, fighters, surfaces, state),
+                    color: [
+                        c[0] + (1.0 - c[0]) * m,
+                        c[1] + (1.0 - c[1]) * m,
+                        c[2] + (1.0 - c[2]) * m,
+                        0.2 + self.shield_analog / 2.0,
+                    ],
+                    radius: self.shield_size(shield),
+                    pos: self.shield_pos(shield, entities, fighters, surfaces, state),
                 })
-            } else { None }
-        } else { None };
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         RenderPlayer {
-            team:   self.team,
+            team: self.team,
             damage: self.body.damage,
             stocks: self.stocks,
             shield,
@@ -2409,14 +2847,14 @@ impl Player {
     }
 
     pub fn vector_arrows(&self, debug: &DebugEntity) -> Vec<VectorArrow> {
-        let mut vector_arrows = vec!();
+        let mut vector_arrows = vec![];
 
         if debug.stick_vector {
             if let Some((x, y)) = self.stick {
                 vector_arrows.push(VectorArrow {
                     x,
                     y,
-                    color: [0.7, 0.7, 0.7, 1.0]
+                    color: [0.7, 0.7, 0.7, 1.0],
                 });
             }
         }
@@ -2425,7 +2863,7 @@ impl Player {
                 vector_arrows.push(VectorArrow {
                     x,
                     y,
-                    color: [1.0, 1.0, 0.0, 1.0]
+                    color: [1.0, 1.0, 0.0, 1.0],
                 });
             }
         }
@@ -2434,14 +2872,14 @@ impl Player {
                 vector_arrows.push(VectorArrow {
                     x: angle.cos(),
                     y: angle.sin(),
-                    color: [1.0, 0.0, 0.0, 1.0]
+                    color: [1.0, 0.0, 0.0, 1.0],
                 });
             }
             if let Some(angle) = self.body.hit_angle_post_di {
                 vector_arrows.push(VectorArrow {
                     x: angle.cos(),
                     y: angle.sin(),
-                    color: [0.0, 1.0, 0.0, 1.0]
+                    color: [0.0, 1.0, 0.0, 1.0],
                 });
             }
         }
@@ -2449,9 +2887,20 @@ impl Player {
         vector_arrows
     }
 
-    pub fn process_message(&mut self, message: &MessagePlayer, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
+    pub fn process_message(
+        &mut self,
+        message: &MessagePlayer,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
         match message {
-            MessagePlayer::Thrown { angle, damage, bkb, kbg, entity_atk_i } => {
+            MessagePlayer::Thrown {
+                angle,
+                damage,
+                bkb,
+                kbg,
+                entity_atk_i,
+            } => {
                 let hitbox = HitBox {
                     shield_damage: 0.0,
                     damage: *damage,
@@ -2472,7 +2921,14 @@ impl Player {
         }
     }
 
-    pub fn send_thrown_message(&self, context: &mut StepContext, angle: f32, damage: f32, bkb: f32, kbg: f32) {
+    pub fn send_thrown_message(
+        &self,
+        context: &mut StepContext,
+        angle: f32,
+        damage: f32,
+        bkb: f32,
+        kbg: f32,
+    ) {
         if let Some(recipient) = self.get_held_fighter(context.entities) {
             let angle = if !self.body.face_right {
                 180.0 - angle
@@ -2489,7 +2945,7 @@ impl Player {
 
             context.messages.push(Message {
                 recipient,
-                contents:  MessageContents::Player(message)
+                contents: MessageContents::Player(message),
             });
         }
     }
@@ -2505,13 +2961,13 @@ impl JumpResult {
     fn jump(&self) -> bool {
         match *self {
             JumpResult::Button | JumpResult::Stick => true,
-            JumpResult::None => false
+            JumpResult::None => false,
         }
     }
 }
 
 pub struct RenderPlayer {
-    pub team:   usize,
+    pub team: usize,
     pub damage: f32,
     pub stocks: Option<u64>,
     pub shield: Option<RenderShield>,
@@ -2519,7 +2975,7 @@ pub struct RenderPlayer {
 
 pub struct RenderShield {
     pub distort: u64,
-    pub color:   [f32; 4],
-    pub radius:  f32,
-    pub pos:     (f32, f32),
+    pub color: [f32; 4],
+    pub radius: f32,
+    pub pos: (f32, f32),
 }

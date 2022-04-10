@@ -3,37 +3,37 @@ use std::collections::HashMap;
 use gilrs_core::Gilrs;
 use uuid::Uuid;
 
-use canon_collision_lib::input::maps::{ControllerMaps, ControllerMap, OS};
+use canon_collision_lib::input::maps::{ControllerMap, ControllerMaps, OS};
 
 pub struct State {
-    pub gilrs:             Gilrs,
-    pub controller_maps:   ControllerMaps,
-    pub controller:        Option<usize>,
-    pub ui_to_analog_map:  HashMap<Uuid, usize>,
+    pub gilrs: Gilrs,
+    pub controller_maps: ControllerMaps,
+    pub controller: Option<usize>,
+    pub ui_to_analog_map: HashMap<Uuid, usize>,
     pub ui_to_digital_map: HashMap<Uuid, usize>,
-    pub analog_history:    HashMap<usize, AnalogHistory>,
-    pub last_code:         Code,
+    pub analog_history: HashMap<usize, AnalogHistory>,
+    pub last_code: Code,
 }
 
 #[derive(Clone)]
 pub enum Code {
-    Analog  (usize, AnalogHistory),
-    Digital (usize),
+    Analog(usize, AnalogHistory),
+    Digital(usize),
     None,
 }
 
 #[derive(Clone)]
 pub struct AnalogHistory {
-    pub min:        i32,
-    pub max:        i32,
+    pub min: i32,
+    pub max: i32,
     pub last_value: i32,
 }
 
 impl AnalogHistory {
     pub fn new(value: i32) -> AnalogHistory {
         AnalogHistory {
-            min:        value,
-            max:        value,
+            min: value,
+            max: value,
             last_value: value,
         }
     }
@@ -53,31 +53,33 @@ impl State {
 
             let mut new = true;
             for controller_map in controller_maps.maps.iter() {
-                if controller_map.name == name && controller_map.uuid == uuid && controller_map.os == os {
+                if controller_map.name == name
+                    && controller_map.uuid == uuid
+                    && controller_map.os == os
+                {
                     new = false;
                 }
             }
 
             if new && gamepad.is_connected() {
                 controller_maps.maps.push(ControllerMap {
-                    analog_maps:  vec!(),
-                    digital_maps: vec!(),
+                    analog_maps: vec![],
+                    digital_maps: vec![],
                     os,
                     name,
-                    uuid
+                    uuid,
                 });
             }
         }
 
         State {
-            controller:        None,
-            ui_to_analog_map:  HashMap::new(),
+            controller: None,
+            ui_to_analog_map: HashMap::new(),
             ui_to_digital_map: HashMap::new(),
-            analog_history:    HashMap::new(),
-            last_code:         Code::None,
+            analog_history: HashMap::new(),
+            last_code: Code::None,
             gilrs,
             controller_maps,
         }
     }
 }
-

@@ -11,19 +11,28 @@ pub fn cli() -> CLIResults {
     let program = &args[0];
 
     let mut opts = Options::new();
-    opts.optflag("h", "hitboxes", "Delete any existing hitboxes on the generated actions");
-    opts.optflag("r", "resize",   "Resize generated action length");
-    opts.reqopt ("f", "fighter",  "Use the fighter specified", "NAME");
-    opts.optopt ("a", "actions",  "Generate hurtboxes for the actions specified",  "NAME1,NAME2,NAME3...");
+    opts.optflag(
+        "h",
+        "hitboxes",
+        "Delete any existing hitboxes on the generated actions",
+    );
+    opts.optflag("r", "resize", "Resize generated action length");
+    opts.reqopt("f", "fighter", "Use the fighter specified", "NAME");
+    opts.optopt(
+        "a",
+        "actions",
+        "Generate hurtboxes for the actions specified",
+        "NAME1,NAME2,NAME3...",
+    );
 
     let mut results = CLIResults::new();
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m)  => m,
+        Ok(m) => m,
         Err(_) => {
             print_usage(program, opts);
             return results;
-        },
+        }
     };
 
     results.delete_hitboxes = matches.opt_present("h");
@@ -40,19 +49,19 @@ pub fn cli() -> CLIResults {
 }
 
 pub struct CLIResults {
-    pub fighter_name:    Option<String>,
-    pub action_names:    Vec<String>,
+    pub fighter_name: Option<String>,
+    pub action_names: Vec<String>,
     pub delete_hitboxes: bool,
-    pub resize:          bool,
+    pub resize: bool,
 }
 
 impl CLIResults {
     pub fn new() -> CLIResults {
         CLIResults {
-            fighter_name:    None,
-            action_names:    vec!(),
+            fighter_name: None,
+            action_names: vec![],
             delete_hitboxes: false,
-            resize:          false,
+            resize: false,
         }
     }
 }

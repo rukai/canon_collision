@@ -1,15 +1,15 @@
 use std::borrow::Cow;
 use std::env;
-use std::panic::PanicInfo;
 use std::panic;
+use std::panic::PanicInfo;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::files;
 use backtrace::Backtrace;
 use os_type;
-use uuid::Uuid;
 use toml;
-use crate::files;
+use uuid::Uuid;
 
 /// Enables the panic handler.
 /// Only use on Canon Collision applications with a gui
@@ -20,7 +20,7 @@ macro_rules! setup_panic_handler {
         // implemented with a macro so that BUILD_VERSION/CARGO_PKG_NAME are from the actual crate
         use canon_collision_lib::panic_handler;
         panic_handler::setup(env!("BUILD_VERSION"), env!("CARGO_PKG_NAME"));
-    }
+    };
 }
 
 /// Enables the panic handler.
@@ -31,13 +31,19 @@ pub fn setup(build_version: &'static str, crate_name: &'static str) {
     //
     // I have considered immediately quitting Canon Collision if it cant locate the panic handler i.e. the user has moved
     // the exe to a different folder. However that would break the above case.
-    let pfs_dev_not_true = env::var("CC_DEV").map(|x| x.to_lowercase() != "true").unwrap_or(true);
+    let pfs_dev_not_true = env::var("CC_DEV")
+        .map(|x| x.to_lowercase() != "true")
+        .unwrap_or(true);
     let handler_exists = path_to_handler().map(|x| x.exists()).unwrap_or(false);
     if pfs_dev_not_true && handler_exists {
         panic::set_hook(Box::new(move |panic_info: &PanicInfo| {
             let (location_file, location_line, location_column) = match panic_info.location() {
-                Some(loc) => (Some(loc.file().to_string()), Some(loc.line()), Some(loc.column())),
-                None      => (None, None, None)
+                Some(loc) => (
+                    Some(loc.file().to_string()),
+                    Some(loc.line()),
+                    Some(loc.column()),
+                ),
+                None => (None, None, None),
             };
 
             let operating_system = if cfg!(windows) {
@@ -48,10 +54,13 @@ pub fn setup(build_version: &'static str, crate_name: &'static str) {
             };
 
             let report = Report {
-                backtrace:     format!("{:#?}", Backtrace::new()),
+                backtrace: format!("{:#?}", Backtrace::new()),
                 build_version: build_version.into(),
-                crate_name:    crate_name.into(),
-                payload:       panic_info.payload().downcast_ref::<&str>().map(|x| x.to_string()),
+                crate_name: crate_name.into(),
+                payload: panic_info
+                    .payload()
+                    .downcast_ref::<&str>()
+                    .map(|x| x.to_string()),
                 operating_system,
                 location_file,
                 location_line,
@@ -60,12 +69,16 @@ pub fn setup(build_version: &'static str, crate_name: &'static str) {
 
             match report.to_file() {
                 Ok(file_path) => call_helper(file_path),
-                Err(err) => {
-                    match toml::to_string_pretty(&report) {
-                        Ok(report)   => eprintln!("Failed to save report to file: {}\nReport:\n{}", err, report),
-                        Err(ser_err) => eprintln!("Failed to save report to file: {}\nFailed to serialize report: {}", err, ser_err)
-                    }
-                }
+                Err(err) => match toml::to_string_pretty(&report) {
+                    Ok(report) => eprintln!(
+                        "Failed to save report to file: {}\nReport:\n{}",
+                        err, report
+                    ),
+                    Err(ser_err) => eprintln!(
+                        "Failed to save report to file: {}\nFailed to serialize report: {}",
+                        err, ser_err
+                    ),
+                },
             }
         }));
     }
@@ -82,14 +95,17 @@ fn path_to_handler() -> Result<PathBuf, String> {
             }
             Ok(path)
         }
-        Err(err) => Err(format!("Failed to get path of executable: {}", err))
+        Err(err) => Err(format!("Failed to get path of executable: {}", err)),
     }
 }
 
 fn call_helper(dump_path: PathBuf) {
     match path_to_handler() {
         Ok(path) => {
-            match (dump_path.into_os_string().into_string(), path.into_os_string().into_string()) {
+            match (
+                dump_path.into_os_string().into_string(),
+                path.into_os_string().into_string(),
+            ) {
                 (Ok(dump_path), Ok(path)) => {
                     if let Err(err) = Command::new(path).arg(dump_path).status() {
                         eprintln!("Failed to run the panic handler: {}", err);
@@ -106,13 +122,13 @@ fn call_helper(dump_path: PathBuf) {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Report {
-    pub crate_name:       String,
-    pub build_version:    String,
-    pub payload:          Option<String>,
-    pub location_file:    Option<String>,
-    pub location_line:    Option<u32>,
-    pub location_column:  Option<u32>,
-    pub backtrace:        String,
+    pub crate_name: String,
+    pub build_version: String,
+    pub payload: Option<String>,
+    pub location_file: Option<String>,
+    pub location_line: Option<u32>,
+    pub location_column: Option<u32>,
+    pub backtrace: String,
     pub operating_system: Cow<'static, str>,
 }
 

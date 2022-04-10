@@ -1,12 +1,17 @@
 #![windows_subsystem = "windows"]
 
-#[macro_use] extern crate log;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate bytemuck;
-#[macro_use] extern crate treeflection_derive;
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate bytemuck;
+#[macro_use]
+extern crate treeflection_derive;
 
 pub(crate) mod ai;
 pub(crate) mod app;
+pub(crate) mod audio;
 pub(crate) mod camera;
 pub(crate) mod cli;
 pub(crate) mod collision;
@@ -18,15 +23,14 @@ pub(crate) mod particle;
 pub(crate) mod replays;
 pub(crate) mod results;
 pub(crate) mod rules;
-pub(crate) mod audio;
 
 #[cfg(feature = "wgpu_renderer")]
 pub(crate) mod wgpu;
 
-use canon_collision_lib::logger;
+use crate::cli::GraphicsBackendChoice;
 #[cfg(feature = "wgpu_renderer")]
 use crate::wgpu::WgpuGraphics;
-use crate::cli::GraphicsBackendChoice;
+use canon_collision_lib::logger;
 
 use winit::event_loop::EventLoop;
 
@@ -42,7 +46,8 @@ fn main() {
         #[cfg(feature = "wgpu_renderer")]
         GraphicsBackendChoice::Wgpu => {
             let event_loop = EventLoop::new();
-            let mut graphics = futures::executor::block_on(WgpuGraphics::new(&event_loop, event_tx, render_rx));
+            let mut graphics =
+                futures::executor::block_on(WgpuGraphics::new(&event_loop, event_tx, render_rx));
             event_loop.run(move |event, _, control_flow| {
                 graphics.update(event, control_flow);
             });

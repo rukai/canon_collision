@@ -3,10 +3,10 @@ use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::{Command, Child};
+use std::process::{Child, Command};
 use std::sync::mpsc::Receiver;
 
-use hotwatch::{Hotwatch, Event};
+use hotwatch::{Event, Hotwatch};
 
 use canon_collision_lib::replays_files;
 
@@ -19,12 +19,16 @@ fn main() {
     // run on file change
     let mut hotwatch = Hotwatch::new().unwrap();
     let clone_tx = tx.clone();
-    hotwatch.watch("../canon_collision", move |event| {
-        clone_tx.send(event).unwrap();
-    }).unwrap();
-    hotwatch.watch("../canon_collision_lib", move |event| {
-        tx.send(event).unwrap();
-    }).unwrap();
+    hotwatch
+        .watch("../canon_collision", move |event| {
+            clone_tx.send(event).unwrap();
+        })
+        .unwrap();
+    hotwatch
+        .watch("../canon_collision_lib", move |event| {
+            tx.send(event).unwrap();
+        })
+        .unwrap();
 
     run(rx);
 }
@@ -34,7 +38,7 @@ fn run(rx: Receiver<Event>) {
     let profile_arg = env!("PROFILE");
 
     for event in rx {
-        if let Event::Write (_) | Event::Create (_) = event {
+        if let Event::Write(_) | Event::Create(_) = event {
             let mut args = env::args();
             args.next();
             let args: Vec<String> = args.collect();
@@ -76,12 +80,11 @@ fn run(rx: Receiver<Event>) {
                     process = launch(&profile_arg, &["--replay", &latest_replay_filename]);
 
                     // busy loop until the replay is loaded or the process died, probably due to changes in the replay structure.
-                    while !send_to_cc(":help") && is_process_running(&mut process) { }
+                    while !send_to_cc(":help") && is_process_running(&mut process) {}
 
                     // cleanup the replay
                     replays_files::delete_replay(latest_replay);
-                }
-                else {
+                } else {
                     process = launch(&profile_arg, &pass_through_args);
                 }
             }

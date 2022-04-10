@@ -1,14 +1,14 @@
+use std::cmp::Ordering;
 use std::fs;
 use std::path::PathBuf;
-use std::cmp::Ordering;
 
 use chrono::DateTime;
 
 use crate::files;
 
 pub fn get_replay_names() -> Vec<String> {
-    let mut result: Vec<String> = vec!();
-    
+    let mut result: Vec<String> = vec![];
+
     if let Ok(files) = fs::read_dir(get_replays_dir_path()) {
         for file in files {
             if let Ok(file) = file {
@@ -26,25 +26,23 @@ pub fn get_replay_names() -> Vec<String> {
     // Most recent dates come first
     // Dates come before non-dates
     // Non-dates are sorted alphabetically
-    result.sort_by(
-        |a, b| {
-            let a_dt = DateTime::parse_from_rfc2822(a);
-            let b_dt = DateTime::parse_from_rfc2822(b);
-            if a_dt.is_err() && b_dt.is_err() {
-                a.cmp(b)
-            } else {
-                if let Ok(a_dt) = a_dt {
-                    if let Ok(b_dt) = b_dt {
-                        a_dt.cmp(&b_dt).reverse()
-                    } else {
-                        Ordering::Less
-                    }
+    result.sort_by(|a, b| {
+        let a_dt = DateTime::parse_from_rfc2822(a);
+        let b_dt = DateTime::parse_from_rfc2822(b);
+        if a_dt.is_err() && b_dt.is_err() {
+            a.cmp(b)
+        } else {
+            if let Ok(a_dt) = a_dt {
+                if let Ok(b_dt) = b_dt {
+                    a_dt.cmp(&b_dt).reverse()
                 } else {
-                    Ordering::Greater
+                    Ordering::Less
                 }
+            } else {
+                Ordering::Greater
             }
         }
-    );
+    });
     result
 }
 

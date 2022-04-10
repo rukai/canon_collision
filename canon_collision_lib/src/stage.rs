@@ -1,120 +1,120 @@
+use crate::files::engine_version;
 use crate::geometry::Rect;
 use winit_input_helper::WinitInputHelper;
-use crate::files::engine_version;
 
-use treeflection::{Node, NodeRunner, NodeToken, ContextVec};
+use treeflection::{ContextVec, Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct Stage {
     pub engine_version: u64,
-    pub name:           String,
-    pub surfaces:       ContextVec<Surface>,
-    pub blast:          Rect,
-    pub camera:         Rect,
-    pub spawn_points:   ContextVec<SpawnPoint>,
+    pub name: String,
+    pub surfaces: ContextVec<Surface>,
+    pub blast: Rect,
+    pub camera: Rect,
+    pub spawn_points: ContextVec<SpawnPoint>,
     pub respawn_points: ContextVec<SpawnPoint>,
 }
 
 impl Default for Stage {
     fn default() -> Stage {
         let main_platform = Surface {
-            x1:      -75.0,
-            y1:      0.0,
-            grab1:   true,
-            x2:      75.0,
-            y2:      0.0,
-            grab2:   false,
-            wall:    false,
+            x1: -75.0,
+            y1: 0.0,
+            grab1: true,
+            x2: 75.0,
+            y2: 0.0,
+            grab2: false,
+            wall: false,
             ceiling: false,
             floor: Some(Floor {
-                traction:     1.0,
-                pass_through: false
-            })
+                traction: 1.0,
+                pass_through: false,
+            }),
         };
 
         let second_platform = Surface {
-            x1:      25.0,
-            y1:      50.0,
-            grab1:   false,
-            x2:      75.0,
-            y2:      50.0,
-            grab2:   false,
-            wall:    false,
+            x1: 25.0,
+            y1: 50.0,
+            grab1: false,
+            x2: 75.0,
+            y2: 50.0,
+            grab2: false,
+            wall: false,
             ceiling: false,
             floor: Some(Floor {
-                traction:     1.0,
+                traction: 1.0,
                 pass_through: true,
-            })
+            }),
         };
 
         let blast = Rect {
             x1: -200.0,
-            x2:  200.0,
+            x2: 200.0,
             y1: -200.0,
-            y2:  200.0,
+            y2: 200.0,
         };
 
         let camera = Rect {
             x1: -150.0,
-            x2:  150.0,
+            x2: 150.0,
             y1: -150.0,
-            y2:  150.0,
+            y2: 150.0,
         };
 
-        let respawn_points = ContextVec::from_vec(vec!(
+        let respawn_points = ContextVec::from_vec(vec![
             SpawnPoint {
-                x:          -50.0,
-                y:          10.0,
+                x: -50.0,
+                y: 10.0,
                 face_right: true,
             },
             SpawnPoint {
-                x:          -25.0,
-                y:          10.0,
+                x: -25.0,
+                y: 10.0,
                 face_right: false,
             },
             SpawnPoint {
-                x:          25.0,
-                y:          10.0,
+                x: 25.0,
+                y: 10.0,
                 face_right: true,
             },
             SpawnPoint {
-                x:          50.0,
-                y:          50.0,
+                x: 50.0,
+                y: 50.0,
                 face_right: false,
             },
-        ));
+        ]);
 
-        let spawn_points = ContextVec::from_vec(vec!(
+        let spawn_points = ContextVec::from_vec(vec![
             SpawnPoint {
-                x:          -50.0,
-                y:          1.0,
+                x: -50.0,
+                y: 1.0,
                 face_right: true,
             },
             SpawnPoint {
-                x:          -25.0,
-                y:          1.0,
+                x: -25.0,
+                y: 1.0,
                 face_right: false,
             },
             SpawnPoint {
-                x:          25.0,
-                y:          1.0,
+                x: 25.0,
+                y: 1.0,
                 face_right: true,
             },
             SpawnPoint {
-                x:          50.0,
-                y:          1.0,
+                x: 50.0,
+                y: 1.0,
                 face_right: false,
             },
-        ));
+        ]);
 
         Stage {
             engine_version: engine_version(),
-            name:           "Base Stage".to_string(),
-            surfaces:       ContextVec::from_vec(vec!(main_platform, second_platform)),
-            blast:          blast,
-            camera:         camera,
-            spawn_points:   spawn_points,
+            name: "Base Stage".to_string(),
+            surfaces: ContextVec::from_vec(vec![main_platform, second_platform]),
+            blast: blast,
+            camera: camera,
+            spawn_points: spawn_points,
             respawn_points: respawn_points,
         }
     }
@@ -143,10 +143,7 @@ impl Stage {
             }
         }
 
-        FloorInfo {
-            left_i,
-            right_i,
-        }
+        FloorInfo { left_i, right_i }
     }
 }
 
@@ -155,21 +152,21 @@ fn f32_equal(a: f32, b: f32) -> bool {
 }
 
 pub struct FloorInfo {
-    pub left_i:  Option<usize>,
+    pub left_i: Option<usize>,
     pub right_i: Option<usize>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct Surface {
-    pub x1:      f32,
-    pub y1:      f32,
-    pub grab1:   bool,
-    pub x2:      f32,
-    pub y2:      f32,
-    pub grab2:   bool,
-    pub wall:    bool,
+    pub x1: f32,
+    pub y1: f32,
+    pub grab1: bool,
+    pub x2: f32,
+    pub y2: f32,
+    pub grab2: bool,
+    pub wall: bool,
     pub ceiling: bool,
-    pub floor:   Option<Floor>,
+    pub floor: Option<Floor>,
 }
 
 // TODO: coloring
@@ -179,14 +176,14 @@ pub struct Surface {
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct Floor {
-    pub traction:     f32,
+    pub traction: f32,
     pub pass_through: bool,
 }
 
 impl Default for Floor {
     fn default() -> Floor {
         Floor {
-            traction:     1.0,
+            traction: 1.0,
             pass_through: true,
         }
     }
@@ -195,11 +192,19 @@ impl Default for Floor {
 /// plat_x/plat_y/plat_p is offset from the centre of the platform
 /// world_x/world_y/world_p is world coordinates
 impl Surface {
-    pub fn new(x1: f32, y1: f32, x2: f32, y2: f32, floor: bool, wall: bool, ceiling: bool) -> Surface {
+    pub fn new(
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+        floor: bool,
+        wall: bool,
+        ceiling: bool,
+    ) -> Surface {
         let floor = if floor {
             Some(Floor {
-                traction:     1.0,
-                pass_through: true
+                traction: 1.0,
+                pass_through: true,
             })
         } else {
             None
@@ -346,8 +351,8 @@ impl Surface {
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct SpawnPoint {
-    pub x:          f32,
-    pub y:          f32,
+    pub x: f32,
+    pub y: f32,
     pub face_right: bool,
 }
 
@@ -356,17 +361,17 @@ impl SpawnPoint {
         SpawnPoint {
             x,
             y,
-            face_right: true
+            face_right: true,
         }
     }
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct DebugStage {
-    pub blast:             bool,
-    pub camera:            bool,
-    pub spawn_points:      bool,
-    pub respawn_points:    bool,
+    pub blast: bool,
+    pub camera: bool,
+    pub spawn_points: bool,
+    pub respawn_points: bool,
     pub render_stage_mode: RenderStageMode,
 }
 
@@ -397,10 +402,10 @@ impl DebugStage {
 
     pub fn all() -> Self {
         DebugStage {
-            blast:             true,
-            camera:            true,
-            spawn_points:      true,
-            respawn_points:    true,
+            blast: true,
+            camera: true,
+            spawn_points: true,
+            respawn_points: true,
             render_stage_mode: RenderStageMode::NormalAndDebug,
         }
     }
@@ -417,36 +422,36 @@ pub enum RenderStageMode {
 impl RenderStageMode {
     pub fn step(&mut self) {
         *self = match self {
-            RenderStageMode::Normal         => RenderStageMode::NormalAndDebug,
+            RenderStageMode::Normal => RenderStageMode::NormalAndDebug,
             RenderStageMode::NormalAndDebug => RenderStageMode::Debug,
-            RenderStageMode::Debug          => RenderStageMode::DebugOnionSkin,
+            RenderStageMode::Debug => RenderStageMode::DebugOnionSkin,
             RenderStageMode::DebugOnionSkin => RenderStageMode::Normal,
         };
     }
 
     pub fn normal(&self) -> bool {
         match self {
-            RenderStageMode::Normal         => true,
+            RenderStageMode::Normal => true,
             RenderStageMode::NormalAndDebug => true,
-            RenderStageMode::Debug          => false,
+            RenderStageMode::Debug => false,
             RenderStageMode::DebugOnionSkin => false,
         }
     }
 
     pub fn debug(&self) -> bool {
         match self {
-            RenderStageMode::Normal         => false,
+            RenderStageMode::Normal => false,
             RenderStageMode::NormalAndDebug => true,
-            RenderStageMode::Debug          => true,
+            RenderStageMode::Debug => true,
             RenderStageMode::DebugOnionSkin => true,
         }
     }
 
     pub fn onion_skin(&self) -> bool {
         match self {
-            RenderStageMode::Normal         => false,
+            RenderStageMode::Normal => false,
             RenderStageMode::NormalAndDebug => false,
-            RenderStageMode::Debug          => false,
+            RenderStageMode::Debug => false,
             RenderStageMode::DebugOnionSkin => true,
         }
     }

@@ -7,6 +7,7 @@ fn print_usage(program: &str, opts: Options) {
     print!("{}", opts.usage(&brief));
 }
 
+#[rustfmt::skip]
 pub fn cli() -> CLIResults {
     let args: Vec<String> = env::args().collect();
     let program = &args[0];
@@ -153,34 +154,34 @@ pub fn cli() -> CLIResults {
 }
 
 pub struct CLIResults {
-    pub graphics_backend:   GraphicsBackendChoice,
-    pub package:            Option<String>,
-    pub max_human_players:  Option<usize>,
-    pub total_cpu_players:  Option<usize>,
-    pub fighter_names:      Vec<String>,
-    pub stage_name:         Option<String>,
-    pub address:            Option<IpAddr>,
-    pub continue_from:      ContinueFrom,
-    pub netplay_players:    Option<u8>,
-    pub netplay_region:     Option<String>,
-    pub debug:              bool,
+    pub graphics_backend: GraphicsBackendChoice,
+    pub package: Option<String>,
+    pub max_human_players: Option<usize>,
+    pub total_cpu_players: Option<usize>,
+    pub fighter_names: Vec<String>,
+    pub stage_name: Option<String>,
+    pub address: Option<IpAddr>,
+    pub continue_from: ContinueFrom,
+    pub netplay_players: Option<u8>,
+    pub netplay_region: Option<String>,
+    pub debug: bool,
     pub max_history_frames: Option<usize>,
 }
 
 impl CLIResults {
     pub fn new() -> CLIResults {
         CLIResults {
-            graphics_backend:   GraphicsBackendChoice::default(),
-            package:            None,
-            max_human_players:  None,
-            total_cpu_players:  None,
-            fighter_names:      vec!(),
-            stage_name:         None,
-            address:            None,
-            continue_from:      ContinueFrom::Menu,
-            netplay_players:    None,
-            netplay_region:     None,
-            debug:              false,
+            graphics_backend: GraphicsBackendChoice::default(),
+            package: None,
+            max_human_players: None,
+            total_cpu_players: None,
+            fighter_names: vec![],
+            stage_name: None,
+            address: None,
+            continue_from: ContinueFrom::Menu,
+            netplay_players: None,
+            netplay_region: None,
+            debug: false,
             max_history_frames: None,
         }
     }
@@ -191,7 +192,7 @@ pub enum ContinueFrom {
     Netplay,
     MatchMaking,
     Game,
-    ReplayFile (String),
+    ReplayFile(String),
     Close,
 }
 

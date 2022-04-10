@@ -1,21 +1,24 @@
 use std::f32;
 
-use gilrs_core::{Gilrs, EvCode, Gamepad, EventType};
+use gilrs_core::{EvCode, EventType, Gamepad, Gilrs};
 use uuid::Uuid;
 
-use super::maps::{ControllerMap, AnalogFilter, AnalogDest, DigitalFilter};
-use super::state::{ControllerInput, Deadzone};
 use super::filter;
+use super::maps::{AnalogDest, AnalogFilter, ControllerMap, DigitalFilter};
+use super::state::{ControllerInput, Deadzone};
 
 pub(crate) struct GenericController {
     pub index: usize,
     pub state: ControllerInput,
-    pub deadzone: Deadzone
+    pub deadzone: Deadzone,
 }
 
 impl GenericController {
-    pub fn get_controllers(gilrs: &mut Gilrs, existing_controllers: &[&GenericController]) -> Vec<GenericController> {
-        let mut controllers = vec!();
+    pub fn get_controllers(
+        gilrs: &mut Gilrs,
+        existing_controllers: &[&GenericController],
+    ) -> Vec<GenericController> {
+        let mut controllers = vec![];
         // find new generic controllers
         for index in 0..gilrs.last_gamepad_hint() {
             let gamepad = gilrs.gamepad(index).unwrap();
@@ -23,9 +26,18 @@ impl GenericController {
                 let exists = existing_controllers.iter().any(|x| x.index == index);
 
                 // Force users to use native GC->Wii U input
-                if !exists && gamepad.name() != "mayflash limited MAYFLASH GameCube Controller Adapter" {
-                    let state = ControllerInput { plugged_in: true, .. ControllerInput::default() };
-                    controllers.push(GenericController { index, state, deadzone: Deadzone::empty() });
+                if !exists
+                    && gamepad.name() != "mayflash limited MAYFLASH GameCube Controller Adapter"
+                {
+                    let state = ControllerInput {
+                        plugged_in: true,
+                        ..ControllerInput::default()
+                    };
+                    controllers.push(GenericController {
+                        index,
+                        state,
+                        deadzone: Deadzone::empty(),
+                    });
                 }
             }
         }
@@ -33,10 +45,17 @@ impl GenericController {
     }
 
     /// Add a single controller to inputs, reading from the passed gamepad
-    pub fn read(&mut self, controller_maps: &[ControllerMap], events: Vec<EventType>, gamepad: &Gamepad) -> ControllerInput {
+    pub fn read(
+        &mut self,
+        controller_maps: &[ControllerMap],
+        events: Vec<EventType>,
+        gamepad: &Gamepad,
+    ) -> ControllerInput {
         let mut controller_map_use = None;
         for controller_map in controller_maps {
-            if controller_map.name == gamepad.name() && controller_map.uuid == Uuid::from_bytes(gamepad.uuid()) {
+            if controller_map.name == gamepad.name()
+                && controller_map.uuid == Uuid::from_bytes(gamepad.uuid())
+            {
                 controller_map_use = Some(controller_map);
             }
         }
@@ -47,7 +66,7 @@ impl GenericController {
                 match event {
                     // TODO: better handle multiple sources pointing to the same destination
                     // maybe keep a unique ControllerInput state for each source input
-                    EventType::ButtonPressed (code) => {
+                    EventType::ButtonPressed(code) => {
                         for map in &controller_map.analog_maps {
                             if let AnalogFilter::FromDigital { value } = map.filter {
                                 if map.source == code_to_usize(&code) {
@@ -64,7 +83,7 @@ impl GenericController {
                             };
                         }
                     }
-                    EventType::ButtonReleased (code) => {
+                    EventType::ButtonReleased(code) => {
                         for map in &controller_map.analog_maps {
                             if let AnalogFilter::FromDigital { .. } = map.filter {
                                 if map.source == code_to_usize(&code) {
@@ -81,11 +100,12 @@ impl GenericController {
                             };
                         }
                     }
-                    EventType::AxisValueChanged (value, code) => {
+                    EventType::AxisValueChanged(value, code) => {
                         for map in &controller_map.analog_maps {
                             if let AnalogFilter::FromAnalog { min, max, flip } = map.filter {
                                 // Implemented as per https://stackoverflow.com/questions/345187/math-mapping-numbers
-                                let mut new_value = ((value-min) as f32) / ((max-min) as f32) * 2.0 - 1.0;
+                                let mut new_value =
+                                    ((value - min) as f32) / ((max - min) as f32) * 2.0 - 1.0;
 
                                 new_value *= if flip { -1.0 } else { 1.0 };
 
@@ -93,7 +113,7 @@ impl GenericController {
                                     &AnalogDest::LTrigger | &AnalogDest::RTrigger => {
                                         new_value = (new_value + 1.0) / 2.0;
                                     }
-                                    _ => { }
+                                    _ => {}
                                 }
 
                                 if map.source == code_to_usize(&code) {
@@ -122,8 +142,8 @@ impl GenericController {
             }
 
             // convert state floats to bytes
-            let raw_stick_x   = GenericController::generic_to_byte(self.state.stick_x);
-            let raw_stick_y   = GenericController::generic_to_byte(self.state.stick_y);
+            let raw_stick_x = GenericController::generic_to_byte(self.state.stick_x);
+            let raw_stick_y = GenericController::generic_to_byte(self.state.stick_y);
             let raw_c_stick_x = GenericController::generic_to_byte(self.state.c_stick_x);
             let raw_c_stick_y = GenericController::generic_to_byte(self.state.c_stick_y);
 
@@ -131,15 +151,16 @@ impl GenericController {
             let raw_r_trigger = GenericController::generic_to_byte(self.state.r_trigger);
 
             // update deadzones
-            if self.state.plugged_in && !self.deadzone.plugged_in { // Only reset deadzone if controller was just plugged in
+            if self.state.plugged_in && !self.deadzone.plugged_in {
+                // Only reset deadzone if controller was just plugged in
                 self.deadzone = Deadzone {
                     plugged_in: true,
-                    stick_x:    raw_stick_x,
-                    stick_y:    raw_stick_y,
-                    c_stick_x:  raw_c_stick_x,
-                    c_stick_y:  raw_c_stick_y,
-                    l_trigger:  raw_l_trigger,
-                    r_trigger:  raw_r_trigger,
+                    stick_x: raw_stick_x,
+                    stick_y: raw_stick_y,
+                    c_stick_x: raw_c_stick_x,
+                    c_stick_y: raw_c_stick_y,
+                    l_trigger: raw_l_trigger,
+                    r_trigger: raw_r_trigger,
                 };
             }
             if !self.state.plugged_in {
@@ -147,11 +168,19 @@ impl GenericController {
             }
 
             // convert bytes to result floats
-            let (stick_x, stick_y)     = filter::stick_filter(filter::stick_deadzone(raw_stick_x,   self.deadzone.stick_x),   filter::stick_deadzone(raw_stick_y,   self.deadzone.stick_y));
-            let (c_stick_x, c_stick_y) = filter::stick_filter(filter::stick_deadzone(raw_c_stick_x, self.deadzone.c_stick_x), filter::stick_deadzone(raw_c_stick_y, self.deadzone.c_stick_y));
+            let (stick_x, stick_y) = filter::stick_filter(
+                filter::stick_deadzone(raw_stick_x, self.deadzone.stick_x),
+                filter::stick_deadzone(raw_stick_y, self.deadzone.stick_y),
+            );
+            let (c_stick_x, c_stick_y) = filter::stick_filter(
+                filter::stick_deadzone(raw_c_stick_x, self.deadzone.c_stick_x),
+                filter::stick_deadzone(raw_c_stick_y, self.deadzone.c_stick_y),
+            );
 
-            let l_trigger = filter::trigger_filter(raw_l_trigger.saturating_sub(self.deadzone.l_trigger));
-            let r_trigger = filter::trigger_filter(raw_r_trigger.saturating_sub(self.deadzone.r_trigger));
+            let l_trigger =
+                filter::trigger_filter(raw_l_trigger.saturating_sub(self.deadzone.l_trigger));
+            let r_trigger =
+                filter::trigger_filter(raw_r_trigger.saturating_sub(self.deadzone.r_trigger));
 
             ControllerInput {
                 stick_x,
@@ -184,4 +213,3 @@ impl GenericController {
 pub fn code_to_usize(code: &EvCode) -> usize {
     (code.into_u32() & 0xFFFF) as usize
 }
-

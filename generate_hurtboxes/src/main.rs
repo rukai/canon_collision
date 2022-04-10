@@ -1,17 +1,19 @@
-mod cli;
-mod model;
-mod hurtbox;
 mod animation;
+mod cli;
+mod hurtbox;
+mod model;
 // TODO: Move duplicate code in hurtbox and animation modules into canon_collision_lib
 
 use canon_collision_lib::assets::Assets;
-use canon_collision_lib::entity_def::{ActionDef, ActionFrame, CollisionBoxRole, CollisionBox, ItemHold};
+use canon_collision_lib::entity_def::{
+    ActionDef, ActionFrame, CollisionBox, CollisionBoxRole, ItemHold,
+};
 use canon_collision_lib::package::Package;
 use cli::CLIResults;
-use model::{Model3D, Joint, Animation};
 use hurtbox::HurtBox;
+use model::{Animation, Joint, Model3D};
 
-use cgmath::{Point3, Vector3, Matrix4, SquareMatrix, Transform, VectorSpace, Rad};
+use cgmath::{Matrix4, Point3, Rad, SquareMatrix, Transform, Vector3, VectorSpace};
 use std::f32;
 
 fn main() {
@@ -27,9 +29,10 @@ fn main() {
                 println!("Could not load package");
                 return;
             }
-        }
-        else {
-            println!("Could not find package/ in current directory or any of its parent directories.");
+        } else {
+            println!(
+                "Could not find package/ in current directory or any of its parent directories."
+            );
             return;
         };
 
@@ -47,7 +50,10 @@ fn main() {
             let hurtboxes = if let Some(hurtboxes) = hurtboxes.get(fighter_key) {
                 hurtboxes
             } else {
-                println!("Hurtboxes hashmap does not contain fighter: {}", fighter_key);
+                println!(
+                    "Hurtboxes hashmap does not contain fighter: {}",
+                    fighter_key
+                );
                 return;
             };
 
@@ -57,21 +63,28 @@ fn main() {
                 if cli.action_names.len() == 0 || cli.action_names.contains(&action_key) {
                     if let Some(animation) = model.animations.get(&action_key) {
                         regenerate_action(action, &model.root_joint, animation, &cli, &hurtboxes);
-                    }
-                    else {
-                        println!("PlayerAction '{}' does not have a corresponding animation, skipping.", action_key);
+                    } else {
+                        println!(
+                            "PlayerAction '{}' does not have a corresponding animation, skipping.",
+                            action_key
+                        );
                     }
                 }
             }
             package.save();
-        }
-        else {
+        } else {
             println!("Package does not contain fighter: {}", fighter_key);
         }
     }
 }
 
-fn regenerate_action(action: &mut ActionDef, root_joint: &Joint, animation: &Animation, cli: &CLIResults, hurtboxes: &[HurtBox]) {
+fn regenerate_action(
+    action: &mut ActionDef,
+    root_joint: &Joint,
+    animation: &Animation,
+    cli: &CLIResults,
+    hurtboxes: &[HurtBox],
+) {
     if cli.resize {
         let frames = animation.len().max(1);
         while action.frames.len() > frames {
@@ -85,8 +98,7 @@ fn regenerate_action(action: &mut ActionDef, root_joint: &Joint, animation: &Ani
     for frame in action.frames.iter_mut() {
         if cli.delete_hitboxes {
             frame.colboxes.clear();
-        }
-        else {
+        } else {
             for i in (0..frame.colboxes.len()).rev() {
                 if let CollisionBoxRole::Hurt(_) = frame.colboxes[i].role {
                     frame.colboxes.remove(i);
@@ -98,7 +110,12 @@ fn regenerate_action(action: &mut ActionDef, root_joint: &Joint, animation: &Ani
     for (i, frame) in action.frames.iter_mut().enumerate() {
         let mut root_joint = root_joint.clone();
         let animation_frame = i as f32;
-        animation::set_animated_joints(animation, animation_frame, &mut root_joint, Matrix4::identity());
+        animation::set_animated_joints(
+            animation,
+            animation_frame,
+            &mut root_joint,
+            Matrix4::identity(),
+        );
         for hurtbox in hurtboxes {
             generate_hurtbox(frame, &root_joint, hurtbox);
         }
@@ -129,12 +146,19 @@ fn generate_hurtbox(frame: &mut ActionFrame, root_joint: &Joint, hurtbox: &HurtB
                 let lerped = point1.lerp(point2, i as f32 / count as f32);
                 let point = (lerped.z, lerped.y);
                 let role = role.clone();
-                frame.colboxes.push(CollisionBox { point, radius, role });
+                frame.colboxes.push(CollisionBox {
+                    point,
+                    radius,
+                    role,
+                });
             }
-        }
-        else {
+        } else {
             let point = (point1.z, point1.y);
-            frame.colboxes.push(CollisionBox { point, radius, role });
+            frame.colboxes.push(CollisionBox {
+                point,
+                radius,
+                role,
+            });
         }
     }
 }

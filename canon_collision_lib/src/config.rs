@@ -7,10 +7,10 @@ use treeflection::{Node, NodeRunner, NodeToken};
 
 #[derive(Clone, Serialize, Deserialize, Node)]
 pub struct Config {
-    pub netplay_region:        Option<String>,
-    pub auto_save_replay:      bool,
+    pub netplay_region: Option<String>,
+    pub auto_save_replay: bool,
     pub verify_package_hashes: bool,
-    pub fullscreen:            bool,
+    pub fullscreen: bool,
 }
 
 impl Config {
@@ -21,12 +21,15 @@ impl Config {
     }
 
     pub fn load() -> Config {
-        if let Ok (json) = files::load_json(&Config::get_path()) {
-            if let Ok (config) = serde_json::from_value::<Config>(json) {
+        if let Ok(json) = files::load_json(&Config::get_path()) {
+            if let Ok(config) = serde_json::from_value::<Config>(json) {
                 return config;
             }
         }
-        warn!("{:?} is invalid or does not exist, loading default values", Config::get_path());
+        warn!(
+            "{:?} is invalid or does not exist, loading default values",
+            Config::get_path()
+        );
         Config::default()
     }
 
@@ -38,10 +41,10 @@ impl Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            netplay_region:        None,
-            auto_save_replay:      false,
+            netplay_region: None,
+            auto_save_replay: false,
             verify_package_hashes: true,
-            fullscreen:            false,
+            fullscreen: false,
         }
     }
 }

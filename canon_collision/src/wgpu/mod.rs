@@ -1,84 +1,93 @@
+mod animation;
 mod buffers;
 mod model3d;
-mod animation;
 
-use buffers::{ColorVertex, Vertex, Buffers};
-use model3d::{Models, Model3D, ModelVertexType, ModelVertexAnimated, ShaderType, ModelVertexStatic};
 use crate::audio::BGMMetadata;
-use crate::entity::{RenderEntityType, RenderEntityFrame};
-use crate::game::{GameState, RenderObject, RenderGame};
+use crate::camera::Camera;
+use crate::entity::{RenderEntityFrame, RenderEntityType};
+use crate::game::{GameState, RenderGame, RenderObject};
 use crate::graphics::{self, GraphicsMessage, Render, RenderType};
-use crate::menu::{RenderMenu, RenderMenuState, PlayerSelect, PlayerSelectUi};
+use crate::menu::{PlayerSelect, PlayerSelectUi, RenderMenu, RenderMenuState};
 use crate::particle::ParticleType;
 use crate::results::PlayerResult;
-use crate::camera::Camera;
-use canon_collision_lib::entity_def::CollisionBoxRole;
+use buffers::{Buffers, ColorVertex, Vertex};
 use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::CollisionBoxRole;
 use canon_collision_lib::geometry::Rect;
 use canon_collision_lib::package::{Package, PackageUpdate};
+use model3d::{
+    Model3D, ModelVertexAnimated, ModelVertexStatic, ModelVertexType, Models, ShaderType,
+};
 
-use std::rc::Rc;
-use std::sync::mpsc::{Sender, Receiver, TryRecvError};
-use std::time::{Duration, Instant};
-use std::{mem, f32};
 use std::borrow::Cow;
-use std::num::{NonZeroU8, NonZeroU64};
+use std::num::{NonZeroU64, NonZeroU8};
+use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::time::{Duration, Instant};
+use std::{f32, mem};
 
 use bytemuck::{Pod, Zeroable};
-use cgmath::Rad;
 use cgmath::prelude::*;
+use cgmath::Rad;
 use cgmath::{Matrix4, Vector3};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use wgpu::util::DeviceExt;
-use wgpu::{Device, Queue, Surface, BindGroupLayout, RenderPipeline, TextureView, Sampler, Texture, Buffer, ShaderSource, BufferBinding};
+use wgpu::{
+    BindGroupLayout, Buffer, BufferBinding, Device, Queue, RenderPipeline, Sampler, ShaderSource,
+    Surface, Texture, TextureView,
+};
 use wgpu_glyph::ab_glyph::FontArc;
-use wgpu_glyph::{Section, GlyphBrush, GlyphBrushBuilder, FontId, Text};
+use wgpu_glyph::{FontId, GlyphBrush, GlyphBrushBuilder, Section, Text};
 
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::Window;
 use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Fullscreen;
+use winit::window::Window;
 
 pub struct WgpuGraphics {
-    package:                      Option<Package>,
-    models:                       Models,
-    uniforms_buffer:              Buffer,
-    uniforms_buffer_len:          usize,
-    glyph_brush:                  GlyphBrush<()>,
-    hack_font_id:                 FontId,
-    window:                       Window,
-    event_tx:                     Sender<WindowEvent<'static>>,
-    render_rx:                    Receiver<GraphicsMessage>,
-    device:                       Device,
-    queue:                        Queue,
-    surface:                      Surface,
-    wsd:                          WindowSizeDependent,
-    staging_belt:                 StagingBelt,
-    pipeline_color_2d:            RenderPipeline,
-    pipeline_color_3d:            RenderPipeline,
-    pipeline_hitbox:              RenderPipeline,
-    pipeline_debug:               RenderPipeline,
-    pipeline_model3d_static:      RenderPipeline,
+    package: Option<Package>,
+    models: Models,
+    uniforms_buffer: Buffer,
+    uniforms_buffer_len: usize,
+    glyph_brush: GlyphBrush<()>,
+    hack_font_id: FontId,
+    window: Window,
+    event_tx: Sender<WindowEvent<'static>>,
+    render_rx: Receiver<GraphicsMessage>,
+    device: Device,
+    queue: Queue,
+    surface: Surface,
+    wsd: WindowSizeDependent,
+    staging_belt: StagingBelt,
+    pipeline_color_2d: RenderPipeline,
+    pipeline_color_3d: RenderPipeline,
+    pipeline_hitbox: RenderPipeline,
+    pipeline_debug: RenderPipeline,
+    pipeline_model3d_static: RenderPipeline,
     pipeline_model3d_static_lava: RenderPipeline,
-    pipeline_model3d_animated:    RenderPipeline,
-    pipeline_model3d_fireball:    RenderPipeline,
-    bind_group_layout_generic:    BindGroupLayout,
-    bind_group_layout_model3d:    BindGroupLayout,
-    sampler:                      Sampler,
-    prev_fullscreen:              Option<bool>,
-    frame_durations:              Vec<Duration>,
-    fps:                          String,
-    bgm_metadata:                 Option<(BGMMetadata, Instant)>,
-    width:                        u32,
-    height:                       u32,
+    pipeline_model3d_animated: RenderPipeline,
+    pipeline_model3d_fireball: RenderPipeline,
+    bind_group_layout_generic: BindGroupLayout,
+    bind_group_layout_model3d: BindGroupLayout,
+    sampler: Sampler,
+    prev_fullscreen: Option<bool>,
+    frame_durations: Vec<Duration>,
+    fps: String,
+    bgm_metadata: Option<(BGMMetadata, Instant)>,
+    width: u32,
+    height: u32,
 }
 
 const SAMPLE_COUNT: u32 = 4;
 
 impl WgpuGraphics {
-    pub async fn new(event_loop: &EventLoop<()>, event_tx: Sender<WindowEvent<'static>>, render_rx: Receiver<GraphicsMessage>) -> WgpuGraphics {
+    pub async fn new(
+        event_loop: &EventLoop<()>,
+        event_tx: Sender<WindowEvent<'static>>,
+        render_rx: Receiver<GraphicsMessage>,
+    ) -> WgpuGraphics {
         let window = Window::new(event_loop).unwrap();
         window.set_title("Canon Collision");
 
@@ -87,45 +96,47 @@ impl WgpuGraphics {
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
 
-        let adapter = instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
-            }
-        ).await.unwrap();
+            })
+            .await
+            .unwrap();
 
-        let (mut device, queue) = adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits {
-                    max_uniform_buffer_binding_size: 32068, // Needed for AnimatedUniform
-                    ..wgpu::Limits::default()
-                },
-                label: None,
-            },
-            None,
-        ).await.unwrap();
-
-        let color_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/color.wgsl"));
-
-        let bind_group_layout_generic = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::all(),
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let (mut device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    features: wgpu::Features::empty(),
+                    limits: wgpu::Limits {
+                        max_uniform_buffer_binding_size: 32068, // Needed for AnimatedUniform
+                        ..wgpu::Limits::default()
                     },
-                ]
-            }
-        );
+                    label: None,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+
+        let color_module =
+            WgpuGraphics::create_shader(&mut device, include_str!("../shaders/color.wgsl"));
+
+        let bind_group_layout_generic =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::all(),
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
             bind_group_layouts: &[&bind_group_layout_generic],
@@ -136,14 +147,14 @@ impl WgpuGraphics {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
-            .. Default::default()
+            ..Default::default()
         };
 
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: None,
-            .. Default::default()
+            ..Default::default()
         };
 
         let targets = [wgpu::ColorTargetState {
@@ -259,7 +270,8 @@ impl WgpuGraphics {
             multisample,
         });
 
-        let hitbox_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/hitbox.wgsl"));
+        let hitbox_module =
+            WgpuGraphics::create_shader(&mut device, include_str!("../shaders/hitbox.wgsl"));
 
         let pipeline_hitbox = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
@@ -287,26 +299,37 @@ impl WgpuGraphics {
             multisample,
         });
 
-        let model3d_standard_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-standard-fragment.glsl", kind: frag);
-        let model3d_standard_fs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_standard_fs);
+        let model3d_standard_fs = vk_shader_macros::include_glsl!(
+            "src/shaders/model3d-standard-fragment.glsl",
+            kind: frag
+        );
+        let model3d_standard_fs_module =
+            WgpuGraphics::create_shader_glsl(&mut device, model3d_standard_fs);
 
-        let model3d_lava_fs = vk_shader_macros::include_glsl!("src/shaders/model3d-lava-fragment.glsl", kind: frag);
+        let model3d_lava_fs =
+            vk_shader_macros::include_glsl!("src/shaders/model3d-lava-fragment.glsl", kind: frag);
         let model3d_lava_fs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_lava_fs);
 
-        let model3d_static_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
-        let model3d_static_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_static_vs);
+        let model3d_static_vs =
+            vk_shader_macros::include_glsl!("src/shaders/model3d-static-vertex.glsl", kind: vert);
+        let model3d_static_vs_module =
+            WgpuGraphics::create_shader_glsl(&mut device, model3d_static_vs);
 
-        let model3d_animated_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
-        let model3d_animated_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_animated_vs);
+        let model3d_animated_vs =
+            vk_shader_macros::include_glsl!("src/shaders/model3d-animated-vertex.glsl", kind: vert);
+        let model3d_animated_vs_module =
+            WgpuGraphics::create_shader_glsl(&mut device, model3d_animated_vs);
 
-        let model3d_fireball_vs = vk_shader_macros::include_glsl!("src/shaders/model3d-fireball-vertex.glsl", kind: vert);
-        let model3d_fireball_vs_module = WgpuGraphics::create_shader_glsl(&mut device, model3d_fireball_vs);
+        let model3d_fireball_vs =
+            vk_shader_macros::include_glsl!("src/shaders/model3d-fireball-vertex.glsl", kind: vert);
+        let model3d_fireball_vs_module =
+            WgpuGraphics::create_shader_glsl(&mut device, model3d_fireball_vs);
 
         // TODO: wgsl cant even handle the multiply yet.
         //let model3d_module = WgpuGraphics::create_shader(&mut device, include_str!("../shaders/model3d.wgsl"));
 
-        let bind_group_layout_model3d = device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let bind_group_layout_model3d =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -338,118 +361,122 @@ impl WgpuGraphics {
                         },
                         count: None,
                     },
-                ]
-            }
-        );
-        let pipeline_model3d_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: None,
-            bind_group_layouts: &[&bind_group_layout_model3d],
-            push_constant_ranges: &[],
-        });
+                ],
+            });
+        let pipeline_model3d_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&bind_group_layout_model3d],
+                push_constant_ranges: &[],
+            });
 
-        let pipeline_model3d_static = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_model3d_layout),
-            vertex: wgpu::VertexState {
-                module: &model3d_static_vs_module,
-                entry_point: "main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x4, // position
-                        1 => Float32x2  // uv
-                    ],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &model3d_standard_fs_module,
-                entry_point: "main",
-                targets: &targets,
-            }),
-            primitive: primitive_back_face_culling,
-            depth_stencil: depth_stencil.clone(),
-            multisample,
-        });
+        let pipeline_model3d_static =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_model3d_layout),
+                vertex: wgpu::VertexState {
+                    module: &model3d_static_vs_module,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x4, // position
+                            1 => Float32x2  // uv
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &model3d_standard_fs_module,
+                    entry_point: "main",
+                    targets: &targets,
+                }),
+                primitive: primitive_back_face_culling,
+                depth_stencil: depth_stencil.clone(),
+                multisample,
+            });
 
-        let pipeline_model3d_static_lava = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_model3d_layout),
-            vertex: wgpu::VertexState {
-                module: &model3d_static_vs_module,
-                entry_point: "main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x4, // position
-                        1 => Float32x2  // uv
-                    ],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &model3d_lava_fs_module,
-                entry_point: "main",
-                targets: &targets,
-            }),
-            primitive: primitive_back_face_culling,
-            depth_stencil: depth_stencil.clone(),
-            multisample,
-        });
+        let pipeline_model3d_static_lava =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_model3d_layout),
+                vertex: wgpu::VertexState {
+                    module: &model3d_static_vs_module,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: mem::size_of::<ModelVertexStatic>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x4, // position
+                            1 => Float32x2  // uv
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &model3d_lava_fs_module,
+                    entry_point: "main",
+                    targets: &targets,
+                }),
+                primitive: primitive_back_face_culling,
+                depth_stencil: depth_stencil.clone(),
+                multisample,
+            });
 
-        let pipeline_model3d_animated = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_model3d_layout),
-            vertex: wgpu::VertexState {
-                module: &model3d_animated_vs_module,
-                entry_point: "main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x4, // position
-                        1 => Float32x2, // uv
-                        2 => Uint32x4,  // joints
-                        3 => Float32x4  // weights
-                    ],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &model3d_standard_fs_module,
-                entry_point: "main",
-                targets: &targets,
-            }),
-            primitive: primitive_back_face_culling,
-            depth_stencil: depth_stencil.clone(),
-            multisample,
-        });
+        let pipeline_model3d_animated =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_model3d_layout),
+                vertex: wgpu::VertexState {
+                    module: &model3d_animated_vs_module,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x4, // position
+                            1 => Float32x2, // uv
+                            2 => Uint32x4,  // joints
+                            3 => Float32x4  // weights
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &model3d_standard_fs_module,
+                    entry_point: "main",
+                    targets: &targets,
+                }),
+                primitive: primitive_back_face_culling,
+                depth_stencil: depth_stencil.clone(),
+                multisample,
+            });
 
-        let pipeline_model3d_fireball = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_model3d_layout),
-            vertex: wgpu::VertexState {
-                module: &model3d_fireball_vs_module,
-                entry_point: "main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x4, // position
-                        1 => Float32x2, // uv
-                        2 => Uint32x4,  // joints
-                        3 => Float32x4  // weights
-                    ],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &model3d_standard_fs_module,
-                entry_point: "main",
-                targets: &targets,
-            }),
-            primitive: primitive_back_face_culling,
-            depth_stencil,
-            multisample,
-        });
+        let pipeline_model3d_fireball =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_model3d_layout),
+                vertex: wgpu::VertexState {
+                    module: &model3d_fireball_vs_module,
+                    entry_point: "main",
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: mem::size_of::<ModelVertexAnimated>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![
+                            0 => Float32x4, // position
+                            1 => Float32x2, // uv
+                            2 => Uint32x4,  // joints
+                            3 => Float32x4  // weights
+                        ],
+                    }],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &model3d_standard_fs_module,
+                    entry_point: "main",
+                    targets: &targets,
+                }),
+                primitive: primitive_back_face_culling,
+                depth_stencil,
+                multisample,
+            });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -510,7 +537,7 @@ impl WgpuGraphics {
             bind_group_layout_model3d,
             sampler,
             prev_fullscreen: None,
-            frame_durations: vec!(),
+            frame_durations: vec![],
             fps: "".into(),
             bgm_metadata: None,
             width,
@@ -551,8 +578,7 @@ impl WgpuGraphics {
                             if render.is_none() {
                                 // restart loop so we can send more window events to the app thread
                                 return;
-                            }
-                            else {
+                            } else {
                                 break;
                             }
                         }
@@ -574,7 +600,6 @@ impl WgpuGraphics {
                 if let Some(event) = event.to_static() {
                     if let Err(_) = self.event_tx.send(event) {
                         *control_flow = ControlFlow::Exit;
-                        
                     }
                 }
             }
@@ -586,17 +611,30 @@ impl WgpuGraphics {
         // TODO: Refactor out the vec + enum once vulkano backend is removed
         for package_update in message.package_updates {
             match package_update {
-                PackageUpdate::Package (package) => {
+                PackageUpdate::Package(package) => {
                     self.package = Some(package);
                 }
-                PackageUpdate::DeleteFighterFrame { fighter, action, frame_index } => {
+                PackageUpdate::DeleteFighterFrame {
+                    fighter,
+                    action,
+                    frame_index,
+                } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.entities[fighter.as_ref()].actions[action.as_ref()].frames.remove(frame_index);
+                        package.entities[fighter.as_ref()].actions[action.as_ref()]
+                            .frames
+                            .remove(frame_index);
                     }
                 }
-                PackageUpdate::InsertFighterFrame { fighter, action, frame_index, frame } => {
+                PackageUpdate::InsertFighterFrame {
+                    fighter,
+                    action,
+                    frame_index,
+                    frame,
+                } => {
                     if let &mut Some(ref mut package) = &mut self.package {
-                        package.entities[fighter.as_ref()].actions[action.as_ref()].frames.insert(frame_index, frame);
+                        package.entities[fighter.as_ref()].actions[action.as_ref()]
+                            .frames
+                            .insert(frame_index, frame);
                     }
                 }
                 PackageUpdate::DeleteStage { index, .. } => {
@@ -634,13 +672,14 @@ impl WgpuGraphics {
         if self.prev_fullscreen.is_none() {
             self.prev_fullscreen = Some(!render.fullscreen); // force set fullscreen state on first update
         }
-        if render.fullscreen != self.prev_fullscreen.unwrap() { // Avoid needlessly recalling set_fullscreen(Some(..)) to avoid FPS drops on at least X11
+        if render.fullscreen != self.prev_fullscreen.unwrap() {
+            // Avoid needlessly recalling set_fullscreen(Some(..)) to avoid FPS drops on at least X11
             if render.fullscreen {
                 let monitor = self.window.current_monitor();
                 // TODO: Investigate exclusive fullscreen
-                self.window.set_fullscreen(Some(Fullscreen::Borderless(monitor)));
-            }
-            else {
+                self.window
+                    .set_fullscreen(Some(Fullscreen::Borderless(monitor)));
+            } else {
                 self.window.set_fullscreen(None);
             }
             self.prev_fullscreen = Some(render.fullscreen);
@@ -656,19 +695,21 @@ impl WgpuGraphics {
         } else {
             false
         };
-        self.window.set_cursor_visible(!render.fullscreen || in_game_paused);
+        self.window
+            .set_cursor_visible(!render.fullscreen || in_game_paused);
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: None
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         match &render.render_type {
-            RenderType::Game (render) => {
+            RenderType::Game(render) => {
                 self.models.load_game(&self.device, &self.queue, render);
             }
-            RenderType::Menu (render) => {
+            RenderType::Menu(render) => {
                 let fighters = &self.package.as_ref().unwrap().fighters(); // TODO: avoid recreating multiple times every frame
-                self.models.load_menu(&self.device, &self.queue, render, fighters);
+                self.models
+                    .load_menu(&self.device, &self.queue, render, fighters);
             }
         }
 
@@ -676,37 +717,42 @@ impl WgpuGraphics {
 
         let draws = match render.render_type {
             RenderType::Game(game) => self.game_render(game, &render.command_output),
-            RenderType::Menu(menu) => self.menu_render(menu, &render.command_output)
+            RenderType::Menu(menu) => self.menu_render(menu, &render.command_output),
         };
 
         let uniforms_bytes = {
             let uniforms_size = draws.iter().map(|x| x.ty.uniform_size_padded()).sum();
-            let mut uniforms_bytes = vec!(0; uniforms_size);
+            let mut uniforms_bytes = vec![0; uniforms_size];
             let mut uniforms_offset = 0;
             for draw in &draws {
-                let size        = draw.ty.uniform_size();
+                let size = draw.ty.uniform_size();
                 let size_padded = draw.ty.uniform_size_padded();
 
-                uniforms_bytes[uniforms_offset..uniforms_offset+size].copy_from_slice(draw.ty.uniform_bytes());
+                uniforms_bytes[uniforms_offset..uniforms_offset + size]
+                    .copy_from_slice(draw.ty.uniform_bytes());
                 uniforms_offset += size_padded;
             }
             uniforms_bytes
         };
 
         if uniforms_bytes.len() > self.uniforms_buffer_len {
-            self.uniforms_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: None,
-                contents: &uniforms_bytes,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-            });
+            self.uniforms_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: None,
+                        contents: &uniforms_bytes,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    });
             self.uniforms_buffer_len = uniforms_bytes.len();
-        }
-        else {
-            self.queue.write_buffer(&self.uniforms_buffer, 0, &uniforms_bytes);
+        } else {
+            self.queue
+                .write_buffer(&self.uniforms_buffer, 0, &uniforms_bytes);
         }
 
-        let view = &frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut bind_groups = vec!();
+        let view = &frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut bind_groups = vec![];
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 color_attachments: &[wgpu::RenderPassColorAttachment {
@@ -733,7 +779,7 @@ impl WgpuGraphics {
 
             let mut uniforms_offset = 0;
             for draw in &draws {
-                let uniform_resource = wgpu::BindingResource::Buffer(BufferBinding{
+                let uniform_resource = wgpu::BindingResource::Buffer(BufferBinding {
                     buffer: &self.uniforms_buffer,
                     offset: uniforms_offset,
                     size: NonZeroU64::new(draw.ty.uniform_size() as u64),
@@ -746,7 +792,7 @@ impl WgpuGraphics {
                             entries: &[wgpu::BindGroupEntry {
                                 binding: 0,
                                 resource: uniform_resource,
-                            }]
+                            }],
                         })
                     }
                     DrawType::Hitbox { .. } => {
@@ -756,13 +802,21 @@ impl WgpuGraphics {
                             entries: &[wgpu::BindGroupEntry {
                                 binding: 0,
                                 resource: uniform_resource,
-                            }]
+                            }],
                         })
                     }
-                    DrawType::ModelAnimated { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                    DrawType::Fireball      { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                    DrawType::ModelStatic   { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
-                    DrawType::Lava          { texture, .. } => self.create_bind_group_model3d(uniform_resource, texture),
+                    DrawType::ModelAnimated { texture, .. } => {
+                        self.create_bind_group_model3d(uniform_resource, texture)
+                    }
+                    DrawType::Fireball { texture, .. } => {
+                        self.create_bind_group_model3d(uniform_resource, texture)
+                    }
+                    DrawType::ModelStatic { texture, .. } => {
+                        self.create_bind_group_model3d(uniform_resource, texture)
+                    }
+                    DrawType::Lava { texture, .. } => {
+                        self.create_bind_group_model3d(uniform_resource, texture)
+                    }
                 };
                 bind_groups.push(bind_group);
                 uniforms_offset += draw.ty.uniform_size_padded() as u64;
@@ -770,14 +824,22 @@ impl WgpuGraphics {
 
             for (i, draw) in draws.iter().enumerate() {
                 let pipeline = match &draw.ty {
-                    DrawType::Color         { debug: false, dimension3: false, .. } => &self.pipeline_color_2d,
-                    DrawType::Color         { debug: false, dimension3: true,  .. } => &self.pipeline_color_3d,
-                    DrawType::Color         { debug: true,                     .. } => &self.pipeline_debug,
-                    DrawType::Hitbox        {                                  .. } => &self.pipeline_hitbox,
-                    DrawType::ModelAnimated {                                  .. } => &self.pipeline_model3d_animated,
-                    DrawType::ModelStatic   {                                  .. } => &self.pipeline_model3d_static,
-                    DrawType::Lava          {                                  .. } => &self.pipeline_model3d_static_lava,
-                    DrawType::Fireball      {                                  .. } => &self.pipeline_model3d_fireball,
+                    DrawType::Color {
+                        debug: false,
+                        dimension3: false,
+                        ..
+                    } => &self.pipeline_color_2d,
+                    DrawType::Color {
+                        debug: false,
+                        dimension3: true,
+                        ..
+                    } => &self.pipeline_color_3d,
+                    DrawType::Color { debug: true, .. } => &self.pipeline_debug,
+                    DrawType::Hitbox { .. } => &self.pipeline_hitbox,
+                    DrawType::ModelAnimated { .. } => &self.pipeline_model3d_animated,
+                    DrawType::ModelStatic { .. } => &self.pipeline_model3d_static,
+                    DrawType::Lava { .. } => &self.pipeline_model3d_static_lava,
+                    DrawType::Fireball { .. } => &self.pipeline_model3d_fireball,
                 };
                 rpass.set_pipeline(pipeline);
                 rpass.set_bind_group(0, &bind_groups[i], &[]);
@@ -786,14 +848,16 @@ impl WgpuGraphics {
                 rpass.draw_indexed(0..draw.buffers.index_count as u32, 0, 0..1);
             }
         }
-        self.glyph_brush.draw_queued(
-            &self.device,
-            &mut self.staging_belt.staging_belt,
-            &mut encoder,
-            view,
-            self.width,
-            self.height
-        ).unwrap();
+        self.glyph_brush
+            .draw_queued(
+                &self.device,
+                &mut self.staging_belt.staging_belt,
+                &mut encoder,
+                view,
+                self.width,
+                self.height,
+            )
+            .unwrap();
         self.staging_belt.finish();
 
         self.queue.submit(Some(encoder.finish()));
@@ -801,7 +865,11 @@ impl WgpuGraphics {
         self.staging_belt.recall();
     }
 
-    fn create_bind_group_model3d(&self, uniform: wgpu::BindingResource, texture: &Rc<Texture>) -> wgpu::BindGroup {
+    fn create_bind_group_model3d(
+        &self,
+        uniform: wgpu::BindingResource,
+        texture: &Rc<Texture>,
+    ) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bind_group_layout_model3d,
@@ -812,13 +880,15 @@ impl WgpuGraphics {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture.create_view(&wgpu::TextureViewDescriptor::default())),
+                    resource: wgpu::BindingResource::TextureView(
+                        &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
                 },
-            ]
+            ],
         })
     }
 
@@ -826,14 +896,12 @@ impl WgpuGraphics {
         // TODO: Render white text, with black background
         for (i, line) in lines.iter().enumerate() {
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(line)
+                text: vec![Text::new(line)
                     .with_color([1.0, 1.0, 0.0, 1.0])
                     .with_scale(20.0)
-                    .with_font_id(self.hack_font_id)
-                ),
+                    .with_font_id(self.hack_font_id)],
                 screen_position: (0.0, self.height as f32 - 25.0 - 20.0 * i as f32),
-                .. Section::default()
+                ..Section::default()
             });
         }
     }
@@ -843,13 +911,11 @@ impl WgpuGraphics {
             let minutes = timer.as_secs() / 60;
             let seconds = timer.as_secs() % 60;
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(format!("{:02}:{:02}", minutes, seconds).as_ref())
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(40.0)
-                ),
+                text: vec![Text::new(format!("{:02}:{:02}", minutes, seconds).as_ref())
+                    .with_color([1.0, 1.0, 1.0, 1.0])
+                    .with_scale(40.0)],
                 screen_position: ((self.width / 2) as f32 - 50.0, 4.0),
-                .. Section::default()
+                ..Section::default()
             });
         }
     }
@@ -857,8 +923,8 @@ impl WgpuGraphics {
     fn game_hud_render(&mut self, objects: &[RenderObject]) {
         let mut entities = 0;
         for object in objects {
-            if let RenderObject::Entity (entity) = object {
-                if let RenderEntityType::Player (_) = &entity.render_type {
+            if let RenderObject::Entity(entity) = object {
+                if let RenderEntityType::Player(_) = &entity.render_type {
                     entities += 1;
                 }
             }
@@ -867,11 +933,11 @@ impl WgpuGraphics {
 
         let mut location = -100.0;
         for object in objects {
-            if let RenderObject::Entity (entity) = object {
+            if let RenderObject::Entity(entity) = object {
                 location += distance;
-                if let RenderEntityType::Player (player) = &entity.render_type {
+                if let RenderEntityType::Player(player) = &entity.render_type {
                     match PlayerAction::from_str(&entity.frames[0].action) {
-                        Ok(PlayerAction::Eliminated) => { }
+                        Ok(PlayerAction::Eliminated) => {}
                         _ => {
                             let c = entity.fighter_color;
                             let color = [c[0], c[1], c[2], 1.0];
@@ -888,24 +954,20 @@ impl WgpuGraphics {
                                 };
 
                                 self.glyph_brush.queue(Section {
-                                    text: vec!(
-                                        Text::new(stocks_string.as_ref())
-                                            .with_color(color)
-                                            .with_scale(22.0)
-                                    ),
+                                    text: vec![Text::new(stocks_string.as_ref())
+                                        .with_color(color)
+                                        .with_scale(22.0)],
                                     screen_position: (location + 10.0, self.height as f32 - 130.0),
-                                    .. Section::default()
+                                    ..Section::default()
                                 });
                             }
 
                             self.glyph_brush.queue(Section {
-                                text: vec!(
-                                    Text::new(format!("{}%", player.damage).as_ref())
+                                text: vec![Text::new(format!("{}%", player.damage).as_ref())
                                     .with_color(color)
-                                    .with_scale(110.0)
-                                ),
+                                    .with_scale(110.0)],
                                 screen_position: (location, self.height as f32 - 117.0),
-                                .. Section::default()
+                                ..Section::default()
                             });
                         }
                     }
@@ -924,13 +986,11 @@ impl WgpuGraphics {
         }
 
         self.glyph_brush.queue(Section {
-            text: vec!(
-                Text::new(&self.fps)
+            text: vec![Text::new(&self.fps)
                 .with_color([1.0, 1.0, 1.0, 1.0])
-                .with_scale(20.0)
-            ),
+                .with_scale(20.0)],
             screen_position: (self.width as f32 - 70.0, 4.0),
-            .. Section::default()
+            ..Section::default()
         });
     }
 
@@ -945,50 +1005,46 @@ impl WgpuGraphics {
             }
 
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new("♪")
+                text: vec![Text::new("♪")
                     .with_color([1.0, 1.0, 1.0, 0.9])
-                    .with_scale(150.0)
-                ),
+                    .with_scale(150.0)],
                 screen_position: (80.0, 70.0),
-                .. Section::default()
+                ..Section::default()
             });
 
             let title = format!("{}\n", bgm_metadata.title);
             let artist = bgm_metadata.artist.map(|x| format!("{}\n", x));
             let album = bgm_metadata.album.map(|x| format!("{}\n", x));
 
-            let mut text = vec!(
-                Text::new(&title)
+            let mut text = vec![Text::new(&title)
                 .with_color([1.0, 1.0, 1.0, 0.9])
-                .with_scale(45.0)
-            );
+                .with_scale(45.0)];
 
             if let Some(artist) = &artist {
                 text.push(
                     Text::new(artist)
-                    .with_color([1.0, 1.0, 1.0, 0.9])
-                    .with_scale(20.0)
+                        .with_color([1.0, 1.0, 1.0, 0.9])
+                        .with_scale(20.0),
                 );
                 text.push(
                     Text::new("\n")
-                    .with_color([1.0, 1.0, 1.0, 0.9])
-                    .with_scale(5.0)
+                        .with_color([1.0, 1.0, 1.0, 0.9])
+                        .with_scale(5.0),
                 );
             }
 
             if let Some(album) = &album {
                 text.push(
                     Text::new(album)
-                    .with_color([1.0, 1.0, 1.0, 0.9])
-                    .with_scale(20.0)
+                        .with_color([1.0, 1.0, 1.0, 0.9])
+                        .with_scale(20.0),
                 );
             }
 
             self.glyph_brush.queue(Section {
                 text,
                 screen_position: (160.0, 100.0),
-                .. Section::default()
+                ..Section::default()
             });
         }
     }
@@ -997,14 +1053,12 @@ impl WgpuGraphics {
         if lines.len() > 1 {
             for (i, line) in lines.iter().enumerate() {
                 self.glyph_brush.queue(Section {
-                    text: vec!(
-                        Text::new(line)
-                            .with_color([1.0, 1.0, 0.0, 1.0])
-                            .with_scale(20.0)
-                            .with_font_id(self.hack_font_id)
-                    ),
+                    text: vec![Text::new(line)
+                        .with_color([1.0, 1.0, 0.0, 1.0])
+                        .with_scale(20.0)
+                        .with_font_id(self.hack_font_id)],
                     screen_position: (0.0, 12.0 + 20.0 * i as f32),
-                    .. Section::default()
+                    ..Section::default()
                 });
             }
         }
@@ -1012,11 +1066,11 @@ impl WgpuGraphics {
 
     fn render_hitbox_buffers(
         &self,
-        render:     &RenderGame,
-        buffers:    Rc<Buffers>,
-        entity:     &Matrix4<f32>,
+        render: &RenderGame,
+        buffers: Rc<Buffers>,
+        entity: &Matrix4<f32>,
         edge_color: [f32; 4],
-        color:      [f32; 4]
+        color: [f32; 4],
     ) -> Draw {
         let camera = render.camera.transform();
         let transformation = camera * entity;
@@ -1027,21 +1081,21 @@ impl WgpuGraphics {
         };
         Draw {
             ty: DrawType::Hitbox { uniform },
-            buffers
+            buffers,
         }
     }
 
     fn render_model3d(
         &self,
-        camera:          &Camera,
-        model:           &Model3D,
-        entity:          &Matrix4<f32>,
-        animation_name:  &str,
+        camera: &Camera,
+        model: &Model3D,
+        entity: &Matrix4<f32>,
+        animation_name: &str,
         animation_frame: f32,
         animation_frame_no_restart: f32,
     ) -> Vec<Draw> {
         let camera = camera.transform();
-        let mut draws = vec!();
+        let mut draws = vec![];
 
         for mesh in &model.meshes {
             let transform = (camera * entity * mesh.transform).into();
@@ -1054,7 +1108,13 @@ impl WgpuGraphics {
                             let mut joint_transforms = [Matrix4::identity().into(); 500];
                             for root_joint in &mesh.root_joints {
                                 if let Some(animation) = model.animations.get(animation_name) {
-                                    animation::generate_joint_transforms(animation, animation_frame, root_joint, Matrix4::identity(), &mut joint_transforms);
+                                    animation::generate_joint_transforms(
+                                        animation,
+                                        animation_frame,
+                                        root_joint,
+                                        Matrix4::identity(),
+                                        &mut joint_transforms,
+                                    );
                                 }
                             }
 
@@ -1064,7 +1124,9 @@ impl WgpuGraphics {
                                 frame_count: animation_frame_no_restart,
                             };
                             let ty = match primitive.shader_type {
-                                ShaderType::Standard | ShaderType::Lava => DrawType::ModelAnimated { uniform, texture },
+                                ShaderType::Standard | ShaderType::Lava => {
+                                    DrawType::ModelAnimated { uniform, texture }
+                                }
                                 ShaderType::Fireball => DrawType::Fireball { uniform, texture },
                             };
                             Draw { ty, buffers }
@@ -1077,7 +1139,7 @@ impl WgpuGraphics {
                                         frame_count: animation_frame_no_restart,
                                     };
                                     DrawType::Lava { uniform, texture }
-                                },
+                                }
                                 ShaderType::Standard | ShaderType::Fireball => {
                                     let uniform = TransformUniform { transform };
                                     DrawType::ModelStatic { uniform, texture }
@@ -1098,24 +1160,30 @@ impl WgpuGraphics {
 
     fn render_color_buffers(
         &self,
-        render:     &RenderGame,
-        buffers:    Rc<Buffers>,
-        entity:     &Matrix4<f32>,
-        debug:      bool,
-        dimension3: bool
+        render: &RenderGame,
+        buffers: Rc<Buffers>,
+        entity: &Matrix4<f32>,
+        debug: bool,
+        dimension3: bool,
     ) -> Draw {
         let camera = render.camera.transform();
         let transformation = camera * entity;
-        let uniform = TransformUniform { transform: transformation.into() };
+        let uniform = TransformUniform {
+            transform: transformation.into(),
+        };
 
         Draw {
-            ty: DrawType::Color { uniform, debug, dimension3 },
-            buffers
+            ty: DrawType::Color {
+                uniform,
+                debug,
+                dimension3,
+            },
+            buffers,
         }
     }
 
     fn game_render(&mut self, render: RenderGame, command_output: &[String]) -> Vec<Draw> {
-        let mut draws = vec!();
+        let mut draws = vec![];
         let mut rng = StdRng::from_seed(render.seed);
         if command_output.is_empty() {
             self.game_hud_render(&render.entities);
@@ -1123,13 +1191,12 @@ impl WgpuGraphics {
             self.debug_lines_render(&render.debug_lines);
             self.fps_render();
             self.bgm_change(&render);
-        }
-        else {
+        } else {
             self.command_render(command_output);
         }
 
         match render.state {
-            GameState::Local  => { }
+            GameState::Local => {}
             GameState::Paused => {
                 // TODO: blue vaporwavey background lines to indicate pause :D
                 // also double as measuring/scale lines
@@ -1137,7 +1204,7 @@ impl WgpuGraphics {
                 // but this might be desirable to have during normal gameplay to, hmmmm....
                 // Just have a 5 second fade out time so it doesnt look clunky and can be used during frame advance
             }
-            _ => { }
+            _ => {}
         }
 
         let stage_transformation = Matrix4::identity();
@@ -1149,32 +1216,62 @@ impl WgpuGraphics {
                     &stage_transformation,
                     "Main",
                     (render.current_frame % 300) as f32, // TODO: Somehow get the animation length from the gltf
-                    render.current_frame as f32
+                    render.current_frame as f32,
                 ));
             }
         }
 
         if render.render_stage_mode.debug() {
             if let Some(buffers) = Buffers::new_surfaces(&self.device, &render.surfaces) {
-                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
+                draws.push(self.render_color_buffers(
+                    &render,
+                    buffers,
+                    &stage_transformation,
+                    false,
+                    false,
+                ));
             }
 
             if let Some(buffers) = Buffers::new_surfaces_fill(&self.device, &render.surfaces) {
-                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
+                draws.push(self.render_color_buffers(
+                    &render,
+                    buffers,
+                    &stage_transformation,
+                    false,
+                    false,
+                ));
             }
 
-            if let Some(buffers) = Buffers::new_selected_surfaces(&self.device, &render.surfaces, &render.selected_surfaces) {
-                draws.push(self.render_color_buffers(&render, buffers, &stage_transformation, false, false));
+            if let Some(buffers) = Buffers::new_selected_surfaces(
+                &self.device,
+                &render.surfaces,
+                &render.selected_surfaces,
+            ) {
+                draws.push(self.render_color_buffers(
+                    &render,
+                    buffers,
+                    &stage_transformation,
+                    false,
+                    false,
+                ));
             }
         }
 
         for entity in render.entities.iter() {
             match entity {
-                RenderObject::Entity (entity) => {
+                RenderObject::Entity(entity) => {
                     fn entity_matrix(frame: &RenderEntityFrame) -> Matrix4<f32> {
-                        let dir = Matrix4::from_nonuniform_scale(if frame.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
+                        let dir = Matrix4::from_nonuniform_scale(
+                            if frame.face_right { 1.0 } else { -1.0 },
+                            1.0,
+                            1.0,
+                        );
                         let rotate = Matrix4::from_angle_z(Rad(frame.frame_angle));
-                        let position = Matrix4::from_translation(Vector3::new(frame.frame_bps.0, frame.frame_bps.1, 0.0));
+                        let position = Matrix4::from_translation(Vector3::new(
+                            frame.frame_bps.0,
+                            frame.frame_bps.1,
+                            0.0,
+                        ));
                         position * rotate * dir
                     }
 
@@ -1183,11 +1280,15 @@ impl WgpuGraphics {
                     // draw entity
                     let action = &entity.frames[0].action;
                     match PlayerAction::from_str(action) {
-                        Ok(PlayerAction::Eliminated) => { }
+                        Ok(PlayerAction::Eliminated) => {}
                         _ => {
                             let fighter_model_name = &entity.frames[0].model_name;
                             if entity.debug.render.normal() && entity.visible {
-                                let dir = Matrix4::from_angle_y(if entity.frames[0].face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+                                let dir = Matrix4::from_angle_y(if entity.frames[0].face_right {
+                                    Rad::turn_div_4()
+                                } else {
+                                    -Rad::turn_div_4()
+                                });
                                 let rotate: Matrix4<f32> = entity.frames[0].render_angle.into();
                                 let position = Matrix4::from_translation(Vector3::new(
                                     entity.frames[0].render_bps.0,
@@ -1202,7 +1303,7 @@ impl WgpuGraphics {
                                         &transformation,
                                         action,
                                         entity.frames[0].frame as f32,
-                                        entity.frames[0].frame_no_restart as f32
+                                        entity.frames[0].frame_no_restart as f32,
                                     ));
                                 }
                             }
@@ -1213,12 +1314,30 @@ impl WgpuGraphics {
                     if entity.debug.ecb {
                         if let Some(ecb) = &entity.frames[0].ecb {
                             // TODO: Set individual corner vertex colours to show which points of the ecb are selected
-                            let buffers  = Buffers::new_ecb(&self.device, ecb);
-                            let dir      = Matrix4::from_nonuniform_scale(if entity.frames[0].face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                            let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
+                            let buffers = Buffers::new_ecb(&self.device, ecb);
+                            let dir = Matrix4::from_nonuniform_scale(
+                                if entity.frames[0].face_right {
+                                    1.0
+                                } else {
+                                    -1.0
+                                },
+                                1.0,
+                                1.0,
+                            );
+                            let position = Matrix4::from_translation(Vector3::new(
+                                entity.frames[0].frame_bps.0,
+                                entity.frames[0].frame_bps.1,
+                                0.0,
+                            ));
                             let transformation = position * dir;
 
-                            draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
+                            draws.push(self.render_color_buffers(
+                                &render,
+                                buffers,
+                                &transformation,
+                                false,
+                                false,
+                            ));
                         }
                     }
 
@@ -1226,24 +1345,54 @@ impl WgpuGraphics {
                     if entity.debug.render.debug() {
                         if entity.debug.render.onion_skin() {
                             if let Some(frame) = entity.frames.get(2) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, self.package.as_ref().unwrap(), &frame.entity_def_key, &frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(
+                                    &self.device,
+                                    self.package.as_ref().unwrap(),
+                                    &frame.entity_def_key,
+                                    &frame.action,
+                                    frame.frame,
+                                ) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.4, 0.4, 0.4, 0.4];
-                                    draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
+                                    draws.push(self.render_hitbox_buffers(
+                                        &render,
+                                        buffers,
+                                        &transformation,
+                                        onion_color,
+                                        onion_color,
+                                    ));
                                 }
                             }
 
                             if let Some(frame) = entity.frames.get(1) {
-                                if let Some(buffers) = Buffers::new_fighter_frame(&self.device, self.package.as_ref().unwrap(), &frame.entity_def_key, &frame.action, frame.frame) {
+                                if let Some(buffers) = Buffers::new_fighter_frame(
+                                    &self.device,
+                                    self.package.as_ref().unwrap(),
+                                    &frame.entity_def_key,
+                                    &frame.action,
+                                    frame.frame,
+                                ) {
                                     let transformation = entity_matrix(frame);
                                     let onion_color = [0.80, 0.80, 0.80, 0.9];
-                                    draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, onion_color, onion_color));
+                                    draws.push(self.render_hitbox_buffers(
+                                        &render,
+                                        buffers,
+                                        &transformation,
+                                        onion_color,
+                                        onion_color,
+                                    ));
                                 }
                             }
                         }
 
                         // draw entity
-                        if let Some(buffers) = Buffers::new_fighter_frame(&self.device, self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, &entity.frames[0].action, entity.frames[0].frame) {
+                        if let Some(buffers) = Buffers::new_fighter_frame(
+                            &self.device,
+                            self.package.as_ref().unwrap(),
+                            &entity.frames[0].entity_def_key,
+                            &entity.frames[0].action,
+                            entity.frames[0].frame,
+                        ) {
                             let color = [0.9, 0.9, 0.9, 1.0];
                             let edge_color = if entity.entity_selected {
                                 [0.0, 1.0, 0.0, 1.0]
@@ -1251,39 +1400,79 @@ impl WgpuGraphics {
                                 let c = entity.fighter_color;
                                 [c[0], c[1], c[2], 1.0]
                             };
-                            draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, edge_color, color));
-                        }
-                        else {
-                             // TODO: Give some indication that we are rendering a deleted or otherwise nonexistent frame
+                            draws.push(self.render_hitbox_buffers(
+                                &render,
+                                buffers,
+                                &transformation,
+                                edge_color,
+                                color,
+                            ));
+                        } else {
+                            // TODO: Give some indication that we are rendering a deleted or otherwise nonexistent frame
                         }
                     }
 
                     // draw selected colboxes
                     if !entity.selected_colboxes.is_empty() {
                         let color = [0.0, 1.0, 0.0, 1.0];
-                        let buffers = Buffers::new_fighter_frame_colboxes(&self.device, self.package.as_ref().unwrap(), &entity.frames[0].entity_def_key, &entity.frames[0].action, entity.frames[0].frame, &entity.selected_colboxes);
-                        draws.push(self.render_hitbox_buffers(&render, buffers, &transformation, color, color));
+                        let buffers = Buffers::new_fighter_frame_colboxes(
+                            &self.device,
+                            self.package.as_ref().unwrap(),
+                            &entity.frames[0].entity_def_key,
+                            &entity.frames[0].action,
+                            entity.frames[0].frame,
+                            &entity.selected_colboxes,
+                        );
+                        draws.push(self.render_hitbox_buffers(
+                            &render,
+                            buffers,
+                            &transformation,
+                            color,
+                            color,
+                        ));
                     }
 
                     // draw hitbox debug arrows
                     // TODO: this should be usable for all entities
                     if entity.debug.hitbox_vectors {
                         // TODO: lets move these to the WgpuGraphics struct
-                        let kbg_arrow = Buffers::new_arrow(&self.device, [1.0,  1.0,  1.0, 1.0]);
+                        let kbg_arrow = Buffers::new_arrow(&self.device, [1.0, 1.0, 1.0, 1.0]);
                         let bkb_arrow = Buffers::new_arrow(&self.device, [0.17, 0.17, 1.0, 1.0]);
                         for colbox in entity.frame_data.colboxes.iter() {
                             if let CollisionBoxRole::Hit(ref hitbox) = colbox.role {
                                 let kb_squish = 0.5;
-                                let squish_kbg = Matrix4::from_nonuniform_scale(0.6, hitbox.kbg * kb_squish, 1.0);
-                                let squish_bkb = Matrix4::from_nonuniform_scale(0.3, (hitbox.bkb / 100.0) * kb_squish, 1.0); // divide by 100 so the arrows are comparable if the hit fighter is on 100%
-                                let rotate = Matrix4::from_angle_z(Rad(hitbox.angle.to_radians() - f32::consts::PI / 2.0));
+                                let squish_kbg = Matrix4::from_nonuniform_scale(
+                                    0.6,
+                                    hitbox.kbg * kb_squish,
+                                    1.0,
+                                );
+                                let squish_bkb = Matrix4::from_nonuniform_scale(
+                                    0.3,
+                                    (hitbox.bkb / 100.0) * kb_squish,
+                                    1.0,
+                                ); // divide by 100 so the arrows are comparable if the hit fighter is on 100%
+                                let rotate = Matrix4::from_angle_z(Rad(
+                                    hitbox.angle.to_radians() - f32::consts::PI / 2.0
+                                ));
                                 let x = entity.frames[0].frame_bps.0 + colbox.point.0;
                                 let y = entity.frames[0].frame_bps.1 + colbox.point.1;
                                 let position = Matrix4::from_translation(Vector3::new(x, y, 0.0));
                                 let transformation_bkb = position * rotate * squish_bkb;
                                 let transformation_kbg = position * rotate * squish_kbg;
-                                draws.push(self.render_color_buffers(&render, kbg_arrow.clone(), &transformation_kbg, false, false));
-                                draws.push(self.render_color_buffers(&render, bkb_arrow.clone(), &transformation_bkb, false, false));
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    kbg_arrow.clone(),
+                                    &transformation_kbg,
+                                    false,
+                                    false,
+                                ));
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    bkb_arrow.clone(),
+                                    &transformation_bkb,
+                                    false,
+                                    false,
+                                ));
                             }
                         }
                     }
@@ -1292,11 +1481,27 @@ impl WgpuGraphics {
                     let num_arrows = entity.vector_arrows.len() as f32;
                     for (i, arrow) in entity.vector_arrows.iter().enumerate() {
                         let arrow_buffers = Buffers::new_arrow(&self.device, arrow.color);
-                        let squish = Matrix4::from_nonuniform_scale((num_arrows - i as f32) / num_arrows, 1.0, 1.0); // consecutive arrows are drawn slightly thinner so we can see arrows behind
-                        let rotate = Matrix4::from_angle_z(Rad(arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0));
-                        let position = Matrix4::from_translation(Vector3::new(entity.frames[0].frame_bps.0, entity.frames[0].frame_bps.1, 0.0));
+                        let squish = Matrix4::from_nonuniform_scale(
+                            (num_arrows - i as f32) / num_arrows,
+                            1.0,
+                            1.0,
+                        ); // consecutive arrows are drawn slightly thinner so we can see arrows behind
+                        let rotate = Matrix4::from_angle_z(Rad(
+                            arrow.y.atan2(arrow.x) - f32::consts::PI / 2.0
+                        ));
+                        let position = Matrix4::from_translation(Vector3::new(
+                            entity.frames[0].frame_bps.0,
+                            entity.frames[0].frame_bps.1,
+                            0.0,
+                        ));
                         let transformation = position * rotate * squish;
-                        draws.push(self.render_color_buffers(&render, arrow_buffers, &transformation, false, false));
+                        draws.push(self.render_color_buffers(
+                            &render,
+                            arrow_buffers,
+                            &transformation,
+                            false,
+                            false,
+                        ));
                     }
 
                     // draw particles
@@ -1309,35 +1514,70 @@ impl WgpuGraphics {
                                     * Matrix4::from_angle_z(Rad(particle.angle));
                                 let size = size * (1.0 - particle.counter_mult());
                                 let size = Matrix4::from_nonuniform_scale(size, size, 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
+                                let position = Matrix4::from_translation(Vector3::new(
+                                    particle.x, particle.y, particle.z,
+                                ));
                                 let transformation = position * rotate * size;
                                 let color = [c[0], c[1], c[2], 1.0];
                                 let triangle_buffers = Buffers::new_triangle(&self.device, color);
-                                draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    triangle_buffers,
+                                    &transformation,
+                                    false,
+                                    false,
+                                ));
                             }
                             &ParticleType::AirJump => {
-                                let size = Matrix4::from_nonuniform_scale(3.0 + particle.counter_mult(), 1.15 + particle.counter_mult(), 1.0);
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
+                                let size = Matrix4::from_nonuniform_scale(
+                                    3.0 + particle.counter_mult(),
+                                    1.15 + particle.counter_mult(),
+                                    1.0,
+                                );
+                                let position = Matrix4::from_translation(Vector3::new(
+                                    particle.x, particle.y, particle.z,
+                                ));
                                 let transformation = position * size;
-                                let color = [c[0], c[1], c[2], (1.0 - particle.counter_mult()) * 0.7];
+                                let color =
+                                    [c[0], c[1], c[2], (1.0 - particle.counter_mult()) * 0.7];
                                 let jump_buffers = Buffers::new_circle(&self.device, color);
-                                draws.push(self.render_color_buffers(&render, jump_buffers, &transformation, false, false));
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    jump_buffers,
+                                    &transformation,
+                                    false,
+                                    false,
+                                ));
                             }
                             &ParticleType::Hit { knockback, damage } => {
                                 // needs to rendered last to ensure we dont have anything drawn on top of the inversion
-                                let size = Matrix4::from_nonuniform_scale(0.2 * knockback, 0.08 * damage, 1.0);
-                                let rotate = Matrix4::from_angle_z(Rad(particle.angle - f32::consts::PI / 2.0));
-                                let position = Matrix4::from_translation(Vector3::new(particle.x, particle.y, particle.z));
+                                let size = Matrix4::from_nonuniform_scale(
+                                    0.2 * knockback,
+                                    0.08 * damage,
+                                    1.0,
+                                );
+                                let rotate = Matrix4::from_angle_z(Rad(
+                                    particle.angle - f32::consts::PI / 2.0
+                                ));
+                                let position = Matrix4::from_translation(Vector3::new(
+                                    particle.x, particle.y, particle.z,
+                                ));
                                 let transformation = position * rotate * size;
                                 let color = [0.5, 0.5, 0.5, 1.5];
                                 let hit_buffers = Buffers::new_circle(&self.device, color);
-                                draws.push(self.render_color_buffers(&render, hit_buffers, &transformation, false, false)); // TODO: Invert
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    hit_buffers,
+                                    &transformation,
+                                    false,
+                                    false,
+                                )); // TODO: Invert
                             }
                         }
                     }
 
                     // Draw spawn plat
-                    if let RenderEntityType::Player (_) = entity.render_type {
+                    if let RenderEntityType::Player(_) = entity.render_type {
                         match PlayerAction::from_str(&entity.frames[0].action) {
                             Ok(PlayerAction::ReSpawn) | Ok(PlayerAction::ReSpawnIdle) => {
                                 // TODO: get width from player dimensions
@@ -1345,30 +1585,60 @@ impl WgpuGraphics {
                                 let height = width / 4.0;
                                 let scale = Matrix4::from_nonuniform_scale(width, -height, 1.0); // negative y to point triangle downwards.
                                 let frame_bps = &entity.frames[0].frame_bps;
-                                let position = Matrix4::from_translation(Vector3::new(frame_bps.0, frame_bps.1, 0.0));
+                                let position = Matrix4::from_translation(Vector3::new(
+                                    frame_bps.0,
+                                    frame_bps.1,
+                                    0.0,
+                                ));
                                 let transformation = position * scale;
 
                                 let c = entity.fighter_color;
                                 let color = [c[0], c[1], c[2], 1.0];
                                 let triangle_buffers = Buffers::new_triangle(&self.device, color);
 
-                                draws.push(self.render_color_buffers(&render, triangle_buffers, &transformation, false, false));
+                                draws.push(self.render_color_buffers(
+                                    &render,
+                                    triangle_buffers,
+                                    &transformation,
+                                    false,
+                                    false,
+                                ));
                             }
-                            _ => { }
+                            _ => {}
                         }
                     }
                 }
-                RenderObject::RectOutline (render_rect) => {
+                RenderObject::RectOutline(render_rect) => {
                     let transformation = Matrix4::identity();
                     let buffers = Buffers::rect_outline_buffers(&self.device, render_rect);
-                    draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
+                    draws.push(self.render_color_buffers(
+                        &render,
+                        buffers,
+                        &transformation,
+                        false,
+                        false,
+                    ));
                 }
-                RenderObject::SpawnPoint (render_point) => {
+                RenderObject::SpawnPoint(render_point) => {
                     let buffers = Buffers::new_spawn_point(&self.device, render_point.color);
-                    let flip = Matrix4::from_nonuniform_scale(if render_point.face_right { 1.0 } else { -1.0 }, 1.0, 1.0);
-                    let position = Matrix4::from_translation(Vector3::new(render_point.x, render_point.y, 0.0));
+                    let flip = Matrix4::from_nonuniform_scale(
+                        if render_point.face_right { 1.0 } else { -1.0 },
+                        1.0,
+                        1.0,
+                    );
+                    let position = Matrix4::from_translation(Vector3::new(
+                        render_point.x,
+                        render_point.y,
+                        0.0,
+                    ));
                     let transformation = position * flip;
-                    draws.push(self.render_color_buffers(&render, buffers, &transformation, false, false));
+                    draws.push(self.render_color_buffers(
+                        &render,
+                        buffers,
+                        &transformation,
+                        false,
+                        false,
+                    ));
                 }
             }
         }
@@ -1376,23 +1646,34 @@ impl WgpuGraphics {
         // Some things need to be rendered after everything else as they are transparent
         for entity in render.entities.iter() {
             match entity {
-                RenderObject::Entity (entity) => {
-                    if let RenderEntityType::Player (player) = &entity.render_type {
+                RenderObject::Entity(entity) => {
+                    if let RenderEntityType::Player(player) = &entity.render_type {
                         // draw shield
                         if let Some(shield) = &player.shield {
-                            let position = Matrix4::from_translation(Vector3::new(shield.pos.0, shield.pos.1, 0.0));
+                            let position = Matrix4::from_translation(Vector3::new(
+                                shield.pos.0,
+                                shield.pos.1,
+                                0.0,
+                            ));
                             let color = if shield.distort > 0 {
                                 let c = shield.color;
-                                [c[0] * rng.gen_range(0.75..=1.25), c[1] * rng.gen_range(0.75..=1.25), c[2] * rng.gen_range(0.75..=1.25), c[3] * rng.gen_range(0.8..=1.2)]
+                                [
+                                    c[0] * rng.gen_range(0.75..=1.25),
+                                    c[1] * rng.gen_range(0.75..=1.25),
+                                    c[2] * rng.gen_range(0.75..=1.25),
+                                    c[3] * rng.gen_range(0.8..=1.2),
+                                ]
                             } else {
                                 shield.color
                             };
                             let buffers = Buffers::new_shield(&self.device, shield, color);
-                            draws.push(self.render_color_buffers(&render, buffers, &position, false, true));
+                            draws.push(
+                                self.render_color_buffers(&render, buffers, &position, false, true),
+                            );
                         }
                     }
                 }
-                _ => { }
+                _ => {}
             }
         }
 
@@ -1401,19 +1682,19 @@ impl WgpuGraphics {
 
     fn menu_render(&mut self, render: RenderMenu, command_output: &[String]) -> Vec<Draw> {
         self.fps_render();
-        let mut draws = vec!();
+        let mut draws = vec![];
 
         match render.state {
-            RenderMenuState::GameSelect (selection) => {
+            RenderMenuState::GameSelect(selection) => {
                 self.draw_game_selector(selection);
                 self.command_render(command_output);
             }
-            RenderMenuState::ReplaySelect (replay_names, selection) => {
+            RenderMenuState::ReplaySelect(replay_names, selection) => {
                 self.draw_replay_selector(&replay_names, selection);
                 self.command_render(command_output);
             }
-            RenderMenuState::CharacterSelect (selections, back_counter, back_counter_max) => {
-                let mut plugged_in_selections: Vec<(&PlayerSelect, usize)> = vec!();
+            RenderMenuState::CharacterSelect(selections, back_counter, back_counter_max) => {
+                let mut plugged_in_selections: Vec<(&PlayerSelect, usize)> = vec![];
                 for (i, selection) in selections.iter().enumerate() {
                     if selection.ui.is_visible() {
                         plugged_in_selections.push((selection, i));
@@ -1422,65 +1703,133 @@ impl WgpuGraphics {
 
                 draws.push(self.draw_back_counter(back_counter, back_counter_max));
                 self.glyph_brush.queue(Section {
-                    text: vec!(
-                        Text::new("Select Fighters")
+                    text: vec![Text::new("Select Fighters")
                         .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(50.0)
-                    ),
+                        .with_scale(50.0)],
                     screen_position: (100.0, 4.0),
-                    .. Section::default()
+                    ..Section::default()
                 });
 
                 match plugged_in_selections.len() {
                     0 => {
                         self.glyph_brush.queue(Section {
-                            text: vec!(
-                                Text::new("There are no controllers plugged in.")
-                                    .with_color([1.0, 1.0, 1.0, 1.0])
-                                    .with_scale(30.0)
-                            ),
+                            text: vec![Text::new("There are no controllers plugged in.")
+                                .with_color([1.0, 1.0, 1.0, 1.0])
+                                .with_scale(30.0)],
                             screen_position: (100.0, 100.0),
-                            .. Section::default()
+                            ..Section::default()
                         });
                     }
                     1 => {
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 0, -0.9, -0.8, 0.9, 0.9));
-
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            0,
+                            -0.9,
+                            -0.8,
+                            0.9,
+                            0.9,
+                        ));
                     }
                     2 => {
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 0, -0.9, -0.8, 0.0, 0.9));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 1,  0.0, -0.8, 0.9, 0.9));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            0,
+                            -0.9,
+                            -0.8,
+                            0.0,
+                            0.9,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            1,
+                            0.0,
+                            -0.8,
+                            0.9,
+                            0.9,
+                        ));
                     }
                     3 => {
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 0, -0.9, -0.8, 0.0, 0.0));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 1,  0.0, -0.8, 0.9, 0.0));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 2, -0.9,  0.0, 0.0, 0.9));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            0,
+                            -0.9,
+                            -0.8,
+                            0.0,
+                            0.0,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            1,
+                            0.0,
+                            -0.8,
+                            0.9,
+                            0.0,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            2,
+                            -0.9,
+                            0.0,
+                            0.0,
+                            0.9,
+                        ));
                     }
                     4 => {
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 0, -0.9, -0.8, 0.0, 0.0));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 1,  0.0, -0.8, 0.9, 0.0));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 2, -0.9,  0.0, 0.0, 0.9));
-                        draws.extend(self.draw_fighter_selector(&plugged_in_selections, 3,  0.0,  0.0, 0.9, 0.9));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            0,
+                            -0.9,
+                            -0.8,
+                            0.0,
+                            0.0,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            1,
+                            0.0,
+                            -0.8,
+                            0.9,
+                            0.0,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            2,
+                            -0.9,
+                            0.0,
+                            0.0,
+                            0.9,
+                        ));
+                        draws.extend(self.draw_fighter_selector(
+                            &plugged_in_selections,
+                            3,
+                            0.0,
+                            0.0,
+                            0.9,
+                            0.9,
+                        ));
                     }
                     _ => {
                         self.glyph_brush.queue(Section {
-                            text: vec!(
-                                Text::new("Currently only supports up to 4 controllers. Please unplug some.")
-                                    .with_color([1.0, 1.0, 1.0, 1.0])
-                                    .with_scale(30.0)
-                            ),
+                            text: vec![Text::new(
+                                "Currently only supports up to 4 controllers. Please unplug some.",
+                            )
+                            .with_color([1.0, 1.0, 1.0, 1.0])
+                            .with_scale(30.0)],
                             screen_position: (100.0, 100.0),
-                            .. Section::default()
+                            ..Section::default()
                         });
                     }
                 }
                 self.command_render(command_output);
             }
-            RenderMenuState::StageSelect (selection) => {
+            RenderMenuState::StageSelect(selection) => {
                 draws.extend(self.draw_stage_selector(selection));
                 self.command_render(command_output);
             }
-            RenderMenuState::GameResults { results, replay_saved } => {
+            RenderMenuState::GameResults {
+                results,
+                replay_saved,
+            } => {
                 let max = results.len() as f32;
                 for (i, result) in results.iter().enumerate() {
                     let i = i as f32;
@@ -1490,25 +1839,21 @@ impl WgpuGraphics {
 
                 if replay_saved {
                     self.glyph_brush.queue(Section {
-                        text: vec!(
-                            Text::new("Replay saved!")
-                                .with_color([1.0, 1.0, 1.0, 1.0])
-                                .with_scale(30.0)
-                        ),
+                        text: vec![Text::new("Replay saved!")
+                            .with_color([1.0, 1.0, 1.0, 1.0])
+                            .with_scale(30.0)],
                         screen_position: (30.0, self.height as f32 - 30.0),
-                        .. Section::default()
+                        ..Section::default()
                     });
                 }
             }
-            RenderMenuState::GenericText (ref text) => {
+            RenderMenuState::GenericText(ref text) => {
                 self.glyph_brush.queue(Section {
-                    text: vec!(
-                        Text::new(text)
+                    text: vec![Text::new(text)
                         .with_color([1.0, 1.0, 0.0, 1.0])
-                        .with_scale(30.0)
-                    ),
+                        .with_scale(30.0)],
                     screen_position: (100.0, 50.0),
-                    .. Section::default()
+                    ..Section::default()
                 });
             }
         }
@@ -1518,42 +1863,36 @@ impl WgpuGraphics {
 
     fn draw_game_selector(&mut self, selection: usize) {
         self.glyph_brush.queue(Section {
-            text: vec!(
-                Text::new("Select Game Mode")
+            text: vec![Text::new("Select Game Mode")
                 .with_color([1.0, 1.0, 1.0, 1.0])
-                .with_scale(50.0)
-            ),
+                .with_scale(50.0)],
             screen_position: (100.0, 4.0),
-            .. Section::default()
+            ..Section::default()
         });
 
-        let modes = vec!("Local", "Netplay", "Replays");
+        let modes = vec!["Local", "Netplay", "Replays"];
         for (mode_i, name) in modes.iter().enumerate() {
             let size = 26.0; // TODO: determine from width/height of screen and start/end pos
             let x_offset = if mode_i == selection { 0.1 } else { 0.0 };
             let x = self.width as f32 * (0.1 + x_offset);
             let y = self.height as f32 * 0.1 + mode_i as f32 * 50.0;
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(name)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(size)
-                ),
+                text: vec![Text::new(name)
+                    .with_color([1.0, 1.0, 1.0, 1.0])
+                    .with_scale(size)],
                 screen_position: (x, y),
-                .. Section::default()
+                ..Section::default()
             });
         }
     }
 
     fn draw_replay_selector(&mut self, replay_names: &[String], selection: usize) {
         self.glyph_brush.queue(Section {
-            text: vec!(
-                Text::new("Select Replay")
-                    .with_color([1.0, 1.0, 1.0, 1.0])
-                    .with_scale(50.0)
-            ),
+            text: vec![Text::new("Select Replay")
+                .with_color([1.0, 1.0, 1.0, 1.0])
+                .with_scale(50.0)],
             screen_position: (100.0, 4.0),
-            .. Section::default()
+            ..Section::default()
         });
 
         for (replay_i, name) in replay_names.iter().enumerate() {
@@ -1562,13 +1901,11 @@ impl WgpuGraphics {
             let x = self.width as f32 * (0.1 + x_offset);
             let y = self.height as f32 * 0.1 + replay_i as f32 * 50.0;
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(name.as_ref())
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(size)
-                ),
+                text: vec![Text::new(name.as_ref())
+                    .with_color([1.0, 1.0, 1.0, 1.0])
+                    .with_scale(size)],
                 screen_position: (x, y),
-                .. Section::default()
+                ..Section::default()
             });
         }
     }
@@ -1593,19 +1930,27 @@ impl WgpuGraphics {
                 debug: true,
                 dimension3: false,
             },
-            buffers
+            buffers,
         }
     }
 
-    fn draw_fighter_selector(&mut self, selections: &[(&PlayerSelect, usize)], i: usize, start_x: f32, start_y: f32, end_x: f32, end_y: f32) -> Vec<Draw> {
-        let mut draws = vec!();
+    fn draw_fighter_selector(
+        &mut self,
+        selections: &[(&PlayerSelect, usize)],
+        i: usize,
+        start_x: f32,
+        start_y: f32,
+        end_x: f32,
+        end_y: f32,
+    ) -> Vec<Draw> {
+        let mut draws = vec![];
         let fighters = &self.package.as_ref().unwrap().fighters();
         let (selection, controller_i) = selections[i];
 
         // render player name
         {
-            let x = ((start_x+1.0) / 2.0) * self.width  as f32;
-            let y = ((start_y+1.0) / 2.0) * self.height as f32;
+            let x = ((start_x + 1.0) / 2.0) * self.width as f32;
+            let y = ((start_y + 1.0) / 2.0) * self.height as f32;
             let size = 26.0; // TODO: determine from width/height of screen and start/end pos
             let color = if let Some((check_i, _)) = selection.controller {
                 // Use the team color of the controller currently manipulating this selection
@@ -1621,84 +1966,80 @@ impl WgpuGraphics {
                 [0.5, 0.5, 0.5, 1.0]
             };
             let name = match selection.ui {
-                PlayerSelectUi::CpuAi        (_) => "CPU AI".to_string(),
-                PlayerSelectUi::CpuFighter   (_) => "CPU Fighter".to_string(),
-                PlayerSelectUi::HumanFighter (_) => format!("Port #{}", controller_i+1),
-                PlayerSelectUi::HumanTeam    (_) => format!("Port #{} Team", controller_i+1),
-                PlayerSelectUi::CpuTeam      (_) => "CPU Team".to_string(),
-                PlayerSelectUi::HumanUnplugged   => unreachable!()
+                PlayerSelectUi::CpuAi(_) => "CPU AI".to_string(),
+                PlayerSelectUi::CpuFighter(_) => "CPU Fighter".to_string(),
+                PlayerSelectUi::HumanFighter(_) => format!("Port #{}", controller_i + 1),
+                PlayerSelectUi::HumanTeam(_) => format!("Port #{} Team", controller_i + 1),
+                PlayerSelectUi::CpuTeam(_) => "CPU Team".to_string(),
+                PlayerSelectUi::HumanUnplugged => unreachable!(),
             };
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(name.as_ref())
-                        .with_color(color)
-                        .with_scale(size)
-                ),
+                text: vec![Text::new(name.as_ref()).with_color(color).with_scale(size)],
                 screen_position: (x, y),
-                .. Section::default()
+                ..Section::default()
             });
         }
 
         // render UI
-        let mut options = vec!();
+        let mut options = vec![];
         match selection.ui {
-            PlayerSelectUi::HumanFighter (_) => {
+            PlayerSelectUi::HumanFighter(_) => {
                 options.extend(fighters.iter().map(|x| x.1.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Add CPU"));
             }
-            PlayerSelectUi::CpuFighter (_) => {
+            PlayerSelectUi::CpuFighter(_) => {
                 options.extend(fighters.iter().map(|x| x.1.name.clone()));
                 options.push(String::from("Change Team"));
                 options.push(String::from("Change AI"));
                 options.push(String::from("Remove CPU"));
             }
-            PlayerSelectUi::HumanTeam (_) => {
+            PlayerSelectUi::HumanTeam(_) => {
                 options.extend(graphics::get_colors().iter().map(|x| x.name.clone()));
                 options.push(String::from("Return"));
             }
-            PlayerSelectUi::CpuTeam (_) => {
+            PlayerSelectUi::CpuTeam(_) => {
                 options.extend(graphics::get_colors().iter().map(|x| x.name.clone()));
                 options.push(String::from("Return"));
             }
-            PlayerSelectUi::CpuAi (_) => {
+            PlayerSelectUi::CpuAi(_) => {
                 options.push(String::from("Return"));
             }
-            PlayerSelectUi::HumanUnplugged => unreachable!()
+            PlayerSelectUi::HumanUnplugged => unreachable!(),
         }
 
         for (option_i, option) in options.iter().enumerate() {
-            let x_offset = if option_i == selection.ui.ticker_unwrap().cursor { 0.1 } else { 0.0 };
-            let x = ((start_x+1.0 + x_offset) / 2.0) * self.width  as f32;
-            let y = ((start_y+1.0           ) / 2.0) * self.height as f32 + (option_i+1) as f32 * 40.0;
+            let x_offset = if option_i == selection.ui.ticker_unwrap().cursor {
+                0.1
+            } else {
+                0.0
+            };
+            let x = ((start_x + 1.0 + x_offset) / 2.0) * self.width as f32;
+            let y = ((start_y + 1.0) / 2.0) * self.height as f32 + (option_i + 1) as f32 * 40.0;
 
             let size = 26.0; // TODO: determine from width/height of screen and start/end pos
             let mut color = [1.0, 1.0, 1.0, 1.0];
             match selection.ui {
-                PlayerSelectUi::HumanFighter (_) |
-                PlayerSelectUi::CpuFighter (_) => {
+                PlayerSelectUi::HumanFighter(_) | PlayerSelectUi::CpuFighter(_) => {
                     if let Some(selected_option_i) = selection.fighter {
                         if selected_option_i == option_i {
                             color = graphics::get_team_color4(selection.team);
                         }
                     }
                 }
-                PlayerSelectUi::HumanTeam (_) |
-                PlayerSelectUi::CpuTeam (_) => {
+                PlayerSelectUi::HumanTeam(_) | PlayerSelectUi::CpuTeam(_) => {
                     if option_i < graphics::get_colors().len() {
                         color = graphics::get_team_color4(option_i);
                     }
                 }
-                _ => { }
+                _ => {}
             }
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(option.as_ref())
-                        .with_color(color)
-                        .with_scale(size)
-                ),
+                text: vec![Text::new(option.as_ref())
+                    .with_color(color)
+                    .with_scale(size)],
                 screen_position: (x, y),
-                .. Section::default()
+                ..Section::default()
             });
         }
 
@@ -1707,7 +2048,7 @@ impl WgpuGraphics {
             let fighter = fighters[selection_i].1;
 
             let camera_dimension = 40.0;
-            let fighter_x_base  = start_x + (end_x - start_x) / 2.0;
+            let fighter_x_base = start_x + (end_x - start_x) / 2.0;
             let fighter_y_base = end_y * -1.0 + 0.05;
 
             let fighter_x_ar = if self.aspect_ratio() > 1.0 {
@@ -1726,10 +2067,19 @@ impl WgpuGraphics {
             let face_right = start_x < 0.0;
 
             //let zoom = fighter.css_scale; // TODO
-            let dir      = Matrix4::from_angle_y(if face_right { Rad::turn_div_4() } else { -Rad::turn_div_4() });
+            let dir = Matrix4::from_angle_y(if face_right {
+                Rad::turn_div_4()
+            } else {
+                -Rad::turn_div_4()
+            });
             let position = Matrix4::from_translation(Vector3::new(fighter_x, fighter_y, 0.0));
             let transformation = position * dir;
-            let camera = Camera::new_for_menu(self.aspect_ratio(), self.width as f32, self.height as f32, camera_dimension);
+            let camera = Camera::new_for_menu(
+                self.aspect_ratio(),
+                self.width as f32,
+                self.height as f32,
+                camera_dimension,
+            );
 
             if let Some(model) = self.models.get(&fighter.name) {
                 // TODO
@@ -1738,7 +2088,14 @@ impl WgpuGraphics {
                 //    .unwrap_or("Idle");
                 let action = "Idle";
                 let frame = selection.animation_frame as f32;
-                draws.extend(self.render_model3d(&camera, model, &transformation, action, frame, frame));
+                draws.extend(self.render_model3d(
+                    &camera,
+                    model,
+                    &transformation,
+                    action,
+                    frame,
+                    frame,
+                ));
             }
         }
 
@@ -1746,15 +2103,13 @@ impl WgpuGraphics {
     }
 
     fn draw_stage_selector(&mut self, selection: usize) -> Vec<Draw> {
-        let mut draws = vec!();
+        let mut draws = vec![];
         self.glyph_brush.queue(Section {
-            text: vec!(
-                Text::new("Select Stage")
-                    .with_color([1.0, 1.0, 1.0, 1.0])
-                    .with_scale(50.0)
-            ),
+            text: vec![Text::new("Select Stage")
+                .with_color([1.0, 1.0, 1.0, 1.0])
+                .with_scale(50.0)],
             screen_position: (100.0, 4.0),
-            .. Section::default()
+            ..Section::default()
         });
         let stages = &self.package.as_ref().unwrap().stages;
         for (stage_i, stage) in stages.key_value_iter().enumerate() {
@@ -1764,13 +2119,11 @@ impl WgpuGraphics {
             let x = self.width as f32 * (0.1 + x_offset);
             let y = self.height as f32 * 0.1 + stage_i as f32 * 50.0;
             self.glyph_brush.queue(Section {
-                text: vec!(
-                    Text::new(stage.name.as_ref())
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(size)
-                ),
+                text: vec![Text::new(stage.name.as_ref())
+                    .with_color([1.0, 1.0, 1.0, 1.0])
+                    .with_scale(size)],
                 screen_position: (x, y),
-                .. Section::default()
+                ..Section::default()
             });
 
             if stage_i == selection {
@@ -1778,10 +2131,12 @@ impl WgpuGraphics {
                 let zoom = 1.0 / zoom_divider;
                 let y = -0.2 * zoom_divider;
 
-                let camera   = Matrix4::from_nonuniform_scale(zoom, zoom * self.aspect_ratio(), 1.0);
+                let camera = Matrix4::from_nonuniform_scale(zoom, zoom * self.aspect_ratio(), 1.0);
                 let position = Matrix4::from_translation(Vector3::new(1.0, y, 0.0));
                 let transformation = camera * position;
-                let uniform = TransformUniform { transform: transformation.into() };
+                let uniform = TransformUniform {
+                    transform: transformation.into(),
+                };
 
                 let stage = &self.package.as_ref().unwrap().stages[stage_key.as_str()];
 
@@ -1792,7 +2147,7 @@ impl WgpuGraphics {
                             debug: true,
                             dimension3: false,
                         },
-                        buffers
+                        buffers,
                     });
                 }
 
@@ -1803,7 +2158,7 @@ impl WgpuGraphics {
                             debug: true,
                             dimension3: false,
                         },
-                        buffers
+                        buffers,
                     });
                 }
             }
@@ -1813,16 +2168,20 @@ impl WgpuGraphics {
     }
 
     fn draw_player_result(&mut self, result: &PlayerResult, start_x: f32) {
-        let fighter_name = self.package.as_ref().unwrap().entities[result.fighter.as_ref()].name.as_str();
+        let fighter_name = self.package.as_ref().unwrap().entities[result.fighter.as_ref()]
+            .name
+            .as_str();
         let color = graphics::get_team_color4(result.team);
         let x = (start_x + 0.05) * self.width as f32;
         let y = 30.0;
         self.glyph_brush.queue(Section {
-            text: vec!(
+            text: vec![
                 Text::new((result.place + 1).to_string().as_ref())
                     .with_color(color)
                     .with_scale(100.0),
-                Text::new(format!("
+                Text::new(
+                    format!(
+                        "
 
 {}
 Kills: {}
@@ -1832,12 +2191,14 @@ L-Cancel Success: {}%",
                         result.kills.len(),
                         result.deaths.len(),
                         result.lcancel_percent
-                ).as_str())
-                    .with_color(color)
-                    .with_scale(30.0)
-            ),
+                    )
+                    .as_str(),
+                )
+                .with_color(color)
+                .with_scale(30.0),
+            ],
             screen_position: (x, y),
-            .. Section::default()
+            ..Section::default()
         });
     }
 
@@ -1848,7 +2209,7 @@ L-Cancel Success: {}%",
 
 struct WindowSizeDependent {
     multisampled_framebuffer: TextureView,
-    depth_stencil:            TextureView,
+    depth_stencil: TextureView,
 }
 
 impl WindowSizeDependent {
@@ -1867,25 +2228,37 @@ impl WindowSizeDependent {
 
         let multisampled_frame_descriptor = &wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Bgra8Unorm,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         };
-        let multisampled_framebuffer = device.create_texture(multisampled_frame_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
+        let multisampled_framebuffer = device
+            .create_texture(multisampled_frame_descriptor)
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         let depth_stencil_descriptor = &wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         };
-        let depth_stencil = device.create_texture(depth_stencil_descriptor).create_view(&wgpu::TextureViewDescriptor::default());
+        let depth_stencil = device
+            .create_texture(depth_stencil_descriptor)
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         WindowSizeDependent {
             multisampled_framebuffer,
@@ -1898,8 +2271,8 @@ impl WindowSizeDependent {
 #[repr(C)]
 struct HitboxUniform {
     edge_color: [f32; 4],
-    color:      [f32; 4],
-    transform:  [[f32; 4]; 4],
+    color: [f32; 4],
+    transform: [[f32; 4]; 4],
 }
 
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -1911,7 +2284,7 @@ struct TransformUniform {
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 struct TransformUniformCycle {
-    transform:   [[f32; 4]; 4],
+    transform: [[f32; 4]; 4],
     frame_count: f32,
 }
 
@@ -1928,39 +2301,57 @@ unsafe impl Pod for AnimatedUniform {}
 unsafe impl Zeroable for AnimatedUniform {}
 
 struct Draw {
-    ty:      DrawType,
+    ty: DrawType,
     buffers: Rc<Buffers>,
 }
 
 enum DrawType {
-    Color         { uniform: TransformUniform, debug: bool, dimension3: bool },
-    Hitbox        { uniform: HitboxUniform },
-    ModelAnimated { uniform: AnimatedUniform,  texture: Rc<Texture> },
-    Fireball      { uniform: AnimatedUniform,  texture: Rc<Texture> },
-    ModelStatic   { uniform: TransformUniform, texture: Rc<Texture> },
-    Lava          { uniform: TransformUniformCycle, texture: Rc<Texture> },
+    Color {
+        uniform: TransformUniform,
+        debug: bool,
+        dimension3: bool,
+    },
+    Hitbox {
+        uniform: HitboxUniform,
+    },
+    ModelAnimated {
+        uniform: AnimatedUniform,
+        texture: Rc<Texture>,
+    },
+    Fireball {
+        uniform: AnimatedUniform,
+        texture: Rc<Texture>,
+    },
+    ModelStatic {
+        uniform: TransformUniform,
+        texture: Rc<Texture>,
+    },
+    Lava {
+        uniform: TransformUniformCycle,
+        texture: Rc<Texture>,
+    },
 }
 
 impl DrawType {
     fn uniform_bytes(&self) -> &[u8] {
         match &self {
-            DrawType::Color         { uniform, .. } => bytemuck::bytes_of(uniform),
-            DrawType::Hitbox        { uniform, .. } => bytemuck::bytes_of(uniform),
-            DrawType::ModelStatic   { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Color { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Hitbox { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::ModelStatic { uniform, .. } => bytemuck::bytes_of(uniform),
             DrawType::ModelAnimated { uniform, .. } => bytemuck::bytes_of(uniform),
-            DrawType::Fireball      { uniform, .. } => bytemuck::bytes_of(uniform),
-            DrawType::Lava          { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Fireball { uniform, .. } => bytemuck::bytes_of(uniform),
+            DrawType::Lava { uniform, .. } => bytemuck::bytes_of(uniform),
         }
     }
 
     fn uniform_size(&self) -> usize {
         match &self {
-            DrawType::Color         { .. } => mem::size_of::<TransformUniform>(),
-            DrawType::Hitbox        { .. } => mem::size_of::<HitboxUniform>(),
+            DrawType::Color { .. } => mem::size_of::<TransformUniform>(),
+            DrawType::Hitbox { .. } => mem::size_of::<HitboxUniform>(),
             DrawType::ModelAnimated { .. } => mem::size_of::<AnimatedUniform>(),
-            DrawType::Fireball      { .. } => mem::size_of::<AnimatedUniform>(),
-            DrawType::ModelStatic   { .. } => mem::size_of::<TransformUniform>(),
-            DrawType::Lava          { .. } => mem::size_of::<TransformUniformCycle>(),
+            DrawType::Fireball { .. } => mem::size_of::<AnimatedUniform>(),
+            DrawType::ModelStatic { .. } => mem::size_of::<TransformUniform>(),
+            DrawType::Lava { .. } => mem::size_of::<TransformUniformCycle>(),
         }
     }
 
@@ -1973,9 +2364,9 @@ impl DrawType {
 }
 
 struct StagingBelt {
-    pub staging_belt:  wgpu::util::StagingBelt,
-        local_pool:    futures::executor::LocalPool,
-        local_spawner: futures::executor::LocalSpawner,
+    pub staging_belt: wgpu::util::StagingBelt,
+    local_pool: futures::executor::LocalPool,
+    local_spawner: futures::executor::LocalSpawner,
 }
 
 impl StagingBelt {
@@ -1983,7 +2374,11 @@ impl StagingBelt {
         let staging_belt = wgpu::util::StagingBelt::new(1024);
         let local_pool = futures::executor::LocalPool::new();
         let local_spawner = local_pool.spawner();
-        StagingBelt { staging_belt, local_pool, local_spawner }
+        StagingBelt {
+            staging_belt,
+            local_pool,
+            local_spawner,
+        }
     }
 
     pub fn finish(&mut self) {

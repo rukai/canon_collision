@@ -1,6 +1,6 @@
 use crate::entity::EntityKey;
 
-use canon_collision_lib::entity_def::{EntityDef, ActionFrame};
+use canon_collision_lib::entity_def::{ActionFrame, EntityDef};
 
 use rand::Rng;
 use rand_chacha::ChaChaRng;
@@ -11,23 +11,23 @@ use std::str::FromStr;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ActionState {
     // If I need to, I could make lookups for entity_def_key and action more effecient by storing as a usize, by calling actions.key_to_index
-    pub entity_def_key:   String,
-    pub action:           String,
-    pub frame:            i64, // TODO: u64
+    pub entity_def_key: String,
+    pub action: String,
+    pub frame: i64, // TODO: u64
     pub frame_no_restart: i64,
-    pub hitlist:          Vec<EntityKey>,
-    pub hitlag:           Hitlag,
+    pub hitlist: Vec<EntityKey>,
+    pub hitlag: Hitlag,
 }
 
 impl ActionState {
     pub fn new<T: Into<&'static str>>(entity_def_key: String, action: T) -> ActionState {
         ActionState {
             entity_def_key,
-            action:           action.into().to_string(),
-            frame:            0,
+            action: action.into().to_string(),
+            frame: 0,
             frame_no_restart: 0,
-            hitlist:          vec!(),
-            hitlag:           Hitlag::None,
+            hitlist: vec![],
+            hitlag: Hitlag::None,
         }
     }
 
@@ -57,7 +57,11 @@ impl ActionState {
         self.frame >= entity_def.actions[self.action.as_ref()].frames.len() as i64
     }
 
-    pub fn debug_string(&self, entity_defs: &KeyedContextVec<EntityDef>, index: EntityKey) -> String {
+    pub fn debug_string(
+        &self,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        index: EntityKey,
+    ) -> String {
         let entity_def = &entity_defs[self.entity_def_key.as_ref()];
         let action = &entity_def.actions[self.action.as_ref()];
         let last_action_frame = action.frames.len() as u64 - 1;
@@ -76,27 +80,29 @@ impl ActionState {
 pub enum Hitlag {
     Attack { counter: u64 },
     Launch { counter: u64, wobble_x: f32 },
-    None
+    None,
 }
 
 impl Hitlag {
     pub fn step(&mut self, rng: &mut ChaChaRng) {
         match self {
-            &mut Hitlag::Attack { ref mut counter} => {
+            &mut Hitlag::Attack { ref mut counter } => {
                 *counter -= 1;
                 if *counter == 0 {
                     *self = Hitlag::None;
                 }
             }
-            &mut Hitlag::Launch { ref mut counter, ref mut wobble_x } => {
+            &mut Hitlag::Launch {
+                ref mut counter,
+                ref mut wobble_x,
+            } => {
                 *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
                 *counter -= 1;
                 if *counter == 0 {
                     *self = Hitlag::None;
                 }
             }
-            &mut Hitlag::None => { }
+            &mut Hitlag::None => {}
         }
     }
 }
-

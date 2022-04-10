@@ -1,35 +1,35 @@
-pub mod maps;
-pub mod state;
+mod filter;
 pub mod gcadapter;
 pub mod generic;
-mod filter;
+pub mod maps;
+pub mod state;
 
-use maps::ControllerMaps;
-use state::{ControllerInput, PlayerInput, Button, Stick, Trigger, Deadzone};
 use gcadapter::GCAdapter;
 use generic::GenericController;
+use maps::ControllerMaps;
+use state::{Button, ControllerInput, Deadzone, PlayerInput, Stick, Trigger};
 
-use gilrs_core::{Gilrs, Event};
+use gilrs_core::{Event, Gilrs};
 use rusb::Context;
 
 use crate::network::{Netplay, NetplayState};
 
 enum InputSource {
-    GCAdapter (GCAdapter),
-    GenericController (GenericController),
+    GCAdapter(GCAdapter),
+    GenericController(GenericController),
 }
 
 pub struct Input {
     // game past and (potentially) future inputs, frame 0 has index 2
     // structure: frames Vec<controllers Vec<ControllerInput>>
-    game_inputs:     Vec<Vec<ControllerInput>>,
-    current_inputs:  Vec<ControllerInput>, // inputs for this frame
-    prev_start:      bool,
-    input_sources:   Vec<InputSource>,
-    _rusb_context:   Context,
-    gilrs:           Gilrs,
+    game_inputs: Vec<Vec<ControllerInput>>,
+    current_inputs: Vec<ControllerInput>, // inputs for this frame
+    prev_start: bool,
+    input_sources: Vec<InputSource>,
+    _rusb_context: Context,
+    gilrs: Gilrs,
     controller_maps: ControllerMaps,
-    pub events:      Vec<Event>,
+    pub events: Vec<Event>,
 }
 
 // In/Out is from perspective of computer
@@ -47,10 +47,10 @@ impl Input {
             .collect();
 
         Input {
-            game_inputs:    vec!(),
-            current_inputs: vec!(),
-            events:         vec!(),
-            prev_start:     false,
+            game_inputs: vec![],
+            current_inputs: vec![],
+            events: vec![],
+            prev_start: false,
             input_sources,
             _rusb_context,
             gilrs,
@@ -59,14 +59,22 @@ impl Input {
     }
 
     /// Call this once every frame
-    pub fn step(&mut self, tas_inputs: &[ControllerInput], ai_inputs: &[ControllerInput], netplay: &mut Netplay, reset_deadzones: bool) {
+    pub fn step(
+        &mut self,
+        tas_inputs: &[ControllerInput],
+        ai_inputs: &[ControllerInput],
+        netplay: &mut Netplay,
+        reset_deadzones: bool,
+    ) {
         // clear deadzones so they will be set at next read
         // TODO: uh why is this even like this, surely just implement deadzone reset on controller plugin (maybe it was for netplay???)
         if reset_deadzones {
             for source in &mut self.input_sources {
                 match source {
-                    &mut InputSource::GCAdapter (_) => { } // TODO: send message to thread or delete all manual reset_deadzone logic adapter.deadzones = Deadzone::empty4()
-                    &mut InputSource::GenericController (ref mut controller) => { controller.deadzone  = Deadzone::empty() }
+                    &mut InputSource::GCAdapter(_) => {} // TODO: send message to thread or delete all manual reset_deadzone logic adapter.deadzones = Deadzone::empty4()
+                    &mut InputSource::GenericController(ref mut controller) => {
+                        controller.deadzone = Deadzone::empty()
+                    }
                 }
             }
         }
@@ -77,25 +85,33 @@ impl Input {
         }
         self.events.sort_by_key(|x| x.time);
 
-        let mut generic_controllers = vec!();
+        let mut generic_controllers = vec![];
         for input_source in &self.input_sources {
             if let InputSource::GenericController(controller) = input_source {
                 generic_controllers.push(controller);
             }
         }
-        for controller in GenericController::get_controllers(&mut self.gilrs, &generic_controllers) {
-            self.input_sources.push(InputSource::GenericController(controller));
+        for controller in GenericController::get_controllers(&mut self.gilrs, &generic_controllers)
+        {
+            self.input_sources
+                .push(InputSource::GenericController(controller));
         }
 
         // read input from controllers
         let mut inputs: Vec<ControllerInput> = Vec::new();
         for source in &mut self.input_sources {
             match source {
-                InputSource::GCAdapter (ref mut adapter) => {
+                InputSource::GCAdapter(ref mut adapter) => {
                     inputs.extend_from_slice(adapter.get_inputs());
                 }
-                InputSource::GenericController (ref mut controller) => {
-                    let events = self.events.iter().filter(|x| x.id == controller.index).map(|x| &x.event).cloned().collect();
+                InputSource::GenericController(ref mut controller) => {
+                    let events = self
+                        .events
+                        .iter()
+                        .filter(|x| x.id == controller.index)
+                        .map(|x| &x.event)
+                        .cloned()
+                        .collect();
                     let gamepad = &self.gilrs.gamepad(controller.index).unwrap(); // Old gamepads stick around forever so its fine to unwrap.
                     let maps = &self.controller_maps.maps;
                     inputs.push(controller.read(maps, events, gamepad));
@@ -107,8 +123,7 @@ impl Input {
             // TODO: combine the skipped frames input with the next frame:
             // * average float values
             // * detect dropped presses and include the press
-        }
-        else {
+        } else {
             netplay.send_controller_inputs(inputs.clone());
         }
 
@@ -138,7 +153,7 @@ impl Input {
     pub fn set_history(&mut self, history: Vec<Vec<ControllerInput>>) {
         self.game_inputs = history;
     }
-    
+
     /// Get the game input history
     pub fn get_history(&self) -> Vec<Vec<ControllerInput>> {
         self.game_inputs.clone()
@@ -161,7 +176,7 @@ impl Input {
 
     /// Return game inputs at specified index into history
     pub fn players_no_log(&self, frame: usize, netplay: &Netplay) -> Vec<PlayerInput> {
-        let mut result_inputs: Vec<PlayerInput> = vec!();
+        let mut result_inputs: Vec<PlayerInput> = vec![];
 
         let local_index = netplay.local_index();
         let mut peer_offset = 0;
@@ -174,12 +189,12 @@ impl Input {
                     let inputs = self.get_8frames_of_input(&self.game_inputs, i, frame as i64);
                     result_inputs.push(Input::controller_inputs_to_player_input(inputs));
                 }
-            }
-            else {
+            } else {
                 let peer_inputs = &peers_inputs[i - peer_offset];
                 let num_controllers = peer_inputs.last().map_or(0, |x| x.len());
                 for i in 0..num_controllers {
-                    let inputs = self.get_8frames_of_input(&peer_inputs[..], i, netplay.frame() as i64);
+                    let inputs =
+                        self.get_8frames_of_input(&peer_inputs[..], i, netplay.frame() as i64);
                     result_inputs.push(Input::controller_inputs_to_player_input(inputs));
                 }
             }
@@ -194,12 +209,16 @@ impl Input {
 
         debug!("players()");
         for (i, input) in result_inputs.iter().enumerate() {
-            debug!("    #{} a: {} b: {} input.stick_x: {} input.stick_y: {}", i, input.a.value, input.b.value, input.stick_x.value, input.stick_y.value);
+            debug!(
+                "    #{} a: {} b: {} input.stick_x: {} input.stick_y: {}",
+                i, input.a.value, input.b.value, input.stick_x.value, input.stick_y.value
+            );
         }
 
         result_inputs
     }
 
+    #[rustfmt::skip]
     fn controller_inputs_to_player_input(inputs: Vec<ControllerInput>) -> PlayerInput {
         if inputs[0].plugged_in {
             PlayerInput {
@@ -235,29 +254,35 @@ impl Input {
 
     /// converts frames Vec<controllers Vec<ControllerInput>> into frames Vec<ControllerInput> for the specified controller_i
     /// Output must be 8 frames long, any missing frames due to either netplay lag or the game just starting are filled in
-    fn get_8frames_of_input(&self, game_inputs: &[Vec<ControllerInput>], controller_i: usize, frame: i64) -> Vec<ControllerInput> {
-        let mut result: Vec<ControllerInput> = vec!();
-        let empty_vec = vec!();
+    fn get_8frames_of_input(
+        &self,
+        game_inputs: &[Vec<ControllerInput>],
+        controller_i: usize,
+        frame: i64,
+    ) -> Vec<ControllerInput> {
+        let mut result: Vec<ControllerInput> = vec![];
+        let empty_vec = vec![];
 
-        for frame_i in (frame-8..frame).rev() {
-            result.push(
-                if frame_i < 0 {
-                    ControllerInput::empty()
+        for frame_i in (frame - 8..frame).rev() {
+            result.push(if frame_i < 0 {
+                ControllerInput::empty()
+            } else {
+                let controllers = match game_inputs.get(frame_i as usize) {
+                    Some(controllers) => controllers,
+                    None => game_inputs.last().unwrap_or(&empty_vec),
+                };
+                match controllers.get(controller_i) {
+                    Some(value) => value.clone(),
+                    None => ControllerInput::empty(),
                 }
-                else {
-                    let controllers = match game_inputs.get(frame_i as usize) {
-                        Some(controllers) => controllers,
-                        None              => game_inputs.last().unwrap_or(&empty_vec)
-                    };
-                    match controllers.get(controller_i) {
-                        Some(value) => value.clone(),
-                        None        => ControllerInput::empty()
-                    }
-                }
-            );
+            });
         }
 
-        assert!(result.len() == 8, "get_8frames_of_input needs to return a vector of size 8 but it was {}", result.len());
+        assert!(
+            result.len() == 8,
+            "get_8frames_of_input needs to return a vector of size 8 but it was {}",
+            result.len()
+        );
         result
     }
 
@@ -276,6 +301,9 @@ impl Input {
 
     /// button combination for quiting the game
     pub fn game_quit_held(&mut self) -> bool {
-        self.current_inputs.iter().any(|x| x.a && x.l && x.r && x.start) && self.start_pressed()
+        self.current_inputs
+            .iter()
+            .any(|x| x.a && x.l && x.r && x.start)
+            && self.start_pressed()
     }
 }

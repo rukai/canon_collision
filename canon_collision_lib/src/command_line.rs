@@ -1,33 +1,36 @@
-use winit_input_helper::{WinitInputHelper, TextChar};
+use winit_input_helper::{TextChar, WinitInputHelper};
 
 use std::collections::VecDeque;
 
-use winit::event::VirtualKeyCode;
 use treeflection::{Node, NodeRunner, NodeToken};
+use winit::event::VirtualKeyCode;
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct CommandLine {
     history_index: isize,
-    cursor:        usize,
-    history:       Vec<String>,
-    command:       String,
-    output:        VecDeque<String>,
-    running:       bool,
+    cursor: usize,
+    history: Vec<String>,
+    command: String,
+    output: VecDeque<String>,
+    running: bool,
 }
 
 impl CommandLine {
     pub fn new() -> Self {
         Self {
             history_index: -1,
-            cursor:        0,
-            history:       vec!(),
-            command:       String::new(),
-            output:        VecDeque::new(),
-            running:       false,
+            cursor: 0,
+            history: vec![],
+            command: String::new(),
+            output: VecDeque::new(),
+            running: false,
         }
     }
 
-    pub fn step<T>(&mut self, os_input: &WinitInputHelper, root_node: &mut T) where T: Node {
+    pub fn step<T>(&mut self, os_input: &WinitInputHelper, root_node: &mut T)
+    where
+        T: Node,
+    {
         if os_input.key_pressed(VirtualKeyCode::Grave) {
             self.running = !self.running;
             return;
@@ -75,7 +78,7 @@ impl CommandLine {
                 }
                 let result = match NodeRunner::new(self.command.as_str()) {
                     Ok(runner) => root_node.node_step(runner),
-                    Err(msg)   => msg
+                    Err(msg) => msg,
                 };
                 for line in result.split('\n') {
                     self.output_add(line.to_string());
@@ -95,10 +98,14 @@ impl CommandLine {
             if os_input.key_pressed(VirtualKeyCode::Left) && self.cursor > 0 {
                 self.cursor -= 1;
             }
-            if os_input.key_pressed(VirtualKeyCode::Right) && self.cursor < self.command.chars().count() {
+            if os_input.key_pressed(VirtualKeyCode::Right)
+                && self.cursor < self.command.chars().count()
+            {
                 self.cursor += 1;
             }
-            if os_input.key_pressed(VirtualKeyCode::Up) && self.history_index + 1 < self.history.len() as isize {
+            if os_input.key_pressed(VirtualKeyCode::Up)
+                && self.history_index + 1 < self.history.len() as isize
+            {
                 self.history_index += 1;
                 self.command = self.history[self.history_index as usize].clone();
                 self.cursor = self.command.chars().count();
@@ -108,8 +115,7 @@ impl CommandLine {
                     self.history_index -= 1;
                     self.command = self.history[self.history_index as usize].clone();
                     self.cursor = self.command.chars().count();
-                }
-                else if self.history_index == 0 {
+                } else if self.history_index == 0 {
                     self.history_index -= 1;
                     self.command.clear();
                     self.cursor = 0;
@@ -151,7 +157,7 @@ impl CommandLine {
             output.insert(0, command);
             output.into()
         } else {
-            vec!()
+            vec![]
         }
     }
 }

@@ -8,4 +8,3 @@ pub enum ItemAction {
     Thrown,
     Dropped,
 }
-

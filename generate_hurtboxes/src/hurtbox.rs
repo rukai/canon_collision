@@ -1,6 +1,7 @@
 use cgmath::Vector3;
 use std::collections::HashMap;
 
+#[rustfmt::skip]
 pub fn get_hurtboxes() -> HashMap<String, Vec<HurtBox>> {
     let mut hurtboxes = HashMap::new();
 
@@ -40,17 +41,24 @@ pub fn get_hurtboxes() -> HashMap<String, Vec<HurtBox>> {
 
 pub struct HurtBox {
     /// The name of the bone the hurtbox is attached to
-    pub bone:        String,
+    pub bone: String,
     /// Multiple hurtboxes are attached along the axis of the bone, every radius a new hurtbox is placed until bone_length
     pub bone_length: f32,
     /// Radius of the hurtbox
-    pub radius:      f32,
+    pub radius: f32,
     /// Offset of the hurtbox from the bone, in bone space
-    pub offset:      Vector3<f32>,
+    pub offset: Vector3<f32>,
 }
 
 impl HurtBox {
-    fn new(bone: &str, bone_length: f32, radius: f32, offset_x: f32, offset_y: f32, offset_z: f32) -> HurtBox {
+    fn new(
+        bone: &str,
+        bone_length: f32,
+        radius: f32,
+        offset_x: f32,
+        offset_y: f32,
+        offset_z: f32,
+    ) -> HurtBox {
         HurtBox {
             bone: bone.into(),
             bone_length,

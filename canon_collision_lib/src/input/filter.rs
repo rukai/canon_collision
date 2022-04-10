@@ -14,7 +14,8 @@ pub fn stick_filter(in_stick_x: u8, in_stick_y: u8) -> (f32, f32) {
 
     let max_x = (angle.cos() * 80.0).trunc();
     let max_y = (angle.sin() * 80.0).trunc();
-    let stick_x = if in_stick_x == 128 { // avoid raw_stick_x = 0 and thus division by zero in the atan2)
+    let stick_x = if in_stick_x == 128 {
+        // avoid raw_stick_x = 0 and thus division by zero in the atan2)
         0.0
     } else {
         abs_min(raw_stick_x, max_x) / 80.0
@@ -23,8 +24,16 @@ pub fn stick_filter(in_stick_x: u8, in_stick_y: u8) -> (f32, f32) {
 
     let deadzone = 0.28;
     (
-        if stick_x.abs() < deadzone { 0.0 } else { stick_x },
-        if stick_y.abs() < deadzone { 0.0 } else { stick_y }
+        if stick_x.abs() < deadzone {
+            0.0
+        } else {
+            stick_x
+        },
+        if stick_y.abs() < deadzone {
+            0.0
+        } else {
+            stick_y
+        },
     )
 }
 

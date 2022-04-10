@@ -2,38 +2,21 @@
 
 mod state;
 
-use uuid::Uuid;
-use gtk::prelude::*;
-use gtk::gdk::Atom;
-use gtk::{
-    Box,
-    Button,
-    CheckButton,
-    Clipboard,
-    ComboBoxText,
-    Entry,
-    EntryBuffer,
-    Label,
-    Orientation,
-    PolicyType,
-    ScrolledWindow,
-    Window,
-    WindowType,
-};
 use gilrs_core::EventType;
+use gtk::gdk::Atom;
+use gtk::prelude::*;
+use gtk::{
+    Box, Button, CheckButton, Clipboard, ComboBoxText, Entry, EntryBuffer, Label, Orientation,
+    PolicyType, ScrolledWindow, Window, WindowType,
+};
+use uuid::Uuid;
 
 use canon_collision_lib::input;
 use canon_collision_lib::input::maps::{
-    AnalogDest,
-    DigitalDest,
-    AnalogMap,
-    DigitalMap,
-    AnalogFilter,
-    DigitalFilter,
-    OS
+    AnalogDest, AnalogFilter, AnalogMap, DigitalDest, DigitalFilter, DigitalMap, OS,
 };
 
-use state::{State, Code, AnalogHistory};
+use state::{AnalogHistory, Code, State};
 
 use std::rc::Rc;
 use std::sync::RwLock;
@@ -201,11 +184,11 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
         let mut state = state.write().unwrap();
         while let Some(ev) = state.gilrs.next_event() {
             match ev.event {
-                EventType::ButtonPressed (code) => {
+                EventType::ButtonPressed(code) => {
                     state.last_code = Code::Digital(input::generic::code_to_usize(&code));
                     label.set_text(format!("Digital: {}", code).as_ref());
                 }
-                EventType::AxisValueChanged (value, code) => {
+                EventType::AxisValueChanged(value, code) => {
                     let code = input::generic::code_to_usize(&code);
                     let new_history = match state.analog_history.get(&code).cloned() {
                         Some(mut history) => {
@@ -218,9 +201,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
                             history.last_value = value;
                             history
                         }
-                        None => {
-                            AnalogHistory::new(value)
-                        }
+                        None => AnalogHistory::new(value),
                     };
                     state.analog_history.insert(code, new_history.clone());
 
@@ -235,7 +216,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
                         label.set_text(format!("Analog: {} Value: {}", code, value).as_ref());
                     }
                 }
-                _ => { }
+                _ => {}
             }
         }
         Continue(true)
@@ -244,6 +225,7 @@ fn input_management_hbox(state: Rc<RwLock<State>>) -> Box {
     hbox
 }
 
+#[rustfmt::skip]
 fn populate_inputs(state: Rc<RwLock<State>>, vbox: Box) {
     for children in vbox.children() {
         vbox.remove(&children);
@@ -292,7 +274,12 @@ fn digital_input_vbox(state: Rc<RwLock<State>>, input_text: String, dest: Digita
     vbox
 }
 
-fn digital_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String, dest: DigitalDest) -> Box {
+fn digital_input_gc_hbox(
+    state: Rc<RwLock<State>>,
+    vbox: Box,
+    input_text: String,
+    dest: DigitalDest,
+) -> Box {
     let hbox = Box::new(Orientation::Horizontal, 5);
 
     let input_label = Label::new(Some(input_text.as_str()));
@@ -338,8 +325,8 @@ fn digital_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String
     add_analog_button.connect_clicked(move |_| {
         let map = DigitalMap {
             source: 0,
-            dest:   dest.clone(),
-            filter: DigitalFilter::default_analog()
+            dest: dest.clone(),
+            filter: DigitalFilter::default_analog(),
         };
         new_input_digital_map(state.clone(), vbox.clone(), map);
     });
@@ -360,14 +347,25 @@ fn new_input_digital_map(state: Rc<RwLock<State>>, vbox: Box, map: DigitalMap) {
     vbox.show_all();
 }
 
-fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, index: usize, parent: &Box) {
+fn input_digital_map_hbox(
+    state: Rc<RwLock<State>>,
+    digital_map: DigitalMap,
+    index: usize,
+    parent: &Box,
+) {
     let uuid = Uuid::new_v4();
     state.write().unwrap().ui_to_digital_map.insert(uuid, index);
 
     let hbox = Box::new(Orientation::Horizontal, 5);
     hbox.set_margin_start(60);
 
-    hbox.add(&Label::new(Some(if digital_map.filter.is_digital_source() { "Digital code" } else { "Analog code" })));
+    hbox.add(&Label::new(Some(
+        if digital_map.filter.is_digital_source() {
+            "Digital code"
+        } else {
+            "Analog code"
+        },
+    )));
 
     let input_code = digital_map.source.to_string();
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));
@@ -410,7 +408,7 @@ fn input_digital_map_hbox(state: Rc<RwLock<State>>, digital_map: DigitalMap, ind
             }));
             hbox.add(&max_entry);
         }
-        DigitalFilter::FromDigital => { }
+        DigitalFilter::FromDigital => {}
     }
 
     let button = Button::with_label("Remove");
@@ -455,7 +453,12 @@ fn analog_input_vbox(state: Rc<RwLock<State>>, input_text: String, dest: AnalogD
     vbox
 }
 
-fn analog_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String, dest: AnalogDest) -> Box {
+fn analog_input_gc_hbox(
+    state: Rc<RwLock<State>>,
+    vbox: Box,
+    input_text: String,
+    dest: AnalogDest,
+) -> Box {
     let hbox = Box::new(Orientation::Horizontal, 5);
 
     let input_label = Label::new(Some(input_text.as_str()));
@@ -501,7 +504,7 @@ fn analog_input_gc_hbox(state: Rc<RwLock<State>>, vbox: Box, input_text: String,
     add_analog_button.connect_clicked(move |_| {
         let map = AnalogMap {
             source: 0,
-            dest:   dest.clone(),
+            dest: dest.clone(),
             filter: AnalogFilter::default_analog(),
         };
         new_input_analog_map(state.clone(), vbox.clone(), map);
@@ -523,14 +526,25 @@ fn new_input_analog_map(state: Rc<RwLock<State>>, vbox: Box, map: AnalogMap) {
     vbox.show_all();
 }
 
-fn input_analog_map_hbox(state: Rc<RwLock<State>>, analog_map: AnalogMap, index: usize, parent: &Box) {
+fn input_analog_map_hbox(
+    state: Rc<RwLock<State>>,
+    analog_map: AnalogMap,
+    index: usize,
+    parent: &Box,
+) {
     let uuid = Uuid::new_v4();
     state.write().unwrap().ui_to_analog_map.insert(uuid, index);
 
     let hbox = Box::new(Orientation::Horizontal, 5);
     hbox.set_margin_start(60);
 
-    hbox.add(&Label::new(Some(if analog_map.filter.is_digital_source() { "Digital code" } else { "Analog code" })));
+    hbox.add(&Label::new(Some(
+        if analog_map.filter.is_digital_source() {
+            "Digital code"
+        } else {
+            "Analog code"
+        },
+    )));
 
     let input_code = analog_map.source.to_string();
     let code_entry_buffer = EntryBuffer::new(Some(input_code.as_ref()));

@@ -1,22 +1,22 @@
 use std::collections::HashSet;
 use std::fs;
-use std::mem;
 use std::fs::File;
+use std::mem;
 use std::path::{Path, PathBuf};
 
-use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
+use treeflection::{KeyedContextVec, Node, NodeRunner, NodeToken};
 
-use crate::entity_def::{EntityDef, EntityDefType, ActionFrame, CollisionBox, CollisionBoxRole};
+use crate::entity_def::{ActionFrame, CollisionBox, CollisionBoxRole, EntityDef, EntityDefType};
 use crate::files;
 use crate::stage::Stage;
 
 /// Stores persistent that data that can be modified at runtime.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
-    pub stages:          KeyedContextVec<Stage>, // TODO: Can just use a std map here
-    pub entities:        KeyedContextVec<EntityDef>,
-        path:            PathBuf,
-        package_updates: Vec<PackageUpdate>,
+    pub stages: KeyedContextVec<Stage>, // TODO: Can just use a std map here
+    pub entities: KeyedContextVec<EntityDef>,
+    path: PathBuf,
+    package_updates: Vec<PackageUpdate>,
 }
 
 impl Default for Package {
@@ -35,9 +35,9 @@ impl Package {
     pub fn open(path: PathBuf) -> Option<Package> {
         let mut package = Package {
             path,
-            stages:          KeyedContextVec::new(),
-            entities:        KeyedContextVec::new(),
-            package_updates: vec!(),
+            stages: KeyedContextVec::new(),
+            entities: KeyedContextVec::new(),
+            package_updates: vec![],
         };
 
         if let Ok(_) = package.load() {
@@ -55,21 +55,23 @@ impl Package {
     fn find_package_in_parent_dirs_core(path: &Path) -> Option<PathBuf> {
         let package_path = path.join("package");
         match fs::metadata(&package_path) {
-            Ok(_) => {
-                Some(package_path.to_path_buf())
-            }
-            Err(_) => {
-                Package::find_package_in_parent_dirs_core(path.parent()?)
-            }
+            Ok(_) => Some(package_path.to_path_buf()),
+            Err(_) => Package::find_package_in_parent_dirs_core(path.parent()?),
         }
     }
 
     pub fn generate_base(path: PathBuf) -> Package {
         let mut package = Package {
             path,
-            stages:          KeyedContextVec::from_vec(vec!((String::from("base_stage.cbor"), Stage::default()))),
-            entities:        KeyedContextVec::from_vec(vec!((String::from("base_fighter.cbor"), EntityDef::default()))),
-            package_updates: vec!(),
+            stages: KeyedContextVec::from_vec(vec![(
+                String::from("base_stage.cbor"),
+                Stage::default(),
+            )]),
+            entities: KeyedContextVec::from_vec(vec![(
+                String::from("base_fighter.cbor"),
+                EntityDef::default(),
+            )]),
+            package_updates: vec![],
         };
         package.save();
         package.load().unwrap();
@@ -94,7 +96,7 @@ impl Package {
         for (key, fighter) in self.entities.key_value_iter() {
             files::save_struct_cbor(&new_path.join("Entities").join(key), fighter);
         }
-        
+
         for (key, stage) in self.stages.key_value_iter() {
             files::save_struct_cbor(&new_path.join("Stages").join(key), stage);
         }
@@ -109,14 +111,15 @@ impl Package {
     }
 
     pub fn load(&mut self) -> Result<(), String> {
-        let mut entities = vec!();
-        if let Ok (dir) = fs::read_dir(self.path.join("Entities")) {
+        let mut entities = vec![];
+        if let Ok(dir) = fs::read_dir(self.path.join("Entities")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
 
                 let reader = File::open(full_path).map_err(|x| format!("{:?}", x))?;
-                let mut entity: EntityDef = serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
+                let mut entity: EntityDef =
+                    serde_cbor::from_reader(reader).map_err(|x| format!("{:?}", x))?;
                 entity.cleanup();
                 entities.push((key, entity));
             }
@@ -124,8 +127,8 @@ impl Package {
         entities.sort_by_key(|x| x.0.clone());
         self.entities = KeyedContextVec::from_vec(entities);
 
-        let mut stages = vec!();
-        if let Ok (dir) = fs::read_dir(self.path.join("Stages")) {
+        let mut stages = vec![];
+        if let Ok(dir) = fs::read_dir(self.path.join("Stages")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 let key = full_path.file_name().unwrap().to_str().unwrap().to_string();
@@ -137,7 +140,6 @@ impl Package {
         }
         stages.sort_by_key(|x| x.0.clone());
         self.stages = KeyedContextVec::from_vec(stages);
-
 
         self.force_update_entire_package();
         Ok(())
@@ -151,17 +153,24 @@ impl Package {
         self.insert_fighter_frame(fighter, action, frame, new_frame);
     }
 
-    pub fn insert_fighter_frame(&mut self, fighter: &str, action: &str, frame: usize, action_frame: ActionFrame) {
+    pub fn insert_fighter_frame(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        action_frame: ActionFrame,
+    ) {
         let action_frames = &mut self.entities[fighter].actions[action].frames;
 
         action_frames.insert(frame, action_frame.clone());
 
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       action_frame,
-        });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: action_frame,
+            });
     }
 
     pub fn delete_fighter_frame(&mut self, fighter: &str, action: &str, frame: usize) -> bool {
@@ -171,11 +180,12 @@ impl Package {
         if action_frames.len() > 1 && frame < action_frames.len() {
             action_frames.remove(frame);
 
-            self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-                fighter:     fighter.to_string(),
-                action:      action.to_string(),
-                frame_index: frame,
-            });
+            self.package_updates
+                .push(PackageUpdate::DeleteFighterFrame {
+                    fighter: fighter.to_string(),
+                    action: action.to_string(),
+                    frame_index: frame,
+                });
             true
         } else {
             false
@@ -186,28 +196,40 @@ impl Package {
     /// the added collisionbox is linked to the specified collisionboxes
     /// returns the index the collisionbox was added to.
     pub fn append_fighter_colbox(
-        &mut self, fighter: &str, action: &str, frame: usize, new_colbox: CollisionBox
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        new_colbox: CollisionBox,
     ) -> usize {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         let new_colbox_index = fighter_frame.colboxes.len();
         fighter_frame.colboxes.push(new_colbox);
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
 
         new_colbox_index
     }
 
-    pub fn delete_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, colboxes_to_delete: &HashSet<usize>) {
+    pub fn delete_fighter_colboxes(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        colboxes_to_delete: &HashSet<usize>,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -224,20 +246,29 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
-    pub fn move_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, moved_colboxes: &HashSet<usize>, distance: (f32, f32)) {
+    pub fn move_fighter_colboxes(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        moved_colboxes: &HashSet<usize>,
+        distance: (f32, f32),
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -249,20 +280,30 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
-    pub fn point_hitbox_angles_to(&mut self, fighter: &str, action: &str, frame: usize, set_hitboxes: &HashSet<usize>, x: f32, y: f32) {
+    pub fn point_hitbox_angles_to(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        set_hitboxes: &HashSet<usize>,
+        x: f32,
+        y: f32,
+    ) {
         let colboxes = &mut self.entities[fighter].actions[action].frames[frame].colboxes;
         for i in set_hitboxes {
             let colbox = &mut colboxes[*i];
@@ -273,7 +314,14 @@ impl Package {
         }
     }
 
-    pub fn resize_fighter_colboxes(&mut self, fighter: &str, action: &str, frame: usize, resized_colboxes: &HashSet<usize>, size_diff: f32) {
+    pub fn resize_fighter_colboxes(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        resized_colboxes: &HashSet<usize>,
+        size_diff: f32,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let colboxes = &mut fighter_frame.colboxes;
@@ -284,21 +332,29 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_increase(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_increase(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        reordered_colboxes: &HashSet<usize>,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -310,21 +366,29 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the back
-    pub fn fighter_colboxes_order_set_last(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_set_last(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        reordered_colboxes: &HashSet<usize>,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -335,21 +399,29 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_decrease(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_decrease(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        reordered_colboxes: &HashSet<usize>,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -360,21 +432,29 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
     /// All colboxes or links containing colboxes from reordered_colboxes are sent to the front
-    pub fn fighter_colboxes_order_set_first(&mut self, fighter: &str, action: &str, frame: usize, reordered_colboxes: &HashSet<usize>) {
+    pub fn fighter_colboxes_order_set_first(
+        &mut self,
+        fighter: &str,
+        action: &str,
+        frame: usize,
+        reordered_colboxes: &HashSet<usize>,
+    ) {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
@@ -386,17 +466,19 @@ impl Package {
             }
         }
 
-        self.package_updates.push(PackageUpdate::DeleteFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-        });
-        self.package_updates.push(PackageUpdate::InsertFighterFrame {
-            fighter:     fighter.to_string(),
-            action:      action.to_string(),
-            frame_index: frame,
-            frame:       fighter_frame.clone(),
-        });
+        self.package_updates
+            .push(PackageUpdate::DeleteFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+            });
+        self.package_updates
+            .push(PackageUpdate::InsertFighterFrame {
+                fighter: fighter.to_string(),
+                action: action.to_string(),
+                frame_index: frame,
+                frame: fighter_frame.clone(),
+            });
     }
 
     // TODO: Refactor to use a reference would be way faster
@@ -406,13 +488,13 @@ impl Package {
     }
 
     pub fn updates(&mut self) -> Vec<PackageUpdate> {
-        mem::replace(&mut self.package_updates, vec!())
+        mem::replace(&mut self.package_updates, vec![])
     }
 
     pub fn fighters(&self) -> Vec<(String, &EntityDef)> {
-        let mut result = vec!();
+        let mut result = vec![];
         for (key, entity) in self.entities.key_value_iter() {
-            if let EntityDefType::Fighter (_) = entity.ty {
+            if let EntityDefType::Fighter(_) = entity.ty {
                 result.push((key.clone(), entity));
             }
         }
@@ -424,15 +506,13 @@ impl Package {
 impl Node for Package {
     fn node_step(&mut self, mut runner: NodeRunner) -> String {
         let result = match runner.step() {
-            NodeToken::ChainProperty (property) => {
-                match property.as_str() {
-                    "entities" => { self.entities.node_step(runner) }
-                    "stages"   => { self.stages.node_step(runner) }
-                    prop       => format!("Package does not have a property '{}'", prop)
-                }
-            }
-            NodeToken::Help => {
-                String::from(r#"
+            NodeToken::ChainProperty(property) => match property.as_str() {
+                "entities" => self.entities.node_step(runner),
+                "stages" => self.stages.node_step(runner),
+                prop => format!("Package does not have a property '{}'", prop),
+            },
+            NodeToken::Help => String::from(
+                r#"
 Package Help
 
 Commands:
@@ -442,26 +522,24 @@ Commands:
 
 Accessors:
 *   .entities - KeyedContextVec
-*   .stages   - KeyedContextVec"#)
-            }
-            NodeToken::Custom (action, _) => {
-                match action.as_ref() {
-                    "save" => {
-                        self.save()
-                    }
-                    "reload" => {
-                        if let Err(err) = self.load() {
-                            err
-                        } else {
-                            String::from("Reload completed successfully.")
-                        }
-                    }
-                    _ => {
-                        format!("Package cannot '{}'", action)
+*   .stages   - KeyedContextVec"#,
+            ),
+            NodeToken::Custom(action, _) => match action.as_ref() {
+                "save" => self.save(),
+                "reload" => {
+                    if let Err(err) = self.load() {
+                        err
+                    } else {
+                        String::from("Reload completed successfully.")
                     }
                 }
+                _ => {
+                    format!("Package cannot '{}'", action)
+                }
+            },
+            action => {
+                format!("Package cannot '{:?}'", action)
             }
-            action => { format!("Package cannot '{:?}'", action) }
         };
 
         self.force_update_entire_package();
@@ -472,9 +550,25 @@ Accessors:
 // Finer grained changes are used when speed is needed
 #[derive(Clone, Serialize, Deserialize)]
 pub enum PackageUpdate {
-    Package (Package),
-    DeleteFighterFrame { fighter: String, action: String, frame_index: usize },
-    InsertFighterFrame { fighter: String, action: String, frame_index: usize, frame: ActionFrame },
-    DeleteStage { index: usize, key: String },
-    InsertStage { index: usize, key: String, stage: Stage },
+    Package(Package),
+    DeleteFighterFrame {
+        fighter: String,
+        action: String,
+        frame_index: usize,
+    },
+    InsertFighterFrame {
+        fighter: String,
+        action: String,
+        frame_index: usize,
+        frame: ActionFrame,
+    },
+    DeleteStage {
+        index: usize,
+        key: String,
+    },
+    InsertStage {
+        index: usize,
+        key: String,
+        stage: Stage,
+    },
 }

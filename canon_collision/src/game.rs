@@ -3,78 +3,80 @@ use crate::camera::Camera;
 use crate::collision::collision_box;
 use crate::collision::item_grab;
 use crate::entity::components::action_state::ActionState;
-use crate::entity::fighters::Fighter;
 use crate::entity::fighters::player::Player;
 use crate::entity::fighters::toriel::Toriel;
-use crate::entity::{Entity, EntityType, StepContext, RenderEntity, DebugEntity, Entities, DebugEntities, EntityKey};
+use crate::entity::fighters::Fighter;
+use crate::entity::{
+    DebugEntities, DebugEntity, Entities, Entity, EntityKey, EntityType, RenderEntity, StepContext,
+};
 use crate::graphics::{GraphicsMessage, Render, RenderType};
 use crate::menu::ResumeMenu;
-use crate::replays::Replay;
 use crate::replays;
-use crate::results::{GameResults, RawPlayerResult, PlayerResult};
-use crate::rules::{Rules, Goal};
+use crate::replays::Replay;
+use crate::results::{GameResults, PlayerResult, RawPlayerResult};
+use crate::rules::{Goal, Rules};
 
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
-use canon_collision_lib::entity_def::{ActionFrame, CollisionBox, EntityDefType, FighterType};
 use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::{ActionFrame, CollisionBox, EntityDefType, FighterType};
 use canon_collision_lib::geometry::Rect;
+use canon_collision_lib::input::state::{ControllerInput, PlayerInput};
 use canon_collision_lib::input::Input;
-use canon_collision_lib::input::state::{PlayerInput, ControllerInput};
 use canon_collision_lib::network::Netplay;
 use canon_collision_lib::package::Package;
-use canon_collision_lib::stage::{Stage, DebugStage, SpawnPoint, Surface, Floor, RenderStageMode};
+use canon_collision_lib::stage::{DebugStage, Floor, RenderStageMode, SpawnPoint, Stage, Surface};
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
-use std::time::Duration;
 use std::str::FromStr;
+use std::time::Duration;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use chrono::Local;
-use rand_chacha::ChaChaRng;
 use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaChaRng;
 use treeflection::{Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
 
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 #[NodeActions(
-    NodeAction(function="save_replay", return_string),
-    NodeAction(function="reset_deadzones", return_string),
-    NodeAction(function="copy_stage_to_package", return_string),
-    NodeAction(function="copy_package_to_stage", return_string),
+    NodeAction(function = "save_replay", return_string),
+    NodeAction(function = "reset_deadzones", return_string),
+    NodeAction(function = "copy_stage_to_package", return_string),
+    NodeAction(function = "copy_package_to_stage", return_string)
 )]
 pub struct Game {
-    pub package:                Package,
-    pub init_seed:              u64,
-    pub state:                  GameState,
-        entity_history:         Vec<Entities>,
-    pub stage_history:          Vec<Stage>,
-    pub current_frame:          usize,
-    pub saved_frame:            usize,
+    pub package: Package,
+    pub init_seed: u64,
+    pub state: GameState,
+    entity_history: Vec<Entities>,
+    pub stage_history: Vec<Stage>,
+    pub current_frame: usize,
+    pub saved_frame: usize,
     pub deleted_history_frames: usize,
-    pub max_history_frames:     Option<usize>,
-    pub stage:                  Stage,
-        entities:               Entities,
-    pub debug_stage:            DebugStage,
-        debug_entities:         DebugEntities,
-    pub selected_controllers:   Vec<usize>,
-    pub selected_ais:           Vec<usize>,
-    pub selected_stage:         String,
-    pub rules:                  Rules,
-        edit:                   Edit,
+    pub max_history_frames: Option<usize>,
+    pub stage: Stage,
+    entities: Entities,
+    pub debug_stage: DebugStage,
+    debug_entities: DebugEntities,
+    pub selected_controllers: Vec<usize>,
+    pub selected_ais: Vec<usize>,
+    pub selected_stage: String,
+    pub rules: Rules,
+    edit: Edit,
     pub debug_output_this_step: bool,
-    pub debug_lines:            Vec<String>,
-    pub selector:               Selector,
-        copied_frame:           Option<ActionFrame>,
-    pub camera:                 Camera,
-    pub tas:                    Vec<ControllerInput>,
-    bgm_metadata:               Option<BGMMetadata>,
-    save_replay:                bool,
-    reset_deadzones:            bool,
-    prev_mouse_point:           Option<(f32, f32)>,
+    pub debug_lines: Vec<String>,
+    pub selector: Selector,
+    copied_frame: Option<ActionFrame>,
+    pub camera: Camera,
+    pub tas: Vec<ControllerInput>,
+    bgm_metadata: Option<BGMMetadata>,
+    save_replay: bool,
+    reset_deadzones: bool,
+    prev_mouse_point: Option<(f32, f32)>,
 }
 
 /// Frame 0 refers to the initial state of the game.
@@ -108,10 +110,17 @@ impl Game {
                 let team = player.team;
 
                 if let EntityDefType::Fighter(fighter_def) = &entity_def.ty {
-                    let player = Player::new(fighter_key.as_ref(), team, i, &stage, &package, &setup.rules);
+                    let player = Player::new(
+                        fighter_key.as_ref(),
+                        team,
+                        i,
+                        &stage,
+                        &package,
+                        &setup.rules,
+                    );
                     let fighter = match fighter_def.ty {
                         FighterType::Toriel => Fighter::Toriel(Toriel::new(player)),
-                        FighterType::Dave   => Fighter::Toriel(Toriel::new(player)),
+                        FighterType::Dave => Fighter::Toriel(Toriel::new(player)),
                     };
                     let ty = EntityType::Fighter(fighter);
                     let state = ActionState::new(fighter_key, PlayerAction::Spawn);
@@ -139,28 +148,28 @@ impl Game {
         let bgm_metadata = Some(audio.play_bgm(&stage.name));
 
         Game {
-            init_seed:              setup.init_seed,
-            state:                  setup.state,
-            entity_history:         setup.entity_history,
-            stage_history:          setup.stage_history,
-            current_frame:          setup.current_frame,
-            saved_frame:            0,
-            max_history_frames:     setup.max_history_frames,
+            init_seed: setup.init_seed,
+            state: setup.state,
+            entity_history: setup.entity_history,
+            stage_history: setup.stage_history,
+            current_frame: setup.current_frame,
+            saved_frame: 0,
+            max_history_frames: setup.max_history_frames,
             deleted_history_frames: setup.deleted_history_frames,
-            selected_controllers:   setup.controllers,
-            selected_ais:           setup.ais,
-            selected_stage:         setup.stage,
-            rules:                  setup.rules,
-            edit:                   setup.edit,
+            selected_controllers: setup.controllers,
+            selected_ais: setup.ais,
+            selected_stage: setup.stage,
+            rules: setup.rules,
+            edit: setup.edit,
             debug_output_this_step: false,
-            debug_lines:            vec!(),
-            selector:               Default::default(),
-            copied_frame:           None,
-            camera:                 setup.camera,
-            tas:                    vec!(),
-            save_replay:            false,
-            reset_deadzones:        false,
-            prev_mouse_point:       None,
+            debug_lines: vec![],
+            selector: Default::default(),
+            copied_frame: None,
+            camera: setup.camera,
+            tas: vec![],
+            save_replay: false,
+            reset_deadzones: false,
+            prev_mouse_point: None,
             bgm_metadata,
             package,
             stage,
@@ -170,7 +179,16 @@ impl Game {
         }
     }
 
-    pub fn step(&mut self, config: &mut Config, input: &mut Input, os_input: &WinitInputHelper, os_input_blocked: bool, netplay: &Netplay, audio: &mut Audio) -> GameState {
+    #[rustfmt::skip]
+    pub fn step(
+        &mut self,
+        config: &mut Config,
+        input: &mut Input,
+        os_input: &WinitInputHelper,
+        os_input_blocked: bool,
+        netplay: &Netplay,
+        audio: &mut Audio,
+    ) -> GameState {
         if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();
@@ -211,7 +229,12 @@ impl Game {
                 self.camera.update_os_input(os_input);
                 self.prev_mouse_point = os_input.mouse();
             }
-            self.camera.update(os_input, &self.entities, &self.package.entities, &self.stage);
+            self.camera.update(
+                os_input,
+                &self.entities,
+                &self.package.entities,
+                &self.stage,
+            );
 
             self.generate_debug(input, netplay);
         }
@@ -223,13 +246,18 @@ impl Game {
     }
 
     fn game_mouse(&self, os_input: &WinitInputHelper) -> Option<(f32, f32)> {
-        os_input.mouse().and_then(|point| self.camera.mouse_to_game(point))
+        os_input
+            .mouse()
+            .and_then(|point| self.camera.mouse_to_game(point))
     }
 
     fn game_mouse_diff(&self, os_input: &WinitInputHelper) -> (f32, f32) {
         if let (Some(cur), Some(prev)) = (os_input.mouse(), self.prev_mouse_point) {
-            if let (Some(cur), Some(prev)) = (self.camera.mouse_to_game(cur), self.camera.mouse_to_game(prev)) {
-                return (cur.0 - prev.0, cur.1 - prev.1)
+            if let (Some(cur), Some(prev)) = (
+                self.camera.mouse_to_game(cur),
+                self.camera.mouse_to_game(prev),
+            ) {
+                return (cur.0 - prev.0, cur.1 - prev.1);
             }
         }
 
@@ -265,11 +293,11 @@ impl Game {
 
     fn set_context(&mut self) {
         match self.edit {
-            Edit::Entity (entity_i) => {
+            Edit::Entity(entity_i) => {
                 if let Some(entity) = self.entities.get(entity_i) {
-                    let entity_def_key  = entity.state.entity_def_key.as_ref();
-                    let entity_action   = entity.state.action.as_ref();
-                    let entity_frame    = entity.state.frame as usize;
+                    let entity_def_key = entity.state.entity_def_key.as_ref();
+                    let entity_action = entity.state.action.as_ref();
+                    let entity_frame = entity.state.frame as usize;
                     let entity_colboxes = self.selector.colboxes_vec();
 
                     let entity_defs = &mut self.package.entities;
@@ -292,9 +320,15 @@ impl Game {
                 }
             }
             Edit::Stage => {
-                self.stage.surfaces.set_context_vec(self.selector.surfaces_vec());
-                self.stage.spawn_points.set_context_vec(self.selector.spawn_points.iter().cloned().collect());
-                self.stage.respawn_points.set_context_vec(self.selector.respawn_points.iter().cloned().collect());
+                self.stage
+                    .surfaces
+                    .set_context_vec(self.selector.surfaces_vec());
+                self.stage
+                    .spawn_points
+                    .set_context_vec(self.selector.spawn_points.iter().cloned().collect());
+                self.stage
+                    .respawn_points
+                    .set_context_vec(self.selector.respawn_points.iter().cloned().collect());
             }
         }
     }
@@ -333,7 +367,9 @@ impl Game {
     }
 
     fn step_local_os_input(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
+        if os_input.key_pressed(VirtualKeyCode::Space)
+            || os_input.key_pressed(VirtualKeyCode::Return)
+        {
             self.state = GameState::Paused;
         }
     }
@@ -348,8 +384,8 @@ impl Game {
             self.entity_history.truncate(start);
             self.stage_history.truncate(start);
             if start != 0 {
-                self.entities = self.entity_history.get(start-1).unwrap().clone();
-                self.stage   = self.stage_history.get(start-1).unwrap().clone();
+                self.entities = self.entity_history.get(start - 1).unwrap().clone();
+                self.stage = self.stage_history.get(start - 1).unwrap().clone();
             }
 
             input.netplay_update();
@@ -366,43 +402,39 @@ impl Game {
 
     fn step_pause(&mut self, input: &mut Input) {
         if input.game_quit_held() {
-            self.state = GameState::Quit (ResumeMenu::Unchanged);
-        }
-        else if input.start_pressed() {
+            self.state = GameState::Quit(ResumeMenu::Unchanged);
+        } else if input.start_pressed() {
             self.state = GameState::Local;
         }
     }
 
-    fn step_pause_os_input(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay, audio: &mut Audio) {
+    fn step_pause_os_input(
+        &mut self,
+        input: &mut Input,
+        os_input: &WinitInputHelper,
+        netplay: &Netplay,
+        audio: &mut Audio,
+    ) {
         // game flow control
         if os_input.key_pressed(VirtualKeyCode::J) {
             self.step_replay_backwards(input);
-        }
-        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::K) {
+        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::K) {
             self.step_replay_forwards_from_input(input, netplay, audio);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::K) {
+        } else if os_input.key_pressed(VirtualKeyCode::K) {
             self.step_replay_forwards_from_history(input);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::H) {
+        } else if os_input.key_pressed(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
-        }
-        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Space) {
+        } else if os_input.key_pressed(VirtualKeyCode::Space) {
             self.step_local(input, netplay, audio);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::U) {
+        } else if os_input.key_pressed(VirtualKeyCode::U) {
             self.saved_frame = self.current_frame;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::I) {
+        } else if os_input.key_pressed(VirtualKeyCode::I) {
             self.jump_frame(self.saved_frame);
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Return) {
+        } else if os_input.key_pressed(VirtualKeyCode::Return) {
             self.state = GameState::Local;
         }
 
@@ -411,68 +443,65 @@ impl Game {
         }
     }
 
-    fn step_editor(&mut self, input: &mut Input, os_input: &WinitInputHelper, netplay: &Netplay, audio: &mut Audio) {
+    fn step_editor(
+        &mut self,
+        input: &mut Input,
+        os_input: &WinitInputHelper,
+        netplay: &Netplay,
+        audio: &mut Audio,
+    ) {
         // set current edit state
         if os_input.key_pressed(VirtualKeyCode::Key0) {
             self.edit = Edit::Stage;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key1) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key1) {
             if let Some(i) = self.entities.keys().next() {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key2) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key2) {
             if let Some(i) = self.entities.keys().nth(1) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key3) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key3) {
             if let Some(i) = self.entities.keys().nth(2) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key4) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key4) {
             if let Some(i) = self.entities.keys().nth(3) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key5) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key5) {
             if let Some(i) = self.entities.keys().nth(4) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key6) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key6) {
             if let Some(i) = self.entities.keys().nth(5) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key7) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key7) {
             if let Some(i) = self.entities.keys().nth(6) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key8) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key8) {
             if let Some(i) = self.entities.keys().nth(7) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Key9) {
+        } else if os_input.key_pressed(VirtualKeyCode::Key9) {
             if let Some(i) = self.entities.keys().nth(8) {
-                self.edit = Edit::Entity (i);
+                self.edit = Edit::Entity(i);
             }
             self.update_frame();
         }
 
         match self.edit {
-            Edit::Entity (entity_i) => {
+            Edit::Entity(entity_i) => {
                 if self.entities.contains_key(entity_i) {
                     if !self.debug_entities.contains_key(entity_i) {
                         self.debug_entities.insert(entity_i, Default::default());
@@ -482,8 +511,9 @@ impl Game {
                     let entity_def_key = entity_def_key.as_ref();
                     let action_key = self.entities[entity_i].state.action.clone();
                     let action_key = action_key.as_ref();
-                    let action_enum = PlayerAction::from_str(self.entities[entity_i].state.action.as_ref());
-                    let frame  = self.entities[entity_i].state.frame as usize;
+                    let action_enum =
+                        PlayerAction::from_str(self.entities[entity_i].state.action.as_ref());
+                    let frame = self.entities[entity_i].state.frame as usize;
                     {
                         let debug_entity = &mut self.debug_entities[entity_i];
                         if os_input.key_pressed(VirtualKeyCode::F1) {
@@ -498,8 +528,7 @@ impl Game {
                         if os_input.key_pressed(VirtualKeyCode::F4) {
                             if os_input.held_shift() {
                                 debug_entity.input_diff = !debug_entity.input_diff;
-                            }
-                            else {
+                            } else {
                                 debug_entity.input = !debug_entity.input;
                             }
                         }
@@ -522,8 +551,7 @@ impl Game {
                         if os_input.key_pressed(VirtualKeyCode::F10) {
                             if os_input.held_shift() {
                                 debug_entity.item_grab_area = !debug_entity.item_grab_area;
-                            }
-                            else {
+                            } else {
                                 debug_entity.cam_area = !debug_entity.cam_area;
                             }
                         }
@@ -537,50 +565,74 @@ impl Game {
 
                     // by adding the same amount of frames that are skipped in the entity logic,
                     // the user continues to see the same frames as they step through the action
-                    let repeat_frames = if let Some(fighter) = &self.entities[entity_i].ty.get_player() {
-                        if action_enum.as_ref().map_or(false, |x| x.is_land()) {
-                            fighter.land_frame_skip + 1
+                    let repeat_frames =
+                        if let Some(fighter) = &self.entities[entity_i].ty.get_player() {
+                            if action_enum.as_ref().map_or(false, |x| x.is_land()) {
+                                fighter.land_frame_skip + 1
+                            } else {
+                                1
+                            }
                         } else {
                             1
-                        }
-                    } else {
-                        1
-                    };
+                        };
 
                     // move collisionboxes
                     if self.selector.moving {
                         // undo the operations used to render the entity
                         let (raw_d_x, raw_d_y) = self.game_mouse_diff(os_input);
-                        let angle = -self.entities[entity_i].frame_angle(&self.package.entities[entity_def_key], &self.stage.surfaces); // rotate by the inverse of the angle
+                        let angle = -self.entities[entity_i].frame_angle(
+                            &self.package.entities[entity_def_key],
+                            &self.stage.surfaces,
+                        ); // rotate by the inverse of the angle
                         let d_x = raw_d_x * angle.cos() - raw_d_y * angle.sin();
                         let d_y = raw_d_x * angle.sin() + raw_d_y * angle.cos();
                         let distance = (self.entities[entity_i].relative_f(d_x), d_y); // *= -1 is its own inverse
-                        self.package.move_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, distance);
+                        self.package.move_fighter_colboxes(
+                            entity_def_key,
+                            action_key,
+                            frame,
+                            &self.selector.colboxes,
+                            distance,
+                        );
 
                         // end move
                         if os_input.mouse_pressed(0) {
                             self.update_frame();
                         }
-                    }
-                    else {
+                    } else {
                         // copy frame
                         if os_input.key_pressed(VirtualKeyCode::V) {
-                            let frame = self.package.entities[entity_def_key].actions[action_key].frames[frame].clone();
+                            let frame = self.package.entities[entity_def_key].actions[action_key]
+                                .frames[frame]
+                                .clone();
                             self.copied_frame = Some(frame);
                         }
                         // paste over current frame
                         if os_input.key_pressed(VirtualKeyCode::B) {
                             let action_frame = self.copied_frame.clone();
                             if let Some(action_frame) = action_frame {
-                                self.package.insert_fighter_frame(entity_def_key, action_key, frame, action_frame);
-                                self.package.delete_fighter_frame(entity_def_key, action_key, frame+1);
+                                self.package.insert_fighter_frame(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    action_frame,
+                                );
+                                self.package.delete_fighter_frame(
+                                    entity_def_key,
+                                    action_key,
+                                    frame + 1,
+                                );
                             }
                         }
 
                         // new frame
                         if os_input.key_pressed(VirtualKeyCode::M) {
                             for i in 0..repeat_frames {
-                                self.package.new_fighter_frame(entity_def_key, action_key, frame + i as usize);
+                                self.package.new_fighter_frame(
+                                    entity_def_key,
+                                    action_key,
+                                    frame + i as usize,
+                                );
                             }
                             // We want to step just the entities current frame to simplify the animation work flow
                             // However we need to do a proper full step so that the history doesn't get mucked up.
@@ -589,24 +641,35 @@ impl Game {
                         // delete frame
                         if os_input.key_pressed(VirtualKeyCode::N) {
                             let i = 0; //for i in 0..repeat_frames { // TODO: Panic
-                                if self.package.delete_fighter_frame(entity_def_key, action_key, frame - i as usize) {
-                                    // Correct any entities that are now on a nonexistent frame due to the frame deletion.
-                                    // This is purely to stay on the same action for usability.
-                                    // The entity itself must handle being on a frame that has been deleted in order for replays to work.
-                                    for any_entity in &mut self.entities.values_mut() {
-                                        if any_entity.state.entity_def_key == entity_def_key && any_entity.state.action == action_key
-                                            && any_entity.state.frame as usize == self.package.entities[entity_def_key].actions[action_key].frames.len()
-                                        {
-                                            any_entity.state.frame -= 1;
-                                        }
+                            if self.package.delete_fighter_frame(
+                                entity_def_key,
+                                action_key,
+                                frame - i as usize,
+                            ) {
+                                // Correct any entities that are now on a nonexistent frame due to the frame deletion.
+                                // This is purely to stay on the same action for usability.
+                                // The entity itself must handle being on a frame that has been deleted in order for replays to work.
+                                for any_entity in &mut self.entities.values_mut() {
+                                    if any_entity.state.entity_def_key == entity_def_key
+                                        && any_entity.state.action == action_key
+                                        && any_entity.state.frame as usize
+                                            == self.package.entities[entity_def_key].actions
+                                                [action_key]
+                                                .frames
+                                                .len()
+                                    {
+                                        any_entity.state.frame -= 1;
                                     }
-                                    self.update_frame();
                                 }
+                                self.update_frame();
+                            }
                             //}
                         }
 
                         // start move collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::A) && !self.selector.colboxes.is_empty() {
+                        if os_input.key_pressed(VirtualKeyCode::A)
+                            && !self.selector.colboxes.is_empty()
+                        {
                             self.selector.moving = true;
                         }
                         // enter pivot mode
@@ -615,7 +678,12 @@ impl Game {
                         }
                         // delete collisionbox
                         if os_input.key_pressed(VirtualKeyCode::D) {
-                            self.package.delete_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes);
+                            self.package.delete_fighter_colboxes(
+                                entity_def_key,
+                                action_key,
+                                frame,
+                                &self.selector.colboxes,
+                            );
                             self.update_frame();
                         }
                         // add collisionbox
@@ -623,12 +691,21 @@ impl Game {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let selected = {
                                     let entity = &self.entities[entity_i];
-                                    let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
+                                    let (p_x, p_y) = entity.public_bps_xy(
+                                        &self.entities,
+                                        &self.package.entities,
+                                        &self.stage.surfaces,
+                                    );
 
                                     let point = (entity.relative_f(m_x - p_x), m_y - p_y);
                                     let new_colbox = CollisionBox::new(point);
 
-                                    self.package.append_fighter_colbox(entity_def_key, action_key, frame, new_colbox)
+                                    self.package.append_fighter_colbox(
+                                        entity_def_key,
+                                        action_key,
+                                        frame,
+                                        new_colbox,
+                                    )
                                 };
                                 self.update_frame();
                                 self.selector.colboxes.insert(selected);
@@ -636,49 +713,100 @@ impl Game {
                         }
                         // resize collisionbox
                         if os_input.key_pressed(VirtualKeyCode::LBracket) {
-                            self.package.resize_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, -0.1);
+                            self.package.resize_fighter_colboxes(
+                                entity_def_key,
+                                action_key,
+                                frame,
+                                &self.selector.colboxes,
+                                -0.1,
+                            );
                         }
                         if os_input.key_pressed(VirtualKeyCode::RBracket) {
-                            self.package.resize_fighter_colboxes(entity_def_key, action_key, frame, &self.selector.colboxes, 0.1);
+                            self.package.resize_fighter_colboxes(
+                                entity_def_key,
+                                action_key,
+                                frame,
+                                &self.selector.colboxes,
+                                0.1,
+                            );
                         }
                         if os_input.key_pressed(VirtualKeyCode::Comma) {
                             if os_input.held_shift() {
-                                self.package.fighter_colboxes_order_set_first(entity_def_key, action_key, frame, &self.selector.colboxes)
-                            }
-                            else {
-                                self.package.fighter_colboxes_order_decrease(entity_def_key, action_key, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_set_first(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    &self.selector.colboxes,
+                                )
+                            } else {
+                                self.package.fighter_colboxes_order_decrease(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    &self.selector.colboxes,
+                                )
                             }
                         }
                         if os_input.key_pressed(VirtualKeyCode::Period) {
                             if os_input.held_shift() {
-                                self.package.fighter_colboxes_order_set_last(entity_def_key, action_key, frame, &self.selector.colboxes)
-                            }
-                            else {
-                                self.package.fighter_colboxes_order_increase(entity_def_key, action_key, frame, &self.selector.colboxes)
+                                self.package.fighter_colboxes_order_set_last(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    &self.selector.colboxes,
+                                )
+                            } else {
+                                self.package.fighter_colboxes_order_increase(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    &self.selector.colboxes,
+                                )
                             }
                         }
                         // set hitbox angle
                         if os_input.key_pressed(VirtualKeyCode::Q) {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let entity = &self.entities[entity_i];
-                                let (p_x, p_y) = entity.public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
+                                let (p_x, p_y) = entity.public_bps_xy(
+                                    &self.entities,
+                                    &self.package.entities,
+                                    &self.stage.surfaces,
+                                );
 
                                 let x = entity.relative_f(m_x - p_x);
                                 let y = m_y - p_y;
-                                self.package.point_hitbox_angles_to(entity_def_key, action_key, frame, &self.selector.colboxes, x, y);
+                                self.package.point_hitbox_angles_to(
+                                    entity_def_key,
+                                    action_key,
+                                    frame,
+                                    &self.selector.colboxes,
+                                    x,
+                                    y,
+                                );
                             }
                         }
 
                         // handle single selection
-                        if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
-                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[entity_def_key], &self.stage.surfaces);
+                        if let Some((m_x, m_y)) =
+                            self.selector.step_single_selection(os_input, &self.camera)
+                        {
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(
+                                &self.entities,
+                                &self.package.entities,
+                                &self.stage.surfaces,
+                            );
+                            let frame = self.entities[entity_i].relative_frame(
+                                &self.package.entities[entity_def_key],
+                                &self.stage.surfaces,
+                            );
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
                                 let hit_y = colbox.point.1 + entity_y;
 
-                                let distance = ((m_x - hit_x).powi(2) + (m_y - hit_y).powi(2)).sqrt();
+                                let distance =
+                                    ((m_x - hit_x).powi(2) + (m_y - hit_y).powi(2)).sqrt();
                                 if distance < colbox.radius {
                                     if os_input.held_alt() {
                                         self.selector.colboxes.remove(&i);
@@ -700,9 +828,19 @@ impl Game {
                         }
 
                         // handle multiple selection
-                        if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
-                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(&self.entities, &self.package.entities, &self.stage.surfaces);
-                            let frame = self.entities[entity_i].relative_frame(&self.package.entities[entity_def_key], &self.stage.surfaces);
+                        if let Some(rect) = self
+                            .selector
+                            .step_multiple_selection(os_input, &self.camera)
+                        {
+                            let (entity_x, entity_y) = self.entities[entity_i].public_bps_xy(
+                                &self.entities,
+                                &self.package.entities,
+                                &self.stage.surfaces,
+                            );
+                            let frame = self.entities[entity_i].relative_frame(
+                                &self.package.entities[entity_def_key],
+                                &self.stage.surfaces,
+                            );
 
                             for (i, colbox) in frame.colboxes.iter().enumerate() {
                                 let hit_x = colbox.point.0 + entity_x;
@@ -754,23 +892,29 @@ impl Game {
                     if os_input.mouse_pressed(0) {
                         self.update_frame();
                     }
-                }
-                else {
+                } else {
                     // start move elements
-                    if os_input.key_pressed(VirtualKeyCode::A) && self.selector.surfaces.len() + self.selector.spawn_points.len() + self.selector.respawn_points.len() > 0 {
+                    if os_input.key_pressed(VirtualKeyCode::A)
+                        && self.selector.surfaces.len()
+                            + self.selector.spawn_points.len()
+                            + self.selector.respawn_points.len()
+                            > 0
+                    {
                         self.selector.moving = true;
                     }
                     // delete elements
                     if os_input.key_pressed(VirtualKeyCode::D) {
                         // the indexes are sorted in reverse order to preserve index order while deleting.
-                        let mut spawns_to_delete: Vec<usize> = self.selector.spawn_points.iter().cloned().collect();
+                        let mut spawns_to_delete: Vec<usize> =
+                            self.selector.spawn_points.iter().cloned().collect();
                         spawns_to_delete.sort_unstable();
                         spawns_to_delete.reverse();
                         for spawn_i in spawns_to_delete {
                             self.stage.spawn_points.remove(spawn_i);
                         }
 
-                        let mut respawns_to_delete: Vec<usize> = self.selector.respawn_points.iter().cloned().collect();
+                        let mut respawns_to_delete: Vec<usize> =
+                            self.selector.respawn_points.iter().cloned().collect();
                         respawns_to_delete.sort_unstable();
                         respawns_to_delete.reverse();
                         for respawn_i in respawns_to_delete {
@@ -783,7 +927,12 @@ impl Game {
                         let entities = self.entities.clone();
                         for surface_i in surfaces_to_delete {
                             for (_, entity) in self.entities.iter_mut() {
-                                entity.platform_deleted(&entities, &self.package.entities, &self.stage.surfaces, surface_i);
+                                entity.platform_deleted(
+                                    &entities,
+                                    &self.package.entities,
+                                    &self.stage.surfaces,
+                                    surface_i,
+                                );
                             }
                             self.stage.surfaces.remove(surface_i);
                         }
@@ -796,22 +945,40 @@ impl Game {
                     }
                     // add ceiling surface
                     if os_input.key_pressed(VirtualKeyCode::W) {
-                        let surface = Surface { ceiling: true, .. Surface::default() };
+                        let surface = Surface {
+                            ceiling: true,
+                            ..Surface::default()
+                        };
                         self.add_surface(surface, os_input);
                     }
                     // add wall surface
                     if os_input.key_pressed(VirtualKeyCode::E) {
-                        let surface = Surface { wall: true, .. Surface::default() };
+                        let surface = Surface {
+                            wall: true,
+                            ..Surface::default()
+                        };
                         self.add_surface(surface, os_input);
                     }
                     // add stage surface
                     if os_input.key_pressed(VirtualKeyCode::R) {
-                        let surface = Surface { floor: Some(Floor { traction: 1.0, pass_through: false }), .. Surface::default() };
+                        let surface = Surface {
+                            floor: Some(Floor {
+                                traction: 1.0,
+                                pass_through: false,
+                            }),
+                            ..Surface::default()
+                        };
                         self.add_surface(surface, os_input);
                     }
                     // add platform surface
                     if os_input.key_pressed(VirtualKeyCode::F) {
-                        let surface = Surface { floor: Some(Floor { traction: 1.0, pass_through: true }), .. Surface::default() };
+                        let surface = Surface {
+                            floor: Some(Floor {
+                                traction: 1.0,
+                                pass_through: true,
+                            }),
+                            ..Surface::default()
+                        };
                         self.add_surface(surface, os_input);
                     }
                     // add spawn point
@@ -830,26 +997,30 @@ impl Game {
                     }
                     if os_input.key_pressed(VirtualKeyCode::S) {
                         let mut join = false;
-                        let mut points: Vec<(f32, f32)> = vec!();
+                        let mut points: Vec<(f32, f32)> = vec![];
                         fn f32_equal(a: f32, b: f32) -> bool {
                             (a - b).abs() < 0.0000001
                         }
 
                         for selection in self.selector.surfaces.iter() {
                             match selection {
-                                &SurfaceSelection::P1 (i) => {
+                                &SurfaceSelection::P1(i) => {
                                     let surface = &self.stage.surfaces[i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
-                                        if !f32_equal(surface.x1, prev_x) || !f32_equal(surface.y1, prev_y) {
+                                        if !f32_equal(surface.x1, prev_x)
+                                            || !f32_equal(surface.y1, prev_y)
+                                        {
                                             join = true;
                                         }
                                     }
                                     points.push((surface.x1, surface.y1));
                                 }
-                                &SurfaceSelection::P2 (i) => {
+                                &SurfaceSelection::P2(i) => {
                                     let surface = &self.stage.surfaces[i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
-                                        if !f32_equal(surface.x2, prev_x) || !f32_equal(surface.y2, prev_y) {
+                                        if !f32_equal(surface.x2, prev_x)
+                                            || !f32_equal(surface.y2, prev_y)
+                                        {
                                             join = true;
                                         }
                                     }
@@ -870,27 +1041,28 @@ impl Game {
                         if join {
                             for selection in self.selector.surfaces.iter() {
                                 match selection {
-                                    &SurfaceSelection::P1 (i) => {
+                                    &SurfaceSelection::P1(i) => {
                                         let surface = &mut self.stage.surfaces[i];
                                         surface.x1 = average_x;
                                         surface.y1 = average_y;
                                     }
-                                    &SurfaceSelection::P2 (i) => {
+                                    &SurfaceSelection::P2(i) => {
                                         let surface = &mut self.stage.surfaces[i];
                                         surface.x2 = average_x;
                                         surface.y2 = average_y;
                                     }
                                 }
                             }
-                        } else { // split
+                        } else {
+                            // split
                             for selection in self.selector.surfaces.iter() {
                                 match selection {
-                                    &SurfaceSelection::P1 (i) => {
+                                    &SurfaceSelection::P1(i) => {
                                         let surface = &mut self.stage.surfaces[i];
                                         surface.x1 = average_x + (surface.x2 - average_x) / 5.0;
                                         surface.y1 = average_y + (surface.y2 - average_y) / 5.0;
                                     }
-                                    &SurfaceSelection::P2 (i) => {
+                                    &SurfaceSelection::P2(i) => {
                                         let surface = &mut self.stage.surfaces[i];
                                         surface.x2 = average_x + (surface.x1 - average_x) / 5.0;
                                         surface.y2 = average_y + (surface.y1 - average_y) / 5.0;
@@ -902,10 +1074,13 @@ impl Game {
                 }
 
                 // handle single selection
-                if let Some((m_x, m_y)) = self.selector.step_single_selection(os_input, &self.camera) {
+                if let Some((m_x, m_y)) =
+                    self.selector.step_single_selection(os_input, &self.camera)
+                {
                     if self.debug_stage.spawn_points {
                         for (i, point) in self.stage.spawn_points.iter().enumerate() {
-                            let distance = ((m_x - point.x).powi(2) + (m_y - point.y).powi(2)).sqrt();
+                            let distance =
+                                ((m_x - point.x).powi(2) + (m_y - point.y).powi(2)).sqrt();
                             if distance < 4.0 {
                                 if os_input.held_alt() {
                                     self.selector.spawn_points.remove(&i);
@@ -917,7 +1092,8 @@ impl Game {
                     }
                     if self.debug_stage.respawn_points {
                         for (i, point) in self.stage.respawn_points.iter().enumerate() {
-                            let distance = ((m_x - point.x).powi(2) + (m_y - point.y).powi(2)).sqrt();
+                            let distance =
+                                ((m_x - point.x).powi(2) + (m_y - point.y).powi(2)).sqrt();
                             if distance < 4.0 {
                                 if os_input.held_alt() {
                                     self.selector.respawn_points.remove(&i);
@@ -928,15 +1104,18 @@ impl Game {
                         }
                     }
                     for (i, surface) in self.stage.surfaces.iter().enumerate() {
-                        let distance1 = ((m_x - surface.x1).powi(2) + (m_y - surface.y1).powi(2)).sqrt();
-                        if distance1 < 3.0 { // TODO: check entire half of surface, not just the edge
+                        let distance1 =
+                            ((m_x - surface.x1).powi(2) + (m_y - surface.y1).powi(2)).sqrt();
+                        if distance1 < 3.0 {
+                            // TODO: check entire half of surface, not just the edge
                             if os_input.held_alt() {
                                 self.selector.surfaces.remove(&SurfaceSelection::P1(i));
                             } else {
                                 self.selector.surfaces.insert(SurfaceSelection::P1(i));
                             }
                         }
-                        let distance2 = ((m_x - surface.x2).powi(2) + (m_y - surface.y2).powi(2)).sqrt();
+                        let distance2 =
+                            ((m_x - surface.x2).powi(2) + (m_y - surface.y2).powi(2)).sqrt();
                         if distance2 < 3.0 {
                             if os_input.held_alt() {
                                 self.selector.surfaces.remove(&SurfaceSelection::P2(i));
@@ -948,10 +1127,14 @@ impl Game {
                 }
 
                 // handle multiple selection
-                if let Some(rect) = self.selector.step_multiple_selection(os_input, &self.camera) {
+                if let Some(rect) = self
+                    .selector
+                    .step_multiple_selection(os_input, &self.camera)
+                {
                     if self.debug_stage.spawn_points {
                         for (i, point) in self.stage.spawn_points.iter().enumerate() {
-                            if rect.contains_point(point.x, point.y) { // TODO: check entire half of surface, not just the edge
+                            if rect.contains_point(point.x, point.y) {
+                                // TODO: check entire half of surface, not just the edge
                                 if os_input.held_alt() {
                                     self.selector.spawn_points.remove(&i);
                                 } else {
@@ -999,34 +1182,57 @@ impl Game {
             if self.selector.surfaces.len() == 1 {
                 // create new surface, p1 is selected surface, p2 is current mouse
                 let (x1, y1) = match self.selector.surfaces.iter().next().unwrap() {
-                    &SurfaceSelection::P1 (i) => (self.stage.surfaces[i].x1, self.stage.surfaces[i].y1),
-                    &SurfaceSelection::P2 (i) => (self.stage.surfaces[i].x2, self.stage.surfaces[i].y2)
+                    &SurfaceSelection::P1(i) => {
+                        (self.stage.surfaces[i].x1, self.stage.surfaces[i].y1)
+                    }
+                    &SurfaceSelection::P2(i) => {
+                        (self.stage.surfaces[i].x2, self.stage.surfaces[i].y2)
+                    }
                 };
 
                 self.selector.clear();
-                self.selector.surfaces.insert(SurfaceSelection::P2(self.stage.surfaces.len()));
-                self.stage.surfaces.push(Surface { x1, y1, x2: m_x, y2: m_y, .. surface });
-            }
-            else if self.selector.surfaces.is_empty() {
+                self.selector
+                    .surfaces
+                    .insert(SurfaceSelection::P2(self.stage.surfaces.len()));
+                self.stage.surfaces.push(Surface {
+                    x1,
+                    y1,
+                    x2: m_x,
+                    y2: m_y,
+                    ..surface
+                });
+            } else if self.selector.surfaces.is_empty() {
                 // create new surface, p1 is current mouse, p2 is moving
                 self.selector.clear();
-                self.selector.surfaces.insert(SurfaceSelection::P2(self.stage.surfaces.len()));
+                self.selector
+                    .surfaces
+                    .insert(SurfaceSelection::P2(self.stage.surfaces.len()));
                 self.selector.moving = true;
-                self.stage.surfaces.push(Surface { x1: m_x, y1: m_y, x2: m_x, y2: m_y, .. surface } );
+                self.stage.surfaces.push(Surface {
+                    x1: m_x,
+                    y1: m_y,
+                    x2: m_x,
+                    y2: m_y,
+                    ..surface
+                });
             }
         }
     }
 
     /// next frame is advanced by using the input history on the current frame
-    fn step_replay_forwards_from_input(&mut self, input: &mut Input, netplay: &Netplay, audio: &mut Audio) {
+    fn step_replay_forwards_from_input(
+        &mut self,
+        input: &mut Input,
+        netplay: &Netplay,
+        audio: &mut Audio,
+    ) {
         if self.current_frame <= input.last_frame() {
             self.current_frame += 1;
             let player_inputs = &input.players(self.current_frame, netplay);
             self.step_game(input, player_inputs, audio);
 
             self.update_frame();
-        }
-        else {
+        } else {
             self.state = GameState::Paused;
         }
 
@@ -1039,8 +1245,7 @@ impl Game {
     fn step_replay_forwards_from_history(&mut self, input: &mut Input) {
         if self.current_history_index() < self.entity_history.len() {
             self.jump_frame(self.current_frame + 1);
-        }
-        else {
+        } else {
             self.state = GameState::Paused;
         }
 
@@ -1052,15 +1257,15 @@ impl Game {
     fn step_replay_forwards_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.key_pressed(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
-        }
-        else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
         }
 
-        if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
+        if os_input.key_pressed(VirtualKeyCode::Space)
+            || os_input.key_pressed(VirtualKeyCode::Return)
+        {
             self.state = GameState::Paused;
         }
     }
@@ -1069,8 +1274,7 @@ impl Game {
     fn step_replay_backwards(&mut self, input: &mut Input) {
         if self.current_frame > 0 {
             self.jump_frame(self.current_frame - 1);
-        }
-        else {
+        } else {
             self.state = GameState::Paused;
         }
 
@@ -1083,11 +1287,11 @@ impl Game {
     fn step_replay_backwards_os_input(&mut self, os_input: &WinitInputHelper) {
         if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Space) || os_input.key_pressed(VirtualKeyCode::Return) {
+        } else if os_input.key_pressed(VirtualKeyCode::Space)
+            || os_input.key_pressed(VirtualKeyCode::Return)
+        {
             self.state = GameState::Paused;
             self.update_frame();
         }
@@ -1098,7 +1302,7 @@ impl Game {
         let history_index = to_frame - self.deleted_history_frames;
         if history_index < self.entity_history.len() {
             self.entities = self.entity_history.get(history_index).unwrap().clone();
-            self.stage   = self.stage_history .get(history_index).unwrap().clone();
+            self.stage = self.stage_history.get(history_index).unwrap().clone();
 
             self.current_frame = to_frame;
             self.update_frame();
@@ -1107,8 +1311,12 @@ impl Game {
 
     fn get_seed(&self) -> [u8; 32] {
         let mut seed = [0; 32];
-        (&mut seed[0..8]).write_u64::<LittleEndian>(self.init_seed).unwrap();
-        (&mut seed[8..16]).write_u64::<LittleEndian>(self.current_frame as u64).unwrap();
+        (&mut seed[0..8])
+            .write_u64::<LittleEndian>(self.init_seed)
+            .unwrap();
+        (&mut seed[8..16])
+            .write_u64::<LittleEndian>(self.current_frame as u64)
+            .unwrap();
         seed
     }
 
@@ -1116,12 +1324,11 @@ impl Game {
         let default_input = PlayerInput::empty();
         {
             let mut rng = ChaChaRng::from_seed(self.get_seed());
-            let mut new_entities = vec!();
-            let mut messages = vec!();
+            let mut new_entities = vec![];
+            let mut messages = vec![];
 
             // To synchronize entity stepping, we step through entity logic in stages (item grab logic, action logic, physics logic, collision logic)
             // Modified entities are copied from the previous stage so that every entity perceives themselves as being stepped first, within that stage.
-
 
             // step each entity action
             let mut action_entities = self.entities.clone();
@@ -1129,19 +1336,23 @@ impl Game {
             for key in keys {
                 let delete_self = {
                     let entity = &mut action_entities[key];
-                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let input_i = entity
+                        .player_id()
+                        .and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i
+                        .and_then(|x| player_inputs.get(*x))
+                        .unwrap_or(&default_input);
                     let mut context = StepContext {
-                        entity_key:   key,
-                        entities:     &self.entities,
-                        entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                        stage:        &self.stage,
-                        surfaces:     &self.stage.surfaces,
-                        rng:          &mut rng,
+                        entity_key: key,
+                        entities: &self.entities,
+                        entity_defs: &self.package.entities,
+                        entity_def: &self.package.entities[entity.state.entity_def_key.as_ref()],
+                        stage: &self.stage,
+                        surfaces: &self.stage.surfaces,
+                        rng: &mut rng,
                         new_entities: &mut new_entities,
-                        messages:     &mut messages,
-                        delete_self:  false,
+                        messages: &mut messages,
+                        delete_self: false,
                         audio,
                         input,
                     };
@@ -1155,25 +1366,34 @@ impl Game {
 
             // step each player item grab
             // No need to clone entity slotmap, all the real logic lives in collision_check which operates on all entities at once.
-            let item_grab_results = item_grab::collision_check(&action_entities, &self.package.entities, &self.stage.surfaces);
+            let item_grab_results = item_grab::collision_check(
+                &action_entities,
+                &self.package.entities,
+                &self.stage.surfaces,
+            );
             let mut grab_entities = action_entities.clone();
             for (current_key, hit_key) in item_grab_results {
                 let hit_id = grab_entities.get_mut(hit_key).and_then(|x| x.player_id());
                 if let Some(entity) = grab_entities.get_mut(current_key) {
-                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let input_i = entity
+                        .player_id()
+                        .and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i
+                        .and_then(|x| player_inputs.get(*x))
+                        .unwrap_or(&default_input);
                     let delete_self = {
                         let mut context = StepContext {
-                            entity_key:   current_key,
-                            entities:     &action_entities,
-                            entity_defs:  &self.package.entities,
-                            entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                            stage:        &self.stage,
-                            surfaces:     &self.stage.surfaces,
-                            rng:          &mut rng,
+                            entity_key: current_key,
+                            entities: &action_entities,
+                            entity_defs: &self.package.entities,
+                            entity_def: &self.package.entities
+                                [entity.state.entity_def_key.as_ref()],
+                            stage: &self.stage,
+                            surfaces: &self.stage.surfaces,
+                            rng: &mut rng,
                             new_entities: &mut new_entities,
-                            messages:     &mut messages,
-                            delete_self:  false,
+                            messages: &mut messages,
+                            delete_self: false,
                             audio,
                             input,
                         };
@@ -1192,19 +1412,23 @@ impl Game {
             for key in keys {
                 let delete_self = {
                     let entity = &mut physics_entities[key];
-                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let input_i = entity
+                        .player_id()
+                        .and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i
+                        .and_then(|x| player_inputs.get(*x))
+                        .unwrap_or(&default_input);
                     let mut context = StepContext {
-                        entity_key:   key,
-                        entities:     &grab_entities,
-                        entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                        stage:        &self.stage,
-                        surfaces:     &self.stage.surfaces,
-                        rng:          &mut rng,
+                        entity_key: key,
+                        entities: &grab_entities,
+                        entity_defs: &self.package.entities,
+                        entity_def: &self.package.entities[entity.state.entity_def_key.as_ref()],
+                        stage: &self.stage,
+                        surfaces: &self.stage.surfaces,
+                        rng: &mut rng,
                         new_entities: &mut new_entities,
-                        messages:     &mut messages,
-                        delete_self:  false,
+                        messages: &mut messages,
+                        delete_self: false,
                         audio,
                         input,
                     };
@@ -1225,24 +1449,32 @@ impl Game {
 
             // check for hits and run hit logic
             let mut collision_entities = physics_entities.clone();
-            let collision_results = collision_box::collision_check(&physics_entities, &self.package.entities, &self.stage.surfaces);
+            let collision_results = collision_box::collision_check(
+                &physics_entities,
+                &self.package.entities,
+                &self.stage.surfaces,
+            );
             let keys: Vec<_> = collision_entities.keys().collect();
             for key in keys {
                 let delete_self = {
                     let entity = &mut collision_entities[key];
-                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let input_i = entity
+                        .player_id()
+                        .and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i
+                        .and_then(|x| player_inputs.get(*x))
+                        .unwrap_or(&default_input);
                     let mut context = StepContext {
-                        entity_key:   key,
-                        entities:     &physics_entities,
-                        entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                        stage:        &self.stage,
-                        surfaces:     &self.stage.surfaces,
-                        rng:          &mut rng,
+                        entity_key: key,
+                        entities: &physics_entities,
+                        entity_defs: &self.package.entities,
+                        entity_def: &self.package.entities[entity.state.entity_def_key.as_ref()],
+                        stage: &self.stage,
+                        surfaces: &self.stage.surfaces,
+                        rng: &mut rng,
                         new_entities: &mut new_entities,
-                        messages:     &mut messages,
-                        delete_self:  false,
+                        messages: &mut messages,
+                        delete_self: false,
                         audio,
                         input,
                     };
@@ -1256,19 +1488,23 @@ impl Game {
 
             for message in messages {
                 if let Some(entity) = collision_entities.get_mut(message.recipient) {
-                    let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
-                    let input = input_i.and_then(|x| player_inputs.get(*x)).unwrap_or(&default_input);
+                    let input_i = entity
+                        .player_id()
+                        .and_then(|x| self.selected_controllers.get(x));
+                    let input = input_i
+                        .and_then(|x| player_inputs.get(*x))
+                        .unwrap_or(&default_input);
                     let mut context = StepContext {
-                        entity_key:   message.recipient,
-                        entities:     &physics_entities,
-                        entity_defs:  &self.package.entities,
-                        entity_def:   &self.package.entities[entity.state.entity_def_key.as_ref()],
-                        stage:        &self.stage,
-                        surfaces:     &self.stage.surfaces,
-                        rng:          &mut rng,
+                        entity_key: message.recipient,
+                        entities: &physics_entities,
+                        entity_defs: &self.package.entities,
+                        entity_def: &self.package.entities[entity.state.entity_def_key.as_ref()],
+                        stage: &self.stage,
+                        surfaces: &self.stage.surfaces,
+                        rng: &mut rng,
                         new_entities: &mut new_entities,
-                        messages:     &mut vec!(),
-                        delete_self:  false,
+                        messages: &mut vec![],
+                        delete_self: false,
                         audio,
                         input,
                     };
@@ -1285,9 +1521,19 @@ impl Game {
 
         let players_count = self.players_iter().count();
         let eliminated: &str = PlayerAction::Eliminated.into();
-        if self.time_out() ||
-           (players_count == 1 && self.players_iter().filter(|(_, x)| x.action != eliminated).count() == 0) ||
-           (players_count >  1 && self.players_iter().filter(|(_, x)| x.action != eliminated).count() == 1)
+        if self.time_out()
+            || (players_count == 1
+                && self
+                    .players_iter()
+                    .filter(|(_, x)| x.action != eliminated)
+                    .count()
+                    == 0)
+            || (players_count > 1
+                && self
+                    .players_iter()
+                    .filter(|(_, x)| x.action != eliminated)
+                    .count()
+                    == 1)
         {
             self.state = self.generate_game_results(input);
         }
@@ -1303,14 +1549,17 @@ impl Game {
         }
     }
 
-    fn players_iter(&self) -> impl Iterator<Item=(&Player, &ActionState)> {
-        self.entities.values().filter_map(|x|
-            x.ty.get_player().map(|f| (f, &x.state))
-        )
+    fn players_iter(&self) -> impl Iterator<Item = (&Player, &ActionState)> {
+        self.entities
+            .values()
+            .filter_map(|x| x.ty.get_player().map(|f| (f, &x.state)))
     }
 
     pub fn generate_game_results(&self, input: &Input) -> GameState {
-        let raw_player_results: Vec<RawPlayerResult> = self.players_iter().map(|(player, state)| player.result(state)).collect();
+        let raw_player_results: Vec<RawPlayerResult> = self
+            .players_iter()
+            .map(|(player, state)| player.result(state))
+            .collect();
         // TODO: Players on the same team score to the same pool and share their place.
         let places: Vec<usize> = match self.rules.goal {
             Goal::LastManStanding => {
@@ -1318,72 +1567,67 @@ impl Game {
                 // tie-breaker:
                 //  * if both eliminated: who lost their last stock last wins
                 //  * if both alive:      lowest percentage wins
-                let mut raw_player_results_i: Vec<(usize, &RawPlayerResult)> = raw_player_results.iter().enumerate().collect();
-                raw_player_results_i.sort_by(
-                    |a_set, b_set| {
-                        let a = a_set.1;
-                        let b = b_set.1;
-                        let a_deaths = a.deaths.len();
-                        let b_deaths = b.deaths.len();
-                        a_deaths.cmp(&b_deaths).then(
-                            if a_deaths == 0 {
-                                if let Some(death_a) = a.deaths.last() {
-                                    if let Some(death_b) = b.deaths.last() {
-                                        death_a.frame.cmp(&death_b.frame)
-                                    }
-                                    else {
-                                        Ordering::Equal
-                                    }
-                                }
-                                else {
-                                    Ordering::Equal
-                                }
+                let mut raw_player_results_i: Vec<(usize, &RawPlayerResult)> =
+                    raw_player_results.iter().enumerate().collect();
+                raw_player_results_i.sort_by(|a_set, b_set| {
+                    let a = a_set.1;
+                    let b = b_set.1;
+                    let a_deaths = a.deaths.len();
+                    let b_deaths = b.deaths.len();
+                    a_deaths.cmp(&b_deaths).then(if a_deaths == 0 {
+                        if let Some(death_a) = a.deaths.last() {
+                            if let Some(death_b) = b.deaths.last() {
+                                death_a.frame.cmp(&death_b.frame)
+                            } else {
+                                Ordering::Equal
                             }
-                            else {
-                                a.final_damage.unwrap().partial_cmp(&b.final_damage.unwrap()).unwrap_or(Ordering::Equal)
-                            }
-                        )
-                    }
-                );
+                        } else {
+                            Ordering::Equal
+                        }
+                    } else {
+                        a.final_damage
+                            .unwrap()
+                            .partial_cmp(&b.final_damage.unwrap())
+                            .unwrap_or(Ordering::Equal)
+                    })
+                });
                 raw_player_results_i.iter().map(|x| x.0).collect()
             }
             Goal::KillDeathScore => {
                 // highest kills wins
                 // tie breaker: least deaths wins
-                let mut raw_player_results_i: Vec<(usize, &RawPlayerResult)> = raw_player_results.iter().enumerate().collect();
-                raw_player_results_i.sort_by(
-                    |a_set, b_set| {
-                        // Repopulating kill lists every frame shouldnt be too bad
-                        let a_kills: Vec<usize> = vec!(); // TODO: populate
-                        let b_kills: Vec<usize> = vec!(); // TODO: populate
-                        let a = a_set.1;
-                        let b = b_set.1;
-                        let a_kills = a_kills.len();
-                        let b_kills = b_kills.len();
-                        let a_deaths = a.deaths.len();
-                        let b_deaths = b.deaths.len();
-                        b_kills.cmp(&a_kills).then(a_deaths.cmp(&b_deaths))
-                    }
-                );
+                let mut raw_player_results_i: Vec<(usize, &RawPlayerResult)> =
+                    raw_player_results.iter().enumerate().collect();
+                raw_player_results_i.sort_by(|a_set, b_set| {
+                    // Repopulating kill lists every frame shouldnt be too bad
+                    let a_kills: Vec<usize> = vec![]; // TODO: populate
+                    let b_kills: Vec<usize> = vec![]; // TODO: populate
+                    let a = a_set.1;
+                    let b = b_set.1;
+                    let a_kills = a_kills.len();
+                    let b_kills = b_kills.len();
+                    let a_deaths = a.deaths.len();
+                    let b_deaths = b.deaths.len();
+                    b_kills.cmp(&a_kills).then(a_deaths.cmp(&b_deaths))
+                });
                 raw_player_results_i.iter().map(|x| x.0).collect()
             }
         };
 
-        let mut player_results: Vec<PlayerResult> = vec!();
+        let mut player_results: Vec<PlayerResult> = vec![];
         for (i, raw_player_result) in raw_player_results.iter().enumerate() {
             let lcancel_percent = if raw_player_result.lcancel_attempts == 0 {
                 100.0
-            }
-            else {
+            } else {
                 raw_player_result.lcancel_success as f32 / raw_player_result.lcancel_attempts as f32
             };
             player_results.push(PlayerResult {
-                fighter:         raw_player_result.ended_as_fighter.clone().unwrap(),
-                team:            raw_player_result.team,
-                controller:      self.selected_controllers[i],
-                place:           places[i],
-                kills:           vec!(), // TODO
-                deaths:          raw_player_result.deaths.clone(),
+                fighter: raw_player_result.ended_as_fighter.clone().unwrap(),
+                team: raw_player_result.team,
+                controller: self.selected_controllers[i],
+                place: places[i],
+                kills: vec![], // TODO
+                deaths: raw_player_result.deaths.clone(),
                 lcancel_percent,
             });
         }
@@ -1391,14 +1635,10 @@ impl Game {
 
         let replay = Replay::new(self, input);
 
-        GameState::Quit (
-            ResumeMenu::Results (
-                GameResults {
-                    player_results,
-                    replay,
-                }
-            )
-        )
+        GameState::Quit(ResumeMenu::Results(GameResults {
+            player_results,
+            replay,
+        }))
     }
 
     fn generate_debug(&mut self, input: &Input, netplay: &Netplay) {
@@ -1406,12 +1646,20 @@ impl Game {
         let player_inputs = &input.players_no_log(frame, netplay);
 
         self.debug_lines = self.camera.debug_print();
-        self.debug_lines.push(format!("Frame: {}    state: {}", frame, self.state));
+        self.debug_lines
+            .push(format!("Frame: {}    state: {}", frame, self.state));
         for (i, debug_entity) in self.debug_entities.iter() {
             if let Some(entity) = self.entities.get(i) {
-                let input_i = entity.player_id().and_then(|x| self.selected_controllers.get(x));
+                let input_i = entity
+                    .player_id()
+                    .and_then(|x| self.selected_controllers.get(x));
                 let input = input_i.and_then(|x| player_inputs.get(*x));
-                self.debug_lines.extend(entity.debug_print(&self.package.entities, input, debug_entity, i));
+                self.debug_lines.extend(entity.debug_print(
+                    &self.package.entities,
+                    input,
+                    debug_entity,
+                    i,
+                ));
             }
         }
 
@@ -1433,7 +1681,7 @@ impl Game {
 
     #[allow(unused)] // Needed for headless build
     pub fn render(&self) -> RenderGame {
-        let mut render_entities = vec!();
+        let mut render_entities = vec![];
 
         let entity_defs = &self.package.entities;
         let surfaces = &self.stage.surfaces;
@@ -1442,38 +1690,66 @@ impl Game {
             let mut entity_selected = false;
             if let GameState::Paused = self.state {
                 match self.edit {
-                    Edit::Entity (entity_i) => {
+                    Edit::Entity(entity_i) => {
                         if i == entity_i {
                             selected_colboxes = self.selector.colboxes.clone();
                             entity_selected = true;
                         }
                     }
-                    _ => { }
+                    _ => {}
                 }
             }
 
             let debug = self.debug_entities.get(i).cloned().unwrap_or_default();
             if debug.cam_area {
-                if let Some(cam_area) = entity.cam_area(&self.stage.camera, &self.entities, &self.package.entities, &self.stage.surfaces) {
+                if let Some(cam_area) = entity.cam_area(
+                    &self.stage.camera,
+                    &self.entities,
+                    &self.package.entities,
+                    &self.stage.surfaces,
+                ) {
                     render_entities.push(RenderObject::rect_outline(cam_area, 0.0, 0.0, 1.0));
                 }
             }
             if debug.item_grab_area {
-                if let Some(item_grab_box) = entity.item_grab_box(&self.entities, &self.package.entities, &self.stage.surfaces) {
+                if let Some(item_grab_box) = entity.item_grab_box(
+                    &self.entities,
+                    &self.package.entities,
+                    &self.stage.surfaces,
+                ) {
                     render_entities.push(RenderObject::rect_outline(item_grab_box, 0.0, 1.0, 0.0));
                 }
             }
 
-            let player_render = entity.render(selected_colboxes, entity_selected, debug, i, &self.entity_history[0..self.current_history_index()], &self.entities, entity_defs, surfaces);
+            let player_render = entity.render(
+                selected_colboxes,
+                entity_selected,
+                debug,
+                i,
+                &self.entity_history[0..self.current_history_index()],
+                &self.entities,
+                entity_defs,
+                surfaces,
+            );
             render_entities.push(RenderObject::Entity(player_render));
         }
 
         // render stage debug entities
         if self.debug_stage.blast {
-            render_entities.push(RenderObject::rect_outline(self.stage.blast.clone(),  1.0, 0.0, 0.0));
+            render_entities.push(RenderObject::rect_outline(
+                self.stage.blast.clone(),
+                1.0,
+                0.0,
+                0.0,
+            ));
         }
         if self.debug_stage.camera {
-            render_entities.push(RenderObject::rect_outline(self.stage.camera.clone(), 0.0, 0.0, 1.0));
+            render_entities.push(RenderObject::rect_outline(
+                self.stage.camera.clone(),
+                0.0,
+                0.0,
+                1.0,
+            ));
         }
         if self.debug_stage.spawn_points {
             for (i, point) in self.stage.spawn_points.iter().enumerate() {
@@ -1511,27 +1787,31 @@ impl Game {
         };
 
         RenderGame {
-            seed:              self.get_seed(),
-            current_frame:     self.current_frame,
-            surfaces:          self.stage.surfaces.to_vec(),
+            seed: self.get_seed(),
+            current_frame: self.current_frame,
+            surfaces: self.stage.surfaces.to_vec(),
             selected_surfaces: self.selector.surfaces.clone(),
             render_stage_mode: self.debug_stage.render_stage_mode.clone(),
-            stage_model_name:  self.stage.name.clone(),
-            entities:          render_entities,
-            state:             self.state.clone(),
-            camera:            self.camera.clone(),
-            debug_lines:       self.debug_lines.clone(),
+            stage_model_name: self.stage.name.clone(),
+            entities: render_entities,
+            state: self.state.clone(),
+            camera: self.camera.clone(),
+            debug_lines: self.debug_lines.clone(),
             timer,
-            bgm_metadata:      self.bgm_metadata.clone(),
+            bgm_metadata: self.bgm_metadata.clone(),
         }
     }
 
     #[allow(unused)] // Needed for headless build
-    pub fn graphics_message(&mut self, config: &Config, command_line: &CommandLine) -> GraphicsMessage {
+    pub fn graphics_message(
+        &mut self,
+        config: &Config,
+        command_line: &CommandLine,
+    ) -> GraphicsMessage {
         let render = Render {
             command_output: command_line.output(),
-            render_type:    RenderType::Game(self.render()),
-            fullscreen:     config.fullscreen,
+            render_type: RenderType::Game(self.render()),
+            fullscreen: config.fullscreen,
         };
         self.bgm_metadata = None;
 
@@ -1574,7 +1854,7 @@ pub enum GameState {
     ReplayBackwards,
     Netplay,
     Paused, // Only Local, ReplayForwardsFromHistory, ReplayForwardsFromInput and ReplayBackwards can be paused
-    Quit (ResumeMenu), // Both Local and Netplay end at Quit
+    Quit(ResumeMenu), // Both Local and Netplay end at Quit
 
     // Used for TAS, in game these are run during pause state
     StepThenPause,
@@ -1585,16 +1865,16 @@ pub enum GameState {
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &GameState::Local                     => write!(f, "Local"),
+            &GameState::Local => write!(f, "Local"),
             &GameState::ReplayForwardsFromHistory => write!(f, "ReplayForwardsFromHistory"),
-            &GameState::ReplayForwardsFromInput   => write!(f, "ReplayForwardsFromInput"),
-            &GameState::ReplayBackwards           => write!(f, "ReplayBackwards"),
-            &GameState::Netplay                   => write!(f, "Netplay"),
-            &GameState::Paused                    => write!(f, "Paused"),
-            &GameState::Quit (_)                  => write!(f, "Quit"),
-            &GameState::StepThenPause             => write!(f, "StepThenPause"),
-            &GameState::StepForwardThenPause      => write!(f, "StepForwardThenPause"),
-            &GameState::StepBackwardThenPause     => write!(f, "StepBackwardThenPause)"),
+            &GameState::ReplayForwardsFromInput => write!(f, "ReplayForwardsFromInput"),
+            &GameState::ReplayBackwards => write!(f, "ReplayBackwards"),
+            &GameState::Netplay => write!(f, "Netplay"),
+            &GameState::Paused => write!(f, "Paused"),
+            &GameState::Quit(_) => write!(f, "Quit"),
+            &GameState::StepThenPause => write!(f, "StepThenPause"),
+            &GameState::StepForwardThenPause => write!(f, "StepForwardThenPause"),
+            &GameState::StepBackwardThenPause => write!(f, "StepBackwardThenPause)"),
         }
     }
 }
@@ -1607,8 +1887,8 @@ impl Default for GameState {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Edit {
-    Entity (EntityKey),
-    Stage
+    Entity(EntityKey),
+    Stage,
 }
 
 impl Default for Edit {
@@ -1619,13 +1899,13 @@ impl Default for Edit {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Selector {
-    colboxes:       HashSet<usize>,
-    surfaces:       HashSet<SurfaceSelection>,
-    spawn_points:   HashSet<usize>,
+    colboxes: HashSet<usize>,
+    surfaces: HashSet<SurfaceSelection>,
+    spawn_points: HashSet<usize>,
     respawn_points: HashSet<usize>,
-    moving:         bool,
-    point:          Option<(f32, f32)>, // selector starting point
-    mouse:          Option<(f32, f32)>, // used to know mouse point during render
+    moving: bool,
+    point: Option<(f32, f32)>, // selector starting point
+    mouse: Option<(f32, f32)>, // used to know mouse point during render
 }
 
 impl Selector {
@@ -1634,7 +1914,7 @@ impl Selector {
     }
 
     fn surfaces_vec(&self) -> Vec<usize> {
-        let mut result = vec!();
+        let mut result = vec![];
         let mut prev_i: Option<usize> = None;
         let mut surfaces: Vec<usize> = self.surfaces.iter().map(|x| x.index()).collect();
         surfaces.sort_unstable();
@@ -1644,8 +1924,7 @@ impl Selector {
                 if prev_i != surface_i {
                     result.push(surface_i)
                 }
-            }
-            else {
+            } else {
                 result.push(surface_i)
             }
             prev_i = Some(surface_i);
@@ -1654,9 +1933,9 @@ impl Selector {
     }
 
     fn start(&mut self, mouse: (f32, f32)) {
-        self.point  = Some(mouse);
+        self.point = Some(mouse);
         self.moving = false;
-        self.mouse  = None;
+        self.mouse = None;
     }
 
     fn clear(&mut self) {
@@ -1667,8 +1946,14 @@ impl Selector {
     }
 
     /// Returns a selection rect iff a multiple selection is finished.
-    fn step_multiple_selection(&mut self, os_input: &WinitInputHelper, camera: &Camera) -> Option<Rect> {
-        let game_mouse = os_input.mouse().and_then(|point| camera.mouse_to_game(point));
+    fn step_multiple_selection(
+        &mut self,
+        os_input: &WinitInputHelper,
+        camera: &Camera,
+    ) -> Option<Rect> {
+        let game_mouse = os_input
+            .mouse()
+            .and_then(|point| camera.mouse_to_game(point));
         // start selection
         if os_input.mouse_pressed(1) {
             if let Some(mouse) = game_mouse {
@@ -1682,16 +1967,23 @@ impl Selector {
                 if !(os_input.held_shift() || os_input.held_alt()) {
                     self.clear();
                 }
-                return Some(Rect::from_tuples(p1, p2))
+                return Some(Rect::from_tuples(p1, p2));
             }
         }
         None
     }
 
     /// Returns a selection point iff a single selection is made.
-    fn step_single_selection(&mut self, os_input: &WinitInputHelper, camera: &Camera) -> Option<(f32, f32)> {
+    fn step_single_selection(
+        &mut self,
+        os_input: &WinitInputHelper,
+        camera: &Camera,
+    ) -> Option<(f32, f32)> {
         if os_input.mouse_pressed(0) {
-            if let point @ Some(_) = os_input.mouse().and_then(|point| camera.mouse_to_game(point)) {
+            if let point @ Some(_) = os_input
+                .mouse()
+                .and_then(|point| camera.mouse_to_game(point))
+            {
                 if !(os_input.held_shift() || os_input.held_alt()) {
                     self.clear();
                 }
@@ -1704,104 +1996,99 @@ impl Selector {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize, Node)]
 pub enum SurfaceSelection {
-    P1 (usize),
-    P2 (usize)
+    P1(usize),
+    P2(usize),
 }
 
 impl SurfaceSelection {
     fn index(&self) -> usize {
         match self {
-            &SurfaceSelection::P1 (index) |
-            &SurfaceSelection::P2 (index) => index
+            &SurfaceSelection::P1(index) | &SurfaceSelection::P2(index) => index,
         }
     }
 }
 
 impl Default for SurfaceSelection {
     fn default() -> SurfaceSelection {
-        SurfaceSelection::P1 (0)
+        SurfaceSelection::P1(0)
     }
 }
 
 pub struct RenderGame {
-    pub seed:              [u8; 32],
-    pub current_frame:     usize,
-    pub surfaces:          Vec<Surface>,
+    pub seed: [u8; 32],
+    pub current_frame: usize,
+    pub surfaces: Vec<Surface>,
     pub selected_surfaces: HashSet<SurfaceSelection>,
     pub render_stage_mode: RenderStageMode,
-    pub stage_model_name:  String,
-    pub entities:          Vec<RenderObject>,
-    pub state:             GameState,
-    pub camera:            Camera,
-    pub debug_lines:       Vec<String>,
-    pub timer:             Option<Duration>,
-    pub bgm_metadata:      Option<BGMMetadata>,
+    pub stage_model_name: String,
+    pub entities: Vec<RenderObject>,
+    pub state: GameState,
+    pub camera: Camera,
+    pub debug_lines: Vec<String>,
+    pub timer: Option<Duration>,
+    pub bgm_metadata: Option<BGMMetadata>,
 }
 
 pub enum RenderObject {
-    Entity      (RenderEntity),
-    RectOutline (RenderRect),
-    SpawnPoint  (RenderSpawnPoint),
+    Entity(RenderEntity),
+    RectOutline(RenderRect),
+    SpawnPoint(RenderSpawnPoint),
 }
 
 impl RenderObject {
     pub fn rect_outline(rect: Rect, r: f32, g: f32, b: f32) -> RenderObject {
-        RenderObject::RectOutline (
-            RenderRect {
-                rect,
-                color: [r, g, b, 1.0]
-            }
-        )
+        RenderObject::RectOutline(RenderRect {
+            rect,
+            color: [r, g, b, 1.0],
+        })
     }
 
     pub fn spawn_point(point: SpawnPoint, r: f32, g: f32, b: f32) -> RenderObject {
-        RenderObject::SpawnPoint (
-            RenderSpawnPoint {
-                x: point.x,
-                y: point.y,
-                face_right: point.face_right,
-                color: [r, g, b, 1.0]
-            }
-        )
+        RenderObject::SpawnPoint(RenderSpawnPoint {
+            x: point.x,
+            y: point.y,
+            face_right: point.face_right,
+            color: [r, g, b, 1.0],
+        })
     }
 }
 
 pub struct RenderRect {
-    pub rect:  Rect,
-    pub color: [f32; 4]
+    pub rect: Rect,
+    pub color: [f32; 4],
 }
 
 pub struct RenderSpawnPoint {
     pub x: f32,
     pub y: f32,
     pub face_right: bool,
-    pub color: [f32; 4]
+    pub color: [f32; 4],
 }
 
 #[derive(Clone)]
 pub struct GameSetup {
-    pub init_seed:              u64,
-    pub input_history:          Vec<Vec<ControllerInput>>,
-    pub entity_history:         Vec<Entities>,
-    pub stage_history:          Vec<Stage>,
-    pub controllers:            Vec<usize>,
-    pub players:                Vec<PlayerSetup>,
-    pub ais:                    Vec<usize>,
-    pub stage:                  String,
-    pub state:                  GameState,
-    pub rules:                  Rules,
-    pub debug:                  bool,
-    pub max_history_frames:     Option<usize>,
+    pub init_seed: u64,
+    pub input_history: Vec<Vec<ControllerInput>>,
+    pub entity_history: Vec<Entities>,
+    pub stage_history: Vec<Stage>,
+    pub controllers: Vec<usize>,
+    pub players: Vec<PlayerSetup>,
+    pub ais: Vec<usize>,
+    pub stage: String,
+    pub state: GameState,
+    pub rules: Rules,
+    pub debug: bool,
+    pub max_history_frames: Option<usize>,
     pub deleted_history_frames: usize,
-    pub current_frame:          usize,
-    pub camera:                 Camera,
-    pub debug_stage:            Option<DebugStage>,
-    pub debug_entities:         Option<DebugEntities>,
+    pub current_frame: usize,
+    pub camera: Camera,
+    pub debug_stage: Option<DebugStage>,
+    pub debug_entities: Option<DebugEntities>,
     // TODO: lets not have hot_reload specific fields here
     //       or maybe we should even rewrite to have a single Option<HotReload> field
-    pub hot_reload_entities:    Option<Entities>,
-    pub hot_reload_stage:       Option<Stage>,
-    pub edit:                   Edit,
+    pub hot_reload_entities: Option<Entities>,
+    pub hot_reload_stage: Option<Stage>,
+    pub edit: Edit,
 }
 
 impl GameSetup {
@@ -1813,5 +2100,5 @@ impl GameSetup {
 #[derive(Clone, Default, Serialize, Deserialize, Node)]
 pub struct PlayerSetup {
     pub fighter: String,
-    pub team:    usize,
+    pub team: usize,
 }

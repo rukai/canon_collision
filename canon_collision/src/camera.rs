@@ -1,25 +1,25 @@
 use crate::entity::Entities;
 
 use canon_collision_lib::entity_def::EntityDef;
-use canon_collision_lib::stage::Stage;
 use canon_collision_lib::geometry::Rect;
+use canon_collision_lib::stage::Stage;
 
-use cgmath::{Matrix4, Point3, Vector3, Transform, Rad, Quaternion};
+use cgmath::{Matrix4, Point3, Quaternion, Rad, Transform, Vector3};
+use std::f32::consts;
+use treeflection::{KeyedContextVec, Node, NodeRunner, NodeToken};
 use winit::event::VirtualKeyCode;
 use winit_input_helper::WinitInputHelper;
-use treeflection::{Node, NodeRunner, NodeToken, KeyedContextVec};
-use std::f32::consts;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Node)]
 pub struct Camera {
-    aspect_ratio:       f32,
-    window_width:       f32,
-    window_height:      f32,
-    pub rect:           Rect,
-    pub control_state:  CameraControlState,
+    aspect_ratio: f32,
+    window_width: f32,
+    window_height: f32,
+    pub rect: Rect,
+    pub control_state: CameraControlState,
     pub transform_mode: TransformMode,
     /// Only used when TransformMode::Dev and CameraControlState::Manual
-    freelook_location:  (f32, f32, f32),
+    freelook_location: (f32, f32, f32),
     /// Uses spherical coordinates to represent the freelook cameras direction
     /// https://en.wikipedia.org/wiki/Spherical_coordinate_system
     /// https://threejs.org/docs/#api/en/math/Spherical
@@ -56,45 +56,63 @@ impl Default for TransformMode {
 impl Camera {
     pub fn new() -> Camera {
         Camera {
-            aspect_ratio:      1.0,
-            window_width:      1.0,
-            window_height:     1.0,
-            rect:              Rect { x1: -10.0, y1: -10.0, x2: 10.0, y2: 10.0 },
-            control_state:     CameraControlState::Auto,
-            transform_mode:    TransformMode::Play,
+            aspect_ratio: 1.0,
+            window_width: 1.0,
+            window_height: 1.0,
+            rect: Rect {
+                x1: -10.0,
+                y1: -10.0,
+                x2: 10.0,
+                y2: 10.0,
+            },
+            control_state: CameraControlState::Auto,
+            transform_mode: TransformMode::Play,
             freelook_location: (0.0, 0.0, 0.0),
-            freelook_phi:      0.0,
-            freelook_theta:    0.0,
+            freelook_phi: 0.0,
+            freelook_theta: 0.0,
         }
     }
 
-    pub fn new_for_menu(aspect_ratio: f32, window_width: f32, window_height: f32, rect_dimension: f32) -> Camera {
+    pub fn new_for_menu(
+        aspect_ratio: f32,
+        window_width: f32,
+        window_height: f32,
+        rect_dimension: f32,
+    ) -> Camera {
         Camera {
             aspect_ratio,
             window_width,
             window_height,
-            rect:              Rect { x1: -rect_dimension, y1: -rect_dimension, x2: rect_dimension, y2: rect_dimension },
-            control_state:     CameraControlState::Auto,
-            transform_mode:    TransformMode::Play,
+            rect: Rect {
+                x1: -rect_dimension,
+                y1: -rect_dimension,
+                x2: rect_dimension,
+                y2: rect_dimension,
+            },
+            control_state: CameraControlState::Auto,
+            transform_mode: TransformMode::Play,
             freelook_location: (0.0, 0.0, 0.0),
-            freelook_phi:      0.0,
-            freelook_theta:    0.0,
+            freelook_phi: 0.0,
+            freelook_theta: 0.0,
         }
     }
 
     pub fn update_os_input(&mut self, os_input: &WinitInputHelper) {
         // set manual/automatic camera control
-        if os_input.mouse_pressed(2) || os_input.scroll_diff() != 0.0 ||
-            (!self.dev_mode() && (os_input.key_pressed(VirtualKeyCode::W) || os_input.key_pressed(VirtualKeyCode::A) || os_input.key_pressed(VirtualKeyCode::S) || os_input.key_pressed(VirtualKeyCode::D)))
+        if os_input.mouse_pressed(2)
+            || os_input.scroll_diff() != 0.0
+            || (!self.dev_mode()
+                && (os_input.key_pressed(VirtualKeyCode::W)
+                    || os_input.key_pressed(VirtualKeyCode::A)
+                    || os_input.key_pressed(VirtualKeyCode::S)
+                    || os_input.key_pressed(VirtualKeyCode::D)))
         {
             self.control_state = CameraControlState::Manual;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Back) {
+        } else if os_input.key_pressed(VirtualKeyCode::Back) {
             self.control_state = CameraControlState::Auto;
-        }
-        else if os_input.key_pressed(VirtualKeyCode::Escape) {
+        } else if os_input.key_pressed(VirtualKeyCode::Escape) {
             self.transform_mode = match self.transform_mode {
-                TransformMode::Dev  => TransformMode::Play,
+                TransformMode::Dev => TransformMode::Play,
                 TransformMode::Play => TransformMode::Dev,
             };
         }
@@ -123,21 +141,19 @@ impl Camera {
                         if os_input.mouse_held(2) {
                             let mouse_diff = os_input.mouse_diff();
                             self.freelook_theta -= mouse_diff.0 / 300.0;
-                            self.freelook_phi   += mouse_diff.1 / 300.0;
+                            self.freelook_phi += mouse_diff.1 / 300.0;
                         }
 
                         // clamp direction
                         let small = 0.00001;
                         if self.freelook_phi > consts::PI - small {
                             self.freelook_phi = consts::PI - small;
-                        }
-                        else if self.freelook_phi < small {
+                        } else if self.freelook_phi < small {
                             self.freelook_phi = small;
                         }
                         if self.freelook_theta > consts::PI * 2.0 {
                             self.freelook_theta = 0.0;
-                        }
-                        else if self.freelook_theta < 0.0 {
+                        } else if self.freelook_theta < 0.0 {
                             self.freelook_theta = consts::PI * 2.0;
                         }
 
@@ -146,16 +162,33 @@ impl Camera {
                         let location_inputs = Vector3::new(
                             0.0,
                             0.0,
-                            if os_input.key_held(VirtualKeyCode::S) { distance } else if os_input.key_held(VirtualKeyCode::W) { -distance } else { 0.0 },
+                            if os_input.key_held(VirtualKeyCode::S) {
+                                distance
+                            } else if os_input.key_held(VirtualKeyCode::W) {
+                                -distance
+                            } else {
+                                0.0
+                            },
                         );
-                        let rotate_matrix: Matrix4<f32> = Quaternion::from_arc(Vector3::new(0.0, 0.0, -1.0), self.freelook_direction(), None).into();
+                        let rotate_matrix: Matrix4<f32> = Quaternion::from_arc(
+                            Vector3::new(0.0, 0.0, -1.0),
+                            self.freelook_direction(),
+                            None,
+                        )
+                        .into();
                         let location_offset = rotate_matrix.transform_vector(location_inputs);
                         self.freelook_location.0 += location_offset.x;
                         self.freelook_location.1 += location_offset.y;
                         self.freelook_location.2 += location_offset.z;
 
                         let location_inputs = Vector3::new(
-                            if os_input.key_held(VirtualKeyCode::A) { distance } else if os_input.key_held(VirtualKeyCode::D) { -distance } else { 0.0 },
+                            if os_input.key_held(VirtualKeyCode::A) {
+                                distance
+                            } else if os_input.key_held(VirtualKeyCode::D) {
+                                -distance
+                            } else {
+                                0.0
+                            },
                             0.0,
                             0.0,
                         );
@@ -198,12 +231,10 @@ impl Camera {
         if rect_aspect > self.aspect_ratio {
             if self.aspect_ratio > 1.0 {
                 camera_distance /= self.aspect_ratio;
-            }
-            else {
+            } else {
                 camera_distance *= self.aspect_ratio;
             }
-        }
-        else if width > height {
+        } else if width > height {
             camera_distance /= rect_aspect;
         }
 
@@ -212,21 +243,34 @@ impl Camera {
 
     pub fn debug_print(&self) -> Vec<String> {
         match (&self.transform_mode, &self.control_state) {
-            (TransformMode::Dev,  CameraControlState::Manual) => vec!("Press Backspace to leave manual camera mode. Press Esc to leave developer mode".into()),
-            (TransformMode::Play, CameraControlState::Manual) => vec!("Press Backspace to leave manual camera mode.".into()),
-            (TransformMode::Dev,  CameraControlState::Auto)   => vec!("Press Esc to leave developer mode.".into()),
-            (TransformMode::Play, CameraControlState::Auto)   => vec!(),
+            (TransformMode::Dev, CameraControlState::Manual) => vec![
+                "Press Backspace to leave manual camera mode. Press Esc to leave developer mode"
+                    .into(),
+            ],
+            (TransformMode::Play, CameraControlState::Manual) => {
+                vec!["Press Backspace to leave manual camera mode.".into()]
+            }
+            (TransformMode::Dev, CameraControlState::Auto) => {
+                vec!["Press Esc to leave developer mode.".into()]
+            }
+            (TransformMode::Play, CameraControlState::Auto) => vec![],
         }
     }
 
     pub fn dev_mode(&self) -> bool {
         match self.transform_mode {
-            TransformMode::Dev  => true,
+            TransformMode::Dev => true,
             TransformMode::Play => false,
         }
     }
 
-    pub fn update(&mut self, os_input: &WinitInputHelper, entities: &Entities, entity_defs: &KeyedContextVec<EntityDef>, stage: &Stage) {
+    pub fn update(
+        &mut self,
+        os_input: &WinitInputHelper,
+        entities: &Entities,
+        entity_defs: &KeyedContextVec<EntityDef>,
+        stage: &Stage,
+    ) {
         // process new resolution
         if let Some((width, height)) = os_input.resolution() {
             self.window_width = width as f32;
@@ -243,14 +287,21 @@ impl Camera {
             let mut new_rect = match new_rect {
                 Some(rect) => rect,
                 None => {
-                    self.rect = Rect { x1: -200.0, y1: -200.0, x2: 200.0, y2: 200.0 };
+                    self.rect = Rect {
+                        x1: -200.0,
+                        y1: -200.0,
+                        x2: 200.0,
+                        y2: 200.0,
+                    };
                     return;
                 }
             };
 
             // grow new_rect to cover all other players
             for player in player_iter {
-                if let Some(next_area) = player.cam_area(&stage.camera, entities, entity_defs, &stage.surfaces) {
+                if let Some(next_area) =
+                    player.cam_area(&stage.camera, entities, entity_defs, &stage.surfaces)
+                {
                     new_rect.x1 = new_rect.x1.min(next_area.left());
                     new_rect.x2 = new_rect.x2.max(next_area.right());
                     new_rect.y1 = new_rect.y1.min(next_area.bot());
@@ -259,16 +310,16 @@ impl Camera {
             }
 
             // grow new_rect to fill aspect ratio
-            let mut width  = (new_rect.x1 - new_rect.x2).abs();
+            let mut width = (new_rect.x1 - new_rect.x2).abs();
             let mut height = (new_rect.y1 - new_rect.y2).abs();
-            if width / height > self.aspect_ratio { // if new_rect AR is wider than the screen AR
+            if width / height > self.aspect_ratio {
+                // if new_rect AR is wider than the screen AR
                 height = width / self.aspect_ratio;
 
                 let avg_vertical = (new_rect.y2 + new_rect.y1) / 2.0;
                 new_rect.y2 = avg_vertical + height / 2.0;
                 new_rect.y1 = avg_vertical - height / 2.0;
-            }
-            else {
+            } else {
                 width = height * self.aspect_ratio;
 
                 let avg_horizontal = (new_rect.x2 + new_rect.x1) / 2.0;
@@ -282,8 +333,7 @@ impl Camera {
                 let diff = new_rect.x1 - cam_max.left();
                 new_rect.x1 -= diff;
                 new_rect.x2 -= diff;
-            }
-            else if new_rect.x2 > cam_max.right() {
+            } else if new_rect.x2 > cam_max.right() {
                 let diff = new_rect.x2 - cam_max.right();
                 new_rect.x1 -= diff;
                 new_rect.x2 -= diff;
@@ -292,8 +342,7 @@ impl Camera {
                 let diff = new_rect.y1 - cam_max.bot();
                 new_rect.y1 -= diff;
                 new_rect.y2 -= diff;
-            }
-            else if new_rect.y2 > cam_max.top() {
+            } else if new_rect.y2 > cam_max.top() {
                 let diff = new_rect.y2 - cam_max.top();
                 new_rect.y1 -= diff;
                 new_rect.y2 -= diff;
@@ -322,10 +371,21 @@ impl Camera {
         match self.transform_mode {
             TransformMode::Dev => {
                 // TODO: Apparently the near z plane should be positive, but that breaks things :/
-                let proj = cgmath::ortho(-width / 2.0, width / 2.0, -height / 2.0, height / 2.0, -20000.0, 20000.0);
-                let camera_target   = Point3::new(middle_x, middle_y, 0.0);
+                let proj = cgmath::ortho(
+                    -width / 2.0,
+                    width / 2.0,
+                    -height / 2.0,
+                    height / 2.0,
+                    -20000.0,
+                    20000.0,
+                );
+                let camera_target = Point3::new(middle_x, middle_y, 0.0);
                 let camera_location = Point3::new(middle_x, middle_y, 2000.0);
-                let view = Matrix4::look_at_rh(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
+                let view = Matrix4::look_at_rh(
+                    camera_location,
+                    camera_target,
+                    Vector3::new(0.0, 1.0, 0.0),
+                );
                 aspect_ratio * proj * view
             }
             TransformMode::Play => {
@@ -337,11 +397,15 @@ impl Camera {
                 match self.control_state {
                     CameraControlState::Auto => {
                         // camera points
-                        let camera_target   = Point3::new(middle_x, middle_y, 0.0);
+                        let camera_target = Point3::new(middle_x, middle_y, 0.0);
                         let camera_location = self.get_camera_location();
 
                         // view matrix
-                        let view = Matrix4::look_at_rh(camera_location, camera_target, Vector3::new(0.0, 1.0, 0.0));
+                        let view = Matrix4::look_at_rh(
+                            camera_location,
+                            camera_target,
+                            Vector3::new(0.0, 1.0, 0.0),
+                        );
                         aspect_ratio * proj * view
                     }
                     CameraControlState::Manual => {
@@ -350,7 +414,11 @@ impl Camera {
                             self.freelook_location.1,
                             self.freelook_location.2,
                         );
-                        let view = Matrix4::look_to_rh(camera_location, self.freelook_direction(), Vector3::new(0.0, 1.0, 0.0));
+                        let view = Matrix4::look_to_rh(
+                            camera_location,
+                            self.freelook_direction(),
+                            Vector3::new(0.0, 1.0, 0.0),
+                        );
                         aspect_ratio * proj * view
                     }
                 }

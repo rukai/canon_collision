@@ -1,14 +1,14 @@
 use serde_cbor::{value, Value};
 use strum::IntoEnumIterator;
 
-use canon_collision_lib::package::Package;
-use canon_collision_lib::files::{engine_version, load_cbor, save_struct_cbor};
-use canon_collision_lib::entity_def::EntityDef;
 use canon_collision_lib::entity_def::player::PlayerAction;
+use canon_collision_lib::entity_def::EntityDef;
+use canon_collision_lib::files::{engine_version, load_cbor, save_struct_cbor};
+use canon_collision_lib::package::Package;
 
-use std::path::Path;
-use std::fs;
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
 
 /// This code is checked in to:
 /// *   refer back to past changes
@@ -33,7 +33,7 @@ fn main() {
     let dry_run = std::env::args().any(|x| x.to_lowercase() == "dryrun");
 
     if let Some(package_path) = Package::find_package_in_parent_dirs() {
-        if let Ok (dir) = fs::read_dir(package_path.join("Entities")) {
+        if let Ok(dir) = fs::read_dir(package_path.join("Entities")) {
             for path in dir {
                 let full_path = path.unwrap().path();
                 upgrade_to_latest_entity(&full_path, dry_run);
@@ -45,10 +45,10 @@ fn main() {
 }
 
 fn get_engine_version(object: &Value) -> u64 {
-    if let &Value::Map (ref map) = object {
-        if let Some (engine_version) = map.get(&Value::Text("engine_version".into())) {
-            if let Value::Integer (value) = engine_version {
-                return *value as u64
+    if let &Value::Map(ref map) = object {
+        if let Some(engine_version) = map.get(&Value::Text("engine_version".into())) {
+            if let Value::Integer(value) = engine_version {
+                return *value as u64;
             }
         }
     }
@@ -56,16 +56,19 @@ fn get_engine_version(object: &Value) -> u64 {
 }
 
 fn upgrade_engine_version(meta: &mut Value) {
-    if let &mut Value::Map (ref mut map) = meta {
-        map.insert(Value::Text(String::from("engine_version")), Value::Integer(engine_version() as i128));
+    if let &mut Value::Map(ref mut map) = meta {
+        map.insert(
+            Value::Text(String::from("engine_version")),
+            Value::Integer(engine_version() as i128),
+        );
     }
 }
 
 fn get_vec<'a>(parent: &'a mut Value, member: &str) -> Option<&'a mut Vec<Value>> {
-    if let &mut Value::Map (ref mut map) = parent {
-        if let Some (array) = map.get_mut(&Value::Text(member.into())) {
-            if let &mut Value::Array (ref mut array) = array {
-                return Some (array);
+    if let &mut Value::Map(ref mut map) = parent {
+        if let Some(array) = map.get_mut(&Value::Text(member.into())) {
+            if let &mut Value::Array(ref mut array) = array {
+                return Some(array);
             }
         }
     }
@@ -89,16 +92,15 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
             "EntityDef: {} is newer than this version of Canon Collision.",
             path.file_name().unwrap().to_str().unwrap()
         );
-    }
-    else if entity_engine_version < engine_version() {
+    } else if entity_engine_version < engine_version() {
         for upgrade_from in entity_engine_version..engine_version() {
             match upgrade_from {
-                19 => { upgrade_entity19(&mut entity) }
-                18 => { upgrade_entity18(&mut entity, file_name) }
-                17 => { upgrade_entity17(&mut entity) }
-                16 => { upgrade_entity16(&mut entity) }
-                15 => { upgrade_entity15(&mut entity) }
-                _  => { }
+                19 => upgrade_entity19(&mut entity),
+                18 => upgrade_entity18(&mut entity, file_name),
+                17 => upgrade_entity17(&mut entity),
+                16 => upgrade_entity16(&mut entity),
+                15 => upgrade_entity15(&mut entity),
+                _ => {}
             }
         }
         upgrade_engine_version(&mut entity);
@@ -109,12 +111,15 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
 
     if dry_run {
         print!("dry run: ");
-    }
-    else {
-       save_struct_cbor(path, &entity);
+    } else {
+        save_struct_cbor(path, &entity);
     }
 
-    println!("Upgraded entity from version {} to version {}.", entity_engine_version, engine_version());
+    println!(
+        "Upgraded entity from version {} to version {}.",
+        entity_engine_version,
+        engine_version()
+    );
 }
 
 fn upgrade_entity19(entity: &mut Value) {
@@ -133,20 +138,9 @@ fn upgrade_entity19(entity: &mut Value) {
 }
 
 fn upgrade_entity18(entity: &mut Value, file_name: &str) {
-    let item_action_names = [
-        "Spawn",
-        "Idle",
-        "Fall",
-        "Held",
-        "Thrown",
-        "Dropped",
-    ];
+    let item_action_names = ["Spawn", "Idle", "Fall", "Held", "Thrown", "Dropped"];
 
-    let projectile_action_names = [
-        "Spawn",
-        "Travel",
-        "Hit",
-    ];
+    let projectile_action_names = ["Spawn", "Travel", "Hit"];
 
     let fighter_action_names = [
         "Spawn",
@@ -158,7 +152,6 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "Teeter",
         "TeeterIdle",
         "MissedTechIdle",
-
         // Movement
         "Fall",
         "AerialFall",
@@ -185,7 +178,6 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "LedgeGetup",
         "LedgeGetupSlow",
         "LedgeIdleChain",
-
         // Defense
         "PowerShield",
         "ShieldOn",
@@ -206,13 +198,11 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "Rebound",
         "LedgeRoll",
         "LedgeRollSlow",
-
         // Vulnerable
         "ShieldBreakFall",
         "ShieldBreakGetup",
         "Stun",
         "MissedTechStart",
-
         // Attack",
         "Jab",
         "Jab2",
@@ -224,7 +214,6 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "Usmash",
         "Dsmash",
         "Fsmash",
-
         // Grabs
         "Grab",
         "DashGrab",
@@ -233,13 +222,11 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "GrabbedIdleAir",
         "GrabbedIdle",
         "GrabbedEnd",
-
         // Throws
         "Uthrow",
         "Dthrow",
         "Fthrow",
         "Bthrow",
-
         // Items
         "ItemGrab",
         "ItemEat",
@@ -251,12 +238,10 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "ItemThrowAirD",
         "ItemThrowAirF",
         "ItemThrowAirB",
-
         // Getup attacks
         "LedgeAttack",
         "LedgeAttackSlow",
         "MissedTechAttack",
-
         // Aerials
         "Uair",
         "Dair",
@@ -268,17 +253,14 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         "FairLand",
         "BairLand",
         "NairLand",
-
         // Taunts
         "TauntUp",
         "TauntDown",
         "TauntLeft",
         "TauntRight",
-
         // Crouch
         "CrouchStart",
         "CrouchEnd",
-
         "Eliminated",
         "DummyFramePreStart",
     ];
@@ -290,11 +272,16 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         _ => fighter_action_names.as_ref(),
     };
 
-    if let Some (actions) = get_vec(entity, "actions") {
+    if let Some(actions) = get_vec(entity, "actions") {
         let mut new_actions = BTreeMap::new();
         new_actions.insert(
             Value::Text("keys".into()),
-            Value::Array(action_names.iter().map(|x| Value::Text(x.to_string())).collect())
+            Value::Array(
+                action_names
+                    .iter()
+                    .map(|x| Value::Text(x.to_string()))
+                    .collect(),
+            ),
         );
         new_actions.insert(
             Value::Text("vector".into()),
@@ -302,25 +289,26 @@ fn upgrade_entity18(entity: &mut Value, file_name: &str) {
         );
 
         if let Value::Map(entity) = entity {
-            entity.insert(
-                Value::Text("actions".into()),
-                Value::Map(new_actions)
-            );
+            entity.insert(Value::Text("actions".into()), Value::Map(new_actions));
         }
     }
 }
 
 fn upgrade_entity17(entity: &mut Value) {
-    let action = new_object(vec!(
-        ("frames", Value::Array(vec!(
-            new_object(vec!(
-                ("ecb", new_object(vec!(
-                    ("top", Value::Float(16.0)),
-                    ("left", Value::Float(-4.0)),
-                    ("right", Value::Float(4.0)),
-                    ("bottom", Value::Float(0.0)),
-                ))),
-                ("colboxes", Value::Array(vec!())),
+    let action = new_object(vec![
+        (
+            "frames",
+            Value::Array(vec![new_object(vec![
+                (
+                    "ecb",
+                    new_object(vec![
+                        ("top", Value::Float(16.0)),
+                        ("left", Value::Float(-4.0)),
+                        ("right", Value::Float(4.0)),
+                        ("bottom", Value::Float(0.0)),
+                    ]),
+                ),
+                ("colboxes", Value::Array(vec![])),
                 ("item_hold_x", Value::Float(4.0)),
                 ("item_hold_y", Value::Float(11.0)),
                 ("grabbing_x", Value::Float(8.0)),
@@ -336,13 +324,13 @@ fn upgrade_entity17(entity: &mut Value) {
                 ("y_vel_modify", Value::Text("None".into())),
                 ("x_vel_temp", Value::Float(0.0)),
                 ("y_vel_temp", Value::Float(0.0)),
-            ))
-        ))),
-        ("iasa", Value::Integer(0))
-    ));
+            ])]),
+        ),
+        ("iasa", Value::Integer(0)),
+    ]);
 
     let action_indexes = [78, 79, 80, 81, 82, 83, 84, 85, 86, 87];
-    if let Some (actions) = get_vec(entity, "actions") {
+    if let Some(actions) = get_vec(entity, "actions") {
         for action_index in &action_indexes {
             actions.insert(*action_index, action.clone());
         }
@@ -372,16 +360,20 @@ fn upgrade_entity15(entity: &mut Value) {
         }
     }
 
-    let action = new_object(vec!(
-        ("frames", Value::Array(vec!(
-            new_object(vec!(
-                ("ecb", new_object(vec!(
-                    ("top", Value::Float(16.0)),
-                    ("left", Value::Float(-4.0)),
-                    ("right", Value::Float(4.0)),
-                    ("bottom", Value::Float(0.0)),
-                ))),
-                ("colboxes", Value::Array(vec!())),
+    let action = new_object(vec![
+        (
+            "frames",
+            Value::Array(vec![new_object(vec![
+                (
+                    "ecb",
+                    new_object(vec![
+                        ("top", Value::Float(16.0)),
+                        ("left", Value::Float(-4.0)),
+                        ("right", Value::Float(4.0)),
+                        ("bottom", Value::Float(0.0)),
+                    ]),
+                ),
+                ("colboxes", Value::Array(vec![])),
                 ("item_hold_x", Value::Float(4.0)),
                 ("item_hold_y", Value::Float(11.0)),
                 ("grabbing_x", Value::Float(8.0)),
@@ -397,13 +389,13 @@ fn upgrade_entity15(entity: &mut Value) {
                 ("y_vel_modify", Value::Text("None".into())),
                 ("x_vel_temp", Value::Float(0.0)),
                 ("y_vel_temp", Value::Float(0.0)),
-            ))
-        ))),
-        ("iasa", Value::Integer(0))
-    ));
+            ])]),
+        ),
+        ("iasa", Value::Integer(0)),
+    ]);
 
     let action_indexes = [33, 69, 70, 71, 72, 73, 74, 75, 76, 77];
-    if let Some (actions) = get_vec(entity, "actions") {
+    if let Some(actions) = get_vec(entity, "actions") {
         for action_index in &action_indexes {
             actions.insert(*action_index, action.clone());
         }

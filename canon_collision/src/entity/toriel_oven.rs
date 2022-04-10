@@ -3,7 +3,7 @@ use kira::Value;
 use crate::audio::sfx::SFXType;
 use crate::entity::components::action_state::ActionState;
 use crate::entity::components::body::Body;
-use crate::entity::{StepContext, ActionResult};
+use crate::entity::{ActionResult, StepContext};
 
 use canon_collision_lib::entity_def::toriel_oven::TorielOvenAction;
 
@@ -28,7 +28,12 @@ impl TorielOven {
         }
     }
 
-    pub fn process_message(&mut self, message: &MessageTorielOven, _context: &mut StepContext, _state: &ActionState) -> Option<ActionResult> {
+    pub fn process_message(
+        &mut self,
+        message: &MessageTorielOven,
+        _context: &mut StepContext,
+        _state: &ActionState,
+    ) -> Option<ActionResult> {
         match message {
             MessageTorielOven::KeepAlive => {
                 self.keep_alive = true;
@@ -37,8 +42,14 @@ impl TorielOven {
         }
     }
 
-    pub fn action_step(&mut self, context: &mut StepContext, state: &ActionState) -> Option<ActionResult> {
-        let action_frames = context.entity_def.actions[state.action.as_ref()].frames.len() as i64;
+    pub fn action_step(
+        &mut self,
+        context: &mut StepContext,
+        state: &ActionState,
+    ) -> Option<ActionResult> {
+        let action_frames = context.entity_def.actions[state.action.as_ref()]
+            .frames
+            .len() as i64;
         if state.frame + 1 >= action_frames {
             context.delete_self = true;
         }
@@ -59,17 +70,19 @@ impl TorielOven {
             Some(TorielOvenAction::AttackExtended) => None,
             Some(TorielOvenAction::Attack) => {
                 if state.frame == 40 {
-                    context.audio.play_sound_effect(context.entity_def, SFXType::Custom {
-                        filename: "ovenTimer.ogg".into(),
-                        volume:   Value::Fixed(0.3),
-                        pitch:    Value::Fixed(1.0),
-                    });
+                    context.audio.play_sound_effect(
+                        context.entity_def,
+                        SFXType::Custom {
+                            filename: "ovenTimer.ogg".into(),
+                            volume: Value::Fixed(0.3),
+                            pitch: Value::Fixed(1.0),
+                        },
+                    );
                 }
                 None
             }
             None => None,
         };
-
 
         self.keep_alive = false;
         result

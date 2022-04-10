@@ -1,30 +1,31 @@
-use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 
-
+use crate::ai;
+use crate::audio::Audio;
+use crate::camera::Camera;
+use crate::cli::{CLIResults, ContinueFrom};
+use crate::game::{Edit, Game, GameSetup, GameState, PlayerSetup};
+use crate::graphics::GraphicsMessage;
+use crate::menu::{Menu, MenuState, ResumeMenu};
+use crate::replays;
+use crate::rules::Rules;
+use canon_collision_lib::assets::Assets;
 use canon_collision_lib::command_line::CommandLine;
 use canon_collision_lib::config::Config;
 use canon_collision_lib::input::Input;
 use canon_collision_lib::network::{NetCommandLine, Netplay, NetplayState};
 use canon_collision_lib::package::Package;
-use canon_collision_lib::assets::Assets;
-use crate::ai;
-use crate::audio::Audio;
-use crate::camera::Camera;
-use crate::cli::{ContinueFrom, CLIResults};
-use crate::game::{Game, GameState, GameSetup, PlayerSetup, Edit};
-use crate::graphics::GraphicsMessage;
-use crate::menu::{Menu, MenuState, ResumeMenu};
-use crate::replays;
-use crate::rules::Rules;
 
+use std::sync::mpsc::channel;
+use std::thread;
+use std::time::{Duration, Instant};
 use winit::event::WindowEvent;
 use winit_input_helper::WinitInputHelper;
-use std::time::{Instant, Duration};
-use std::thread;
-use std::sync::mpsc::channel;
 
-pub fn run_in_thread(cli_results: CLIResults) -> (Sender<WindowEvent<'static>>, Receiver<GraphicsMessage>) {
+pub fn run_in_thread(
+    cli_results: CLIResults,
+) -> (Sender<WindowEvent<'static>>, Receiver<GraphicsMessage>) {
     let (render_tx, render_rx) = channel();
     let (event_tx, event_rx) = mpsc::channel();
     thread::spawn(move || {
@@ -33,7 +34,11 @@ pub fn run_in_thread(cli_results: CLIResults) -> (Sender<WindowEvent<'static>>, 
     (event_tx, render_rx)
 }
 
-fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, render_tx: Sender<GraphicsMessage>) {
+fn run(
+    mut cli_results: CLIResults,
+    event_rx: Receiver<WindowEvent<'static>>,
+    render_tx: Sender<GraphicsMessage>,
+) {
     let mut config = Config::load();
     if let ContinueFrom::Close = cli_results.continue_from {
         return;
@@ -50,8 +55,7 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
             println!("Could not load package");
             return;
         }
-    }
-    else {
+    } else {
         println!("Could not find package/ in current directory or any of its parent directories.");
         return;
     };
@@ -69,22 +73,17 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
     // CLI options
     let (mut menu, mut game) = {
         #[allow(unused_variables)] // Needed for headless build
-
         match cli_results.continue_from {
             ContinueFrom::Menu => {
                 audio.play_bgm("Menu");
-                (
-                    Menu::new(MenuState::GameSelect),
-                    None,
-                )
+                (Menu::new(MenuState::GameSelect), None)
             }
             ContinueFrom::Game => {
                 // handle issues with package that prevent starting from game
                 if package.as_ref().unwrap().entities.len() == 0 {
                     println!("package has no entities");
                     return;
-                }
-                else if package.as_ref().unwrap().stages.len() == 0 {
+                } else if package.as_ref().unwrap().stages.len() == 0 {
                     println!("package has no stages");
                     return;
                 }
@@ -105,19 +104,22 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
 
                 // handle missing and invalid cli input
                 if cli_results.fighter_names.is_empty() {
-                    cli_results.fighter_names.push(package.as_ref().unwrap().entities.index_to_key(0).unwrap());
+                    cli_results
+                        .fighter_names
+                        .push(package.as_ref().unwrap().entities.index_to_key(0).unwrap());
                 }
 
                 // fill players/controllers
-                let mut controllers: Vec<usize> = vec!();
-                let mut players: Vec<PlayerSetup> = vec!();
+                let mut controllers: Vec<usize> = vec![];
+                let mut players: Vec<PlayerSetup> = vec![];
                 input.step(&[], &[], &mut netplay, false); // run the first input step so that we can check for the number of controllers.
                 let input_len = input.players(0, &netplay).len();
                 for i in 0..input_len {
                     controllers.push(i);
                     players.push(PlayerSetup {
-                        fighter: cli_results.fighter_names[i % cli_results.fighter_names.len()].clone(),
-                        team:    i
+                        fighter: cli_results.fighter_names[i % cli_results.fighter_names.len()]
+                            .clone(),
+                        team: i,
                     });
                 }
 
@@ -130,13 +132,15 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 }
 
                 // add cpu players
-                let mut ais: Vec<usize> = vec!();
+                let mut ais: Vec<usize> = vec![];
                 let players_len = players.len();
                 if let Some(total_players) = cli_results.total_cpu_players {
                     for i in 0..total_players {
                         players.push(PlayerSetup {
-                            fighter: cli_results.fighter_names[(players_len + i) % cli_results.fighter_names.len()].clone(),
-                            team:    players_len + i
+                            fighter: cli_results.fighter_names
+                                [(players_len + i) % cli_results.fighter_names.len()]
+                            .clone(),
+                            team: players_len + i,
                         });
                         controllers.push(input_len + i);
                         ais.push(0);
@@ -153,22 +157,22 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 };
 
                 let setup = GameSetup {
-                    init_seed:              GameSetup::gen_seed(),
-                    input_history:          vec!(),
-                    entity_history:         Default::default(),
-                    stage_history:          vec!(),
-                    stage:                  cli_results.stage_name.unwrap(),
-                    state:                  GameState::Local,
-                    debug:                  cli_results.debug,
-                    max_history_frames:     cli_results.max_history_frames,
-                    current_frame:          0,
+                    init_seed: GameSetup::gen_seed(),
+                    input_history: vec![],
+                    entity_history: Default::default(),
+                    stage_history: vec![],
+                    stage: cli_results.stage_name.unwrap(),
+                    state: GameState::Local,
+                    debug: cli_results.debug,
+                    max_history_frames: cli_results.max_history_frames,
+                    current_frame: 0,
                     deleted_history_frames: 0,
-                    debug_entities:         Default::default(),
-                    debug_stage:            Default::default(),
-                    camera:                 Camera::new(),
-                    edit:                   Edit::Stage,
-                    hot_reload_entities:    None,
-                    hot_reload_stage:       None,
+                    debug_entities: Default::default(),
+                    debug_stage: Default::default(),
+                    camera: Camera::new(),
+                    edit: Edit::Stage,
+                    hot_reload_entities: None,
+                    hot_reload_stage: None,
                     rules,
                     controllers,
                     players,
@@ -179,53 +183,53 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     Some(Game::new(package.take().unwrap(), setup, &mut audio)),
                 )
             }
-            ContinueFrom::ReplayFile (file_name) => {
-                match replays::load_replay(&file_name) {
-                    Ok(replay) => {
-                        let mut game_setup = replay.into_game_setup(true);
-                        input.set_history(std::mem::take(&mut game_setup.input_history));
-                        (
-                            Menu::new(MenuState::character_select()),
-                            Some(Game::new(package.take().unwrap(), game_setup, &mut audio)),
-                        )
-                    }
-                    Err(err) => {
-                        println!("Failed to load replay with filename '{}', because: {}", file_name, err);
-                        return;
-                    }
+            ContinueFrom::ReplayFile(file_name) => match replays::load_replay(&file_name) {
+                Ok(replay) => {
+                    let mut game_setup = replay.into_game_setup(true);
+                    input.set_history(std::mem::take(&mut game_setup.input_history));
+                    (
+                        Menu::new(MenuState::character_select()),
+                        Some(Game::new(package.take().unwrap(), game_setup, &mut audio)),
+                    )
                 }
-
-            }
+                Err(err) => {
+                    println!(
+                        "Failed to load replay with filename '{}', because: {}",
+                        file_name, err
+                    );
+                    return;
+                }
+            },
             ContinueFrom::Netplay => {
                 audio.play_bgm("Menu");
                 netplay.direct_connect(cli_results.address.unwrap());
-                let state = MenuState::NetplayWait { message: String::from("") };
+                let state = MenuState::NetplayWait {
+                    message: String::from(""),
+                };
 
-                (
-                    Menu::new(state),
-                    None,
-                )
+                (Menu::new(state), None)
             }
             ContinueFrom::MatchMaking => {
                 audio.play_bgm("Menu");
                 netplay.connect_match_making(
-                    cli_results.netplay_region.unwrap_or(config.netplay_region.clone().unwrap_or(String::from("AU"))),
+                    cli_results
+                        .netplay_region
+                        .unwrap_or(config.netplay_region.clone().unwrap_or(String::from("AU"))),
                     cli_results.netplay_players.unwrap_or(2),
                 );
-                let state = MenuState::NetplayWait { message: String::from("") };
+                let state = MenuState::NetplayWait {
+                    message: String::from(""),
+                };
 
-                (
-                    Menu::new(state),
-                    None,
-                )
+                (Menu::new(state), None)
             }
-            ContinueFrom::Close => unreachable!()
+            ContinueFrom::Close => unreachable!(),
         }
     };
 
     let mut command_line = CommandLine::new();
     let mut os_input = WinitInputHelper::new();
-    let mut events = vec!();
+    let mut events = vec![];
 
     loop {
         debug!("\n\nAPP LOOP START");
@@ -254,7 +258,14 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                 let reset_deadzones = game.check_reset_deadzones();
                 input.step(&game.tas, &ai_inputs, &mut netplay, reset_deadzones);
 
-                if let GameState::Quit (resume_menu_inner) = game.step(&mut config, &mut input, &os_input, command_line.block(), &netplay, &mut audio) {
+                if let GameState::Quit(resume_menu_inner) = game.step(
+                    &mut config,
+                    &mut input,
+                    &os_input,
+                    command_line.block(),
+                    &netplay,
+                    &mut audio,
+                ) {
                     resume_menu = Some(resume_menu_inner)
                 }
                 if let Err(_) = render_tx.send(game.graphics_message(&config, &command_line)) {
@@ -265,14 +276,26 @@ fn run(mut cli_results: CLIResults, event_rx: Receiver<WindowEvent<'static>>, re
                     command_line.step(&os_input, game);
                 }
             }
-        }
-        else {
+        } else {
             input.step(&[], &[], &mut netplay, false);
-            if let Some(mut menu_game_setup) = menu.step(package.as_ref().unwrap(), &mut config, &mut input, &os_input, &mut netplay) {
+            if let Some(mut menu_game_setup) = menu.step(
+                package.as_ref().unwrap(),
+                &mut config,
+                &mut input,
+                &os_input,
+                &mut netplay,
+            ) {
                 input.set_history(std::mem::take(&mut menu_game_setup.input_history));
-                game = Some(Game::new(package.take().unwrap(), menu_game_setup, &mut audio));
-            }
-            else if let Err(_) = render_tx.send(menu.graphics_message(package.as_mut().unwrap(), &config, &command_line)) {
+                game = Some(Game::new(
+                    package.take().unwrap(),
+                    menu_game_setup,
+                    &mut audio,
+                ));
+            } else if let Err(_) = render_tx.send(menu.graphics_message(
+                package.as_mut().unwrap(),
+                &config,
+                &command_line,
+            )) {
                 return;
             }
         }
