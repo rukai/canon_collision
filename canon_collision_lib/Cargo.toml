@@ -15,8 +15,8 @@ rust-version = "1.56"
 backtrace = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 dirs-next = "2"
-strum = "0.22"
-strum_macros = "0.22"
+strum = "0.24"
+strum_macros = "0.24"
 env_logger = "0.9"
 gilrs-core = "0.3"
 rusb = "0.8"
@@ -32,6 +32,6 @@ toml = "0.5"
 treeflection = "0.1"
 treeflection_derive = "0.4"
 uuid = { version = "0.8", features = ["v4", "serde"] }
-winit = "0.25" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
-winit_input_helper = "0.10"
+winit = "0.26" # Needed on all builds, game logic is dependent on VirtualKeyCode struct
+winit_input_helper = "0.12"
 hotwatch = "0.4" # TODO: I could probably pretty easily replace this with notify, the hotwatch wrapper isnt really giving me much.

@@ -102,15 +102,15 @@ impl Camera {
         if os_input.mouse_pressed(2)
             || os_input.scroll_diff() != 0.0
             || (!self.dev_mode()
-                && (os_input.key_pressed(VirtualKeyCode::W)
-                    || os_input.key_pressed(VirtualKeyCode::A)
-                    || os_input.key_pressed(VirtualKeyCode::S)
-                    || os_input.key_pressed(VirtualKeyCode::D)))
+                && (os_input.key_pressed_os(VirtualKeyCode::W)
+                    || os_input.key_pressed_os(VirtualKeyCode::A)
+                    || os_input.key_pressed_os(VirtualKeyCode::S)
+                    || os_input.key_pressed_os(VirtualKeyCode::D)))
         {
             self.control_state = CameraControlState::Manual;
-        } else if os_input.key_pressed(VirtualKeyCode::Back) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Back) {
             self.control_state = CameraControlState::Auto;
-        } else if os_input.key_pressed(VirtualKeyCode::Escape) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Escape) {
             self.transform_mode = match self.transform_mode {
                 TransformMode::Dev => TransformMode::Play,
                 TransformMode::Play => TransformMode::Dev,

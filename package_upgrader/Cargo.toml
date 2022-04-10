@@ -9,5 +9,5 @@ rust-version = "1.56"
 
 [dependencies]
 serde_cbor = "0.11"
-strum = "0.22"
+strum = "0.24"
 canon_collision_lib = { path = "../canon_collision_lib" }

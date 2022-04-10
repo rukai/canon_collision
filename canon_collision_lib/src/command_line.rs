@@ -31,7 +31,7 @@ impl CommandLine {
     where
         T: Node,
     {
-        if os_input.key_pressed(VirtualKeyCode::Grave) {
+        if os_input.key_pressed_os(VirtualKeyCode::Grave) {
             self.running = !self.running;
             return;
         }
@@ -71,7 +71,7 @@ impl CommandLine {
                 self.history_index = -1;
             }
 
-            if os_input.key_pressed(VirtualKeyCode::Return) {
+            if os_input.key_pressed_os(VirtualKeyCode::Return) {
                 {
                     let command = format!("→{}", self.command.trim_end());
                     self.output_add(command);
@@ -89,28 +89,28 @@ impl CommandLine {
                 self.command.clear();
                 self.cursor = 0;
             }
-            if os_input.key_pressed(VirtualKeyCode::Home) {
+            if os_input.key_pressed_os(VirtualKeyCode::Home) {
                 self.cursor = 0;
             }
-            if os_input.key_pressed(VirtualKeyCode::End) {
+            if os_input.key_pressed_os(VirtualKeyCode::End) {
                 self.cursor = self.command.chars().count();
             }
-            if os_input.key_pressed(VirtualKeyCode::Left) && self.cursor > 0 {
+            if os_input.key_pressed_os(VirtualKeyCode::Left) && self.cursor > 0 {
                 self.cursor -= 1;
             }
-            if os_input.key_pressed(VirtualKeyCode::Right)
+            if os_input.key_pressed_os(VirtualKeyCode::Right)
                 && self.cursor < self.command.chars().count()
             {
                 self.cursor += 1;
             }
-            if os_input.key_pressed(VirtualKeyCode::Up)
+            if os_input.key_pressed_os(VirtualKeyCode::Up)
                 && self.history_index + 1 < self.history.len() as isize
             {
                 self.history_index += 1;
                 self.command = self.history[self.history_index as usize].clone();
                 self.cursor = self.command.chars().count();
             }
-            if os_input.key_pressed(VirtualKeyCode::Down) {
+            if os_input.key_pressed_os(VirtualKeyCode::Down) {
                 if self.history_index > 0 {
                     self.history_index -= 1;
                     self.command = self.history[self.history_index as usize].clone();

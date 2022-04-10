@@ -698,7 +698,7 @@ impl Menu {
         os_input: &WinitInputHelper,
         netplay: &mut Netplay,
     ) -> Option<GameSetup> {
-        if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
+        if os_input.held_alt() && os_input.key_pressed_os(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();
         }

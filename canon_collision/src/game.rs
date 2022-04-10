@@ -189,7 +189,7 @@ impl Game {
         netplay: &Netplay,
         audio: &mut Audio,
     ) -> GameState {
-        if os_input.held_alt() && os_input.key_pressed(VirtualKeyCode::Return) {
+        if os_input.held_alt() && os_input.key_pressed_os(VirtualKeyCode::Return) {
             config.fullscreen = !config.fullscreen;
             config.save();
         }
@@ -367,8 +367,8 @@ impl Game {
     }
 
     fn step_local_os_input(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::Space)
-            || os_input.key_pressed(VirtualKeyCode::Return)
+        if os_input.key_pressed_os(VirtualKeyCode::Space)
+            || os_input.key_pressed_os(VirtualKeyCode::Return)
         {
             self.state = GameState::Paused;
         }
@@ -416,25 +416,25 @@ impl Game {
         audio: &mut Audio,
     ) {
         // game flow control
-        if os_input.key_pressed(VirtualKeyCode::J) {
+        if os_input.key_pressed_os(VirtualKeyCode::J) {
             self.step_replay_backwards(input);
-        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::K) {
+        } else if os_input.held_shift() && os_input.key_pressed_os(VirtualKeyCode::K) {
             self.step_replay_forwards_from_input(input, netplay, audio);
-        } else if os_input.key_pressed(VirtualKeyCode::K) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::K) {
             self.step_replay_forwards_from_history(input);
-        } else if os_input.key_pressed(VirtualKeyCode::H) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
-        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.held_shift() && os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        } else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
-        } else if os_input.key_pressed(VirtualKeyCode::Space) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Space) {
             self.step_local(input, netplay, audio);
-        } else if os_input.key_pressed(VirtualKeyCode::U) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::U) {
             self.saved_frame = self.current_frame;
-        } else if os_input.key_pressed(VirtualKeyCode::I) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::I) {
             self.jump_frame(self.saved_frame);
-        } else if os_input.key_pressed(VirtualKeyCode::Return) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Return) {
             self.state = GameState::Local;
         }
 
@@ -451,49 +451,49 @@ impl Game {
         audio: &mut Audio,
     ) {
         // set current edit state
-        if os_input.key_pressed(VirtualKeyCode::Key0) {
+        if os_input.key_pressed_os(VirtualKeyCode::Key0) {
             self.edit = Edit::Stage;
-        } else if os_input.key_pressed(VirtualKeyCode::Key1) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key1) {
             if let Some(i) = self.entities.keys().next() {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key2) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key2) {
             if let Some(i) = self.entities.keys().nth(1) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key3) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key3) {
             if let Some(i) = self.entities.keys().nth(2) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key4) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key4) {
             if let Some(i) = self.entities.keys().nth(3) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key5) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key5) {
             if let Some(i) = self.entities.keys().nth(4) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key6) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key6) {
             if let Some(i) = self.entities.keys().nth(5) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key7) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key7) {
             if let Some(i) = self.entities.keys().nth(6) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key8) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key8) {
             if let Some(i) = self.entities.keys().nth(7) {
                 self.edit = Edit::Entity(i);
             }
             self.update_frame();
-        } else if os_input.key_pressed(VirtualKeyCode::Key9) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::Key9) {
             if let Some(i) = self.entities.keys().nth(8) {
                 self.edit = Edit::Entity(i);
             }
@@ -516,49 +516,49 @@ impl Game {
                     let frame = self.entities[entity_i].state.frame as usize;
                     {
                         let debug_entity = &mut self.debug_entities[entity_i];
-                        if os_input.key_pressed(VirtualKeyCode::F1) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F1) {
                             debug_entity.action = !debug_entity.action;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F2) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F2) {
                             debug_entity.physics = !debug_entity.physics;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F3) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F3) {
                             debug_entity.frame = !debug_entity.frame;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F4) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F4) {
                             if os_input.held_shift() {
                                 debug_entity.input_diff = !debug_entity.input_diff;
                             } else {
                                 debug_entity.input = !debug_entity.input;
                             }
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F5) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F5) {
                             debug_entity.stick_vector = !debug_entity.stick_vector;
                             debug_entity.c_stick_vector = !debug_entity.c_stick_vector;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F6) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F6) {
                             debug_entity.di_vector = !debug_entity.di_vector;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F7) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F7) {
                             debug_entity.hitbox_vectors = !debug_entity.hitbox_vectors;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F8) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F8) {
                             debug_entity.ecb = !debug_entity.ecb;
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F9) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F9) {
                             debug_entity.render.step();
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F10) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F10) {
                             if os_input.held_shift() {
                                 debug_entity.item_grab_area = !debug_entity.item_grab_area;
                             } else {
                                 debug_entity.cam_area = !debug_entity.cam_area;
                             }
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F11) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F11) {
                             *debug_entity = DebugEntity::all();
                         }
-                        if os_input.key_pressed(VirtualKeyCode::F12) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F12) {
                             *debug_entity = DebugEntity::default();
                         }
                     }
@@ -601,14 +601,14 @@ impl Game {
                         }
                     } else {
                         // copy frame
-                        if os_input.key_pressed(VirtualKeyCode::V) {
+                        if os_input.key_pressed_os(VirtualKeyCode::V) {
                             let frame = self.package.entities[entity_def_key].actions[action_key]
                                 .frames[frame]
                                 .clone();
                             self.copied_frame = Some(frame);
                         }
                         // paste over current frame
-                        if os_input.key_pressed(VirtualKeyCode::B) {
+                        if os_input.key_pressed_os(VirtualKeyCode::B) {
                             let action_frame = self.copied_frame.clone();
                             if let Some(action_frame) = action_frame {
                                 self.package.insert_fighter_frame(
@@ -626,7 +626,7 @@ impl Game {
                         }
 
                         // new frame
-                        if os_input.key_pressed(VirtualKeyCode::M) {
+                        if os_input.key_pressed_os(VirtualKeyCode::M) {
                             for i in 0..repeat_frames {
                                 self.package.new_fighter_frame(
                                     entity_def_key,
@@ -639,7 +639,7 @@ impl Game {
                             self.step_local(input, netplay, audio);
                         }
                         // delete frame
-                        if os_input.key_pressed(VirtualKeyCode::N) {
+                        if os_input.key_pressed_os(VirtualKeyCode::N) {
                             let i = 0; //for i in 0..repeat_frames { // TODO: Panic
                             if self.package.delete_fighter_frame(
                                 entity_def_key,
@@ -667,17 +667,17 @@ impl Game {
                         }
 
                         // start move collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::A)
+                        if os_input.key_pressed_os(VirtualKeyCode::A)
                             && !self.selector.colboxes.is_empty()
                         {
                             self.selector.moving = true;
                         }
                         // enter pivot mode
-                        if os_input.key_pressed(VirtualKeyCode::S) {
+                        if os_input.key_pressed_os(VirtualKeyCode::S) {
                             // TODO
                         }
                         // delete collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::D) {
+                        if os_input.key_pressed_os(VirtualKeyCode::D) {
                             self.package.delete_fighter_colboxes(
                                 entity_def_key,
                                 action_key,
@@ -687,7 +687,7 @@ impl Game {
                             self.update_frame();
                         }
                         // add collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::F) {
+                        if os_input.key_pressed_os(VirtualKeyCode::F) {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let selected = {
                                     let entity = &self.entities[entity_i];
@@ -712,7 +712,7 @@ impl Game {
                             }
                         }
                         // resize collisionbox
-                        if os_input.key_pressed(VirtualKeyCode::LBracket) {
+                        if os_input.key_pressed_os(VirtualKeyCode::LBracket) {
                             self.package.resize_fighter_colboxes(
                                 entity_def_key,
                                 action_key,
@@ -721,7 +721,7 @@ impl Game {
                                 -0.1,
                             );
                         }
-                        if os_input.key_pressed(VirtualKeyCode::RBracket) {
+                        if os_input.key_pressed_os(VirtualKeyCode::RBracket) {
                             self.package.resize_fighter_colboxes(
                                 entity_def_key,
                                 action_key,
@@ -730,7 +730,7 @@ impl Game {
                                 0.1,
                             );
                         }
-                        if os_input.key_pressed(VirtualKeyCode::Comma) {
+                        if os_input.key_pressed_os(VirtualKeyCode::Comma) {
                             if os_input.held_shift() {
                                 self.package.fighter_colboxes_order_set_first(
                                     entity_def_key,
@@ -747,7 +747,7 @@ impl Game {
                                 )
                             }
                         }
-                        if os_input.key_pressed(VirtualKeyCode::Period) {
+                        if os_input.key_pressed_os(VirtualKeyCode::Period) {
                             if os_input.held_shift() {
                                 self.package.fighter_colboxes_order_set_last(
                                     entity_def_key,
@@ -765,7 +765,7 @@ impl Game {
                             }
                         }
                         // set hitbox angle
-                        if os_input.key_pressed(VirtualKeyCode::Q) {
+                        if os_input.key_pressed_os(VirtualKeyCode::Q) {
                             if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                                 let entity = &self.entities[entity_i];
                                 let (p_x, p_y) = entity.public_bps_xy(
@@ -894,7 +894,7 @@ impl Game {
                     }
                 } else {
                     // start move elements
-                    if os_input.key_pressed(VirtualKeyCode::A)
+                    if os_input.key_pressed_os(VirtualKeyCode::A)
                         && self.selector.surfaces.len()
                             + self.selector.spawn_points.len()
                             + self.selector.respawn_points.len()
@@ -903,7 +903,7 @@ impl Game {
                         self.selector.moving = true;
                     }
                     // delete elements
-                    if os_input.key_pressed(VirtualKeyCode::D) {
+                    if os_input.key_pressed_os(VirtualKeyCode::D) {
                         // the indexes are sorted in reverse order to preserve index order while deleting.
                         let mut spawns_to_delete: Vec<usize> =
                             self.selector.spawn_points.iter().cloned().collect();
@@ -940,11 +940,11 @@ impl Game {
                         self.update_frame();
                     }
                     // add decorative surface
-                    if os_input.key_pressed(VirtualKeyCode::Q) {
+                    if os_input.key_pressed_os(VirtualKeyCode::Q) {
                         self.add_surface(Surface::default(), os_input);
                     }
                     // add ceiling surface
-                    if os_input.key_pressed(VirtualKeyCode::W) {
+                    if os_input.key_pressed_os(VirtualKeyCode::W) {
                         let surface = Surface {
                             ceiling: true,
                             ..Surface::default()
@@ -952,7 +952,7 @@ impl Game {
                         self.add_surface(surface, os_input);
                     }
                     // add wall surface
-                    if os_input.key_pressed(VirtualKeyCode::E) {
+                    if os_input.key_pressed_os(VirtualKeyCode::E) {
                         let surface = Surface {
                             wall: true,
                             ..Surface::default()
@@ -960,7 +960,7 @@ impl Game {
                         self.add_surface(surface, os_input);
                     }
                     // add stage surface
-                    if os_input.key_pressed(VirtualKeyCode::R) {
+                    if os_input.key_pressed_os(VirtualKeyCode::R) {
                         let surface = Surface {
                             floor: Some(Floor {
                                 traction: 1.0,
@@ -971,7 +971,7 @@ impl Game {
                         self.add_surface(surface, os_input);
                     }
                     // add platform surface
-                    if os_input.key_pressed(VirtualKeyCode::F) {
+                    if os_input.key_pressed_os(VirtualKeyCode::F) {
                         let surface = Surface {
                             floor: Some(Floor {
                                 traction: 1.0,
@@ -982,20 +982,20 @@ impl Game {
                         self.add_surface(surface, os_input);
                     }
                     // add spawn point
-                    if os_input.key_pressed(VirtualKeyCode::Z) {
+                    if os_input.key_pressed_os(VirtualKeyCode::Z) {
                         if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             self.stage.spawn_points.push(SpawnPoint::new(m_x, m_y));
                             self.update_frame();
                         }
                     }
                     // add respawn point
-                    if os_input.key_pressed(VirtualKeyCode::X) {
+                    if os_input.key_pressed_os(VirtualKeyCode::X) {
                         if let Some((m_x, m_y)) = self.game_mouse(os_input) {
                             self.stage.respawn_points.push(SpawnPoint::new(m_x, m_y));
                             self.update_frame();
                         }
                     }
-                    if os_input.key_pressed(VirtualKeyCode::S) {
+                    if os_input.key_pressed_os(VirtualKeyCode::S) {
                         let mut join = false;
                         let mut points: Vec<(f32, f32)> = vec![];
                         fn f32_equal(a: f32, b: f32) -> bool {
@@ -1255,16 +1255,16 @@ impl Game {
     }
 
     fn step_replay_forwards_os_input(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::H) {
+        if os_input.key_pressed_os(VirtualKeyCode::H) {
             self.state = GameState::ReplayBackwards;
-        } else if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.held_shift() && os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        } else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
         }
 
-        if os_input.key_pressed(VirtualKeyCode::Space)
-            || os_input.key_pressed(VirtualKeyCode::Return)
+        if os_input.key_pressed_os(VirtualKeyCode::Space)
+            || os_input.key_pressed_os(VirtualKeyCode::Return)
         {
             self.state = GameState::Paused;
         }
@@ -1285,12 +1285,12 @@ impl Game {
     }
 
     fn step_replay_backwards_os_input(&mut self, os_input: &WinitInputHelper) {
-        if os_input.held_shift() && os_input.key_pressed(VirtualKeyCode::L) {
+        if os_input.held_shift() && os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromInput;
-        } else if os_input.key_pressed(VirtualKeyCode::L) {
+        } else if os_input.key_pressed_os(VirtualKeyCode::L) {
             self.state = GameState::ReplayForwardsFromHistory;
-        } else if os_input.key_pressed(VirtualKeyCode::Space)
-            || os_input.key_pressed(VirtualKeyCode::Return)
+        } else if os_input.key_pressed_os(VirtualKeyCode::Space)
+            || os_input.key_pressed_os(VirtualKeyCode::Return)
         {
             self.state = GameState::Paused;
             self.update_frame();

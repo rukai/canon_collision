@@ -377,25 +377,25 @@ pub struct DebugStage {
 
 impl DebugStage {
     pub fn step(&mut self, os_input: &WinitInputHelper) {
-        if os_input.key_pressed(VirtualKeyCode::F1) {
+        if os_input.key_pressed_os(VirtualKeyCode::F1) {
             self.blast = !self.blast;
         }
-        if os_input.key_pressed(VirtualKeyCode::F2) {
+        if os_input.key_pressed_os(VirtualKeyCode::F2) {
             self.camera = !self.camera;
         }
-        if os_input.key_pressed(VirtualKeyCode::F3) {
+        if os_input.key_pressed_os(VirtualKeyCode::F3) {
             self.spawn_points = !self.spawn_points;
         }
-        if os_input.key_pressed(VirtualKeyCode::F4) {
+        if os_input.key_pressed_os(VirtualKeyCode::F4) {
             self.respawn_points = !self.respawn_points;
         }
-        if os_input.key_pressed(VirtualKeyCode::F9) {
+        if os_input.key_pressed_os(VirtualKeyCode::F9) {
             self.render_stage_mode.step();
         }
-        if os_input.key_pressed(VirtualKeyCode::F11) {
+        if os_input.key_pressed_os(VirtualKeyCode::F11) {
             *self = DebugStage::all();
         }
-        if os_input.key_pressed(VirtualKeyCode::F12) {
+        if os_input.key_pressed_os(VirtualKeyCode::F12) {
             *self = DebugStage::default();
         }
     }
