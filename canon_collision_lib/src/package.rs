@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
-use std::mem;
+
 use std::path::{Path, PathBuf};
 
 use treeflection::{KeyedContextVec, Node, NodeRunner, NodeToken};
@@ -40,7 +40,7 @@ impl Package {
             package_updates: vec![],
         };
 
-        if let Ok(_) = package.load() {
+        if package.load().is_ok() {
             Some(package)
         } else {
             None
@@ -55,7 +55,7 @@ impl Package {
     fn find_package_in_parent_dirs_core(path: &Path) -> Option<PathBuf> {
         let package_path = path.join("package");
         match fs::metadata(&package_path) {
-            Ok(_) => Some(package_path.to_path_buf()),
+            Ok(_) => Some(package_path),
             Err(_) => Package::find_package_in_parent_dirs_core(path.parent()?),
         }
     }
@@ -358,7 +358,7 @@ impl Package {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
-            reordered_colboxes.sort();
+            reordered_colboxes.sort_unstable();
             reordered_colboxes.reverse();
             for i in reordered_colboxes {
                 let colbox = fighter_frame.colboxes.remove(i);
@@ -392,7 +392,7 @@ impl Package {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
-            reordered_colboxes.sort();
+            reordered_colboxes.sort_unstable();
             for i in reordered_colboxes {
                 let colbox = fighter_frame.colboxes.remove(i);
                 fighter_frame.colboxes.insert(0, colbox);
@@ -425,7 +425,7 @@ impl Package {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
-            reordered_colboxes.sort();
+            reordered_colboxes.sort_unstable();
             for i in reordered_colboxes {
                 let colbox = fighter_frame.colboxes.remove(i);
                 fighter_frame.colboxes.insert(i, colbox);
@@ -458,7 +458,7 @@ impl Package {
         let fighter_frame = &mut self.entities[fighter].actions[action].frames[frame];
         {
             let mut reordered_colboxes: Vec<usize> = reordered_colboxes.iter().cloned().collect();
-            reordered_colboxes.sort();
+            reordered_colboxes.sort_unstable();
             reordered_colboxes.reverse();
             for i in reordered_colboxes {
                 let colbox = fighter_frame.colboxes.remove(i);
@@ -488,7 +488,7 @@ impl Package {
     }
 
     pub fn updates(&mut self) -> Vec<PackageUpdate> {
-        mem::replace(&mut self.package_updates, vec![])
+        std::mem::take(&mut self.package_updates)
     }
 
     pub fn fighters(&self) -> Vec<(String, &EntityDef)> {

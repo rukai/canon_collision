@@ -18,7 +18,7 @@ fn main_main() -> i32 {
             stream.write_all(out.as_bytes()).unwrap();
 
             let mut result = String::new();
-            if let Ok(_) = stream.read_to_string(&mut result) {
+            if stream.read_to_string(&mut result).is_ok() {
                 println!("{}", result);
             }
             0

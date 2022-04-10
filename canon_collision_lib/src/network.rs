@@ -29,7 +29,7 @@ impl NetCommandLine {
 
         listener.set_nonblocking(true).unwrap();
 
-        NetCommandLine { listener: listener }
+        NetCommandLine { listener }
     }
 
     pub fn step<T>(&mut self, root_node: &mut T)
@@ -44,7 +44,7 @@ impl NetCommandLine {
                         if let Ok(string) = str::from_utf8(&buf[1..amt]) {
                             if buf[0] == 0x43 {
                                 // 'C'
-                                let out = NetCommandLine::run_inner(&string, root_node);
+                                let out = NetCommandLine::run_inner(string, root_node);
                                 if let Err(e) = stream.write(out.as_bytes()) {
                                     println!("command send failed {}", e);
                                 }
@@ -65,8 +65,8 @@ impl NetCommandLine {
     {
         match NodeRunner::new(command) {
             Ok(runner) => {
-                let result = package.node_step(runner);
-                result
+                
+                package.node_step(runner)
             }
             Err(msg) => msg,
         }
@@ -196,7 +196,7 @@ impl Netplay {
             }
         }
 
-        if self.peers.len() > 0 && self.state_frame - self.last_received_frame > 600 {
+        if !self.peers.is_empty() && self.state_frame - self.last_received_frame > 600 {
             self.disconnect_with_reason(
                 "Connection timed out: no packets received in the last 10 seconds",
             );
@@ -223,7 +223,7 @@ impl Netplay {
                 if let &Some(ref response) = &self.match_making_response {
                     for peer in response.addresses.iter() {
                         if !self.peers.contains(peer) {
-                            self.peers.push(peer.clone());
+                            self.peers.push(*peer);
                             self.confirmed_inputs.push(vec![]);
                         }
                     }
@@ -231,7 +231,7 @@ impl Netplay {
                 if self.peers.len() as u8 + 1 == request.num_players {
                     self.set_state(NetplayState::InitConnection(InitConnection {
                         random: rand::thread_rng().gen::<u64>(),
-                        build_version: request.build_version.clone(),
+                        build_version: request.build_version,
                     }));
                 }
             }

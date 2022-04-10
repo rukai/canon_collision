@@ -1508,7 +1508,7 @@ impl WgpuGraphics {
                     for particle in &entity.particles {
                         let c = particle.color;
                         match &particle.p_type {
-                            &ParticleType::Spark { size, .. } => {
+                            ParticleType::Spark { size, .. } => {
                                 let rotate = Matrix4::from_angle_x(Rad(particle.angle))
                                     * Matrix4::from_angle_y(Rad(particle.angle))
                                     * Matrix4::from_angle_z(Rad(particle.angle));
@@ -1528,7 +1528,7 @@ impl WgpuGraphics {
                                     false,
                                 ));
                             }
-                            &ParticleType::AirJump => {
+                            ParticleType::AirJump => {
                                 let size = Matrix4::from_nonuniform_scale(
                                     3.0 + particle.counter_mult(),
                                     1.15 + particle.counter_mult(),
@@ -1549,7 +1549,7 @@ impl WgpuGraphics {
                                     false,
                                 ));
                             }
-                            &ParticleType::Hit { knockback, damage } => {
+                            ParticleType::Hit { knockback, damage } => {
                                 // needs to rendered last to ensure we dont have anything drawn on top of the inversion
                                 let size = Matrix4::from_nonuniform_scale(
                                     0.2 * knockback,

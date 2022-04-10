@@ -152,12 +152,11 @@ fn skeleton_from_gltf_node(
             blob,
             node_to_joints_lookup,
             ibms,
-            pose_transform.clone(),
+            pose_transform,
         ));
     }
 
     let transform = pose_transform; // TODO: Modified to remove the IBM, how to handle when merging ????
-    let ibm = ibm.clone();
 
     let (translation, rotation, scale) = match node.transform() {
         Transform::Matrix { .. } => {
@@ -182,7 +181,7 @@ fn skeleton_from_gltf_node(
         name,
         children,
         transform,
-        ibm,
+        ibm: *ibm,
         translation,
         rotation,
         scale,

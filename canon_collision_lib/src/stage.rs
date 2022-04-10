@@ -112,10 +112,10 @@ impl Default for Stage {
             engine_version: engine_version(),
             name: "Base Stage".to_string(),
             surfaces: ContextVec::from_vec(vec![main_platform, second_platform]),
-            blast: blast,
-            camera: camera,
-            spawn_points: spawn_points,
-            respawn_points: respawn_points,
+            blast,
+            camera,
+            spawn_points,
+            respawn_points,
         }
     }
 }

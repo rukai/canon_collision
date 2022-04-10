@@ -29,8 +29,7 @@ impl GCAdapter {
                                 Ok(_) => {
                                     // Tell adapter to start reading
                                     let payload = [0x13];
-                                    if let Ok(_) =
-                                        handle.write_interrupt(0x2, &payload, Duration::new(1, 0))
+                                    if handle.write_interrupt(0x2, &payload, Duration::new(1, 0)).is_ok()
                                     {
                                         adapter_handles.push(handle);
                                         println!("GC adapter: Setup complete");

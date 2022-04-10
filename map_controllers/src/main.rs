@@ -69,11 +69,11 @@ fn main() {
     inputs_vbox.set_margin_end(10);
     scrolled_window.add(&inputs_vbox);
 
-    let controller_select = controller_select_hbox(state.clone(), inputs_vbox.clone());
+    let controller_select = controller_select_hbox(state.clone(), inputs_vbox);
     controller_select.set_margin_end(10);
     vbox.add(&controller_select);
 
-    vbox.add(&input_management_hbox(state.clone()));
+    vbox.add(&input_management_hbox(state));
 
     vbox.pack_end(&scrolled_window, true, true, 0);
 
@@ -343,7 +343,7 @@ fn new_input_digital_map(state: Rc<RwLock<State>>, vbox: Box, map: DigitalMap) {
         state.controller_maps.maps[i].digital_maps.len() - 1
     };
 
-    input_digital_map_hbox(state.clone(), map, push_index, &vbox);
+    input_digital_map_hbox(state, map, push_index, &vbox);
     vbox.show_all();
 }
 
@@ -522,7 +522,7 @@ fn new_input_analog_map(state: Rc<RwLock<State>>, vbox: Box, map: AnalogMap) {
         state.controller_maps.maps[i].analog_maps.len() - 1
     };
 
-    input_analog_map_hbox(state.clone(), map, push_index, &vbox);
+    input_analog_map_hbox(state, map, push_index, &vbox);
     vbox.show_all();
 }
 

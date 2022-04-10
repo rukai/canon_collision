@@ -72,7 +72,7 @@ fn get_vec<'a>(parent: &'a mut Value, member: &str) -> Option<&'a mut Vec<Value>
             }
         }
     }
-    return None;
+    None
 }
 
 fn new_object(entries: Vec<(&str, Value)>) -> Value {
@@ -107,7 +107,7 @@ fn upgrade_to_latest_entity(path: &Path, dry_run: bool) {
     }
 
     // convert to EntityDef to ensure result is deserializable before writing to disk
-    let entity: EntityDef = value::from_value(entity.into()).unwrap();
+    let entity: EntityDef = value::from_value(entity).unwrap();
 
     if dry_run {
         print!("dry run: ");

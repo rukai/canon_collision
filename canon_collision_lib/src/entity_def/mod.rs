@@ -424,7 +424,7 @@ pub struct CollisionBox {
 impl CollisionBox {
     pub fn new(point: (f32, f32)) -> CollisionBox {
         CollisionBox {
-            point: point,
+            point,
             radius: 1.0,
             role: CollisionBoxRole::default(),
         }

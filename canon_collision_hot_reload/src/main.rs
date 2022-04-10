@@ -74,10 +74,10 @@ fn run(rx: Receiver<Event>) {
                     let latest_replay = &replays[0];
                     let latest_replay_filename = format!("{}.zip", latest_replay);
 
-                    process.take().map(|mut x| x.kill().unwrap());
+                    if let Some(mut x) = process.take() { x.kill().unwrap() }
 
                     // relaunch
-                    process = launch(&profile_arg, &["--replay", &latest_replay_filename]);
+                    process = launch(profile_arg, &["--replay", &latest_replay_filename]);
 
                     // busy loop until the replay is loaded or the process died, probably due to changes in the replay structure.
                     while !send_to_cc(":help") && is_process_running(&mut process) {}
@@ -85,7 +85,7 @@ fn run(rx: Receiver<Event>) {
                     // cleanup the replay
                     replays_files::delete_replay(latest_replay);
                 } else {
-                    process = launch(&profile_arg, &pass_through_args);
+                    process = launch(profile_arg, &pass_through_args);
                 }
             }
         }
@@ -122,7 +122,9 @@ fn launch(profile_arg: &str, pass_through_args: &[&str]) -> Option<Child> {
 fn send_to_cc(message: &str) -> bool {
     match TcpStream::connect("127.0.0.1:1613") {
         Ok(mut stream) => {
-            stream.write(format!("C{}", message).as_bytes()).unwrap();
+            stream
+                .write_all(format!("C{}", message).as_bytes())
+                .unwrap();
 
             // We need to receive to ensure we block, but we dont really care what the response is.
             let mut result = String::new();

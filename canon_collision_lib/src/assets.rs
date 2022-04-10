@@ -17,22 +17,18 @@ impl Assets {
         let (models_reload_tx, models_reload_rx) = mpsc::channel();
 
         let current_dir = std::env::current_dir().unwrap();
-        if let Some(path) = Assets::find_assets_in_parent_dirs_core(&current_dir) {
-            Some(Assets {
-                path,
-                models_reload_rx,
-                models_reload_tx,
-                hotwatch: Hotwatch::new().unwrap(),
-            })
-        } else {
-            None
-        }
+        Assets::find_assets_in_parent_dirs_core(&current_dir).map(|path| Assets {
+            path,
+            models_reload_rx,
+            models_reload_tx,
+            hotwatch: Hotwatch::new().unwrap(),
+        })
     }
 
     fn find_assets_in_parent_dirs_core(path: &Path) -> Option<PathBuf> {
         let assets_path = path.join("assets");
         match fs::metadata(&assets_path) {
-            Ok(_) => Some(assets_path.to_path_buf()),
+            Ok(_) => Some(assets_path),
             Err(_) => Assets::find_assets_in_parent_dirs_core(path.parent()?),
         }
     }

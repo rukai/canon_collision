@@ -193,7 +193,7 @@ impl Buffers {
                 vertices.push(colorvertex(surface.x1 - d_x, surface.y1 - d_y, color));
                 vertices.push(colorvertex(x_mid - d_x, y_mid - d_y, color));
 
-                indices.push(indice_count + 0);
+                indices.push(indice_count);
                 indices.push(indice_count + 1);
                 indices.push(indice_count + 2);
                 indices.push(indice_count + 0);
@@ -207,7 +207,7 @@ impl Buffers {
                 vertices.push(colorvertex(surface.x2 - d_x, surface.y2 - d_y, color));
                 vertices.push(colorvertex(x_mid - d_x, y_mid - d_y, color));
 
-                indices.push(indice_count + 0);
+                indices.push(indice_count);
                 indices.push(indice_count + 1);
                 indices.push(indice_count + 2);
                 indices.push(indice_count + 0);
@@ -250,7 +250,7 @@ impl Buffers {
             vertices.push(colorvertex(surface.x2 - d_x, surface.y2 - d_y, color));
             vertices.push(colorvertex(surface.x1 - d_x, surface.y1 - d_y, color));
 
-            indices.push(indice_count + 0);
+            indices.push(indice_count);
             indices.push(indice_count + 1);
             indices.push(indice_count + 2);
             indices.push(indice_count + 0);

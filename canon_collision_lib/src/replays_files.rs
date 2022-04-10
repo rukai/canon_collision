@@ -31,16 +31,14 @@ pub fn get_replay_names() -> Vec<String> {
         let b_dt = DateTime::parse_from_rfc2822(b);
         if a_dt.is_err() && b_dt.is_err() {
             a.cmp(b)
-        } else {
-            if let Ok(a_dt) = a_dt {
-                if let Ok(b_dt) = b_dt {
-                    a_dt.cmp(&b_dt).reverse()
-                } else {
-                    Ordering::Less
-                }
+        } else if let Ok(a_dt) = a_dt {
+            if let Ok(b_dt) = b_dt {
+                a_dt.cmp(&b_dt).reverse()
             } else {
-                Ordering::Greater
+                Ordering::Less
             }
+        } else {
+            Ordering::Greater
         }
     });
     result
@@ -54,7 +52,7 @@ fn get_replays_dir_path() -> PathBuf {
 
 pub fn get_replay_path(name: &str) -> PathBuf {
     let mut replay_path = get_replays_dir_path();
-    replay_path.push(name.to_string());
+    replay_path.push(name);
     replay_path
 }
 

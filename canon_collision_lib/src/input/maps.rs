@@ -79,7 +79,7 @@ impl ControllerMap {
     }
 
     pub fn get_fullname(&self) -> String {
-        format!("{} - {}", self.name, self.uuid.to_string())
+        format!("{} - {}", self.name, self.uuid)
     }
 }
 

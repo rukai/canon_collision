@@ -43,7 +43,7 @@ impl Input {
         let controller_maps = ControllerMaps::load();
         let input_sources = GCAdapter::get_adapters(&mut _rusb_context)
             .into_iter()
-            .map(|adapter| InputSource::GCAdapter(adapter))
+            .map(InputSource::GCAdapter)
             .collect();
 
         Input {
@@ -133,7 +133,7 @@ impl Input {
         if let NetplayState::Offline = netplay.state() {
             // replace tas inputs
             for i in 0..tas_inputs.len().min(inputs.len()) {
-                inputs[i] = tas_inputs[i].clone();
+                inputs[i] = tas_inputs[i];
             }
         }
 
@@ -272,7 +272,7 @@ impl Input {
                     None => game_inputs.last().unwrap_or(&empty_vec),
                 };
                 match controllers.get(controller_i) {
-                    Some(value) => value.clone(),
+                    Some(value) => *value,
                     None => ControllerInput::empty(),
                 }
             });

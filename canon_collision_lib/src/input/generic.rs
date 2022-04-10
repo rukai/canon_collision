@@ -189,7 +189,7 @@ impl GenericController {
                 c_stick_y,
                 l_trigger,
                 r_trigger,
-                ..self.state.clone()
+                ..self.state
             }
         } else {
             ControllerInput::default()
