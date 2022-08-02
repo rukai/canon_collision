@@ -687,11 +687,7 @@ impl WgpuGraphics {
 
         // hide cursor during regular play in fullscreen
         let in_game_paused = if let RenderType::Game(game) = &render.render_type {
-            if let GameState::Paused = &game.state {
-                true
-            } else {
-                false
-            }
+            matches!(game.state, GameState::Paused)
         } else {
             false
         };

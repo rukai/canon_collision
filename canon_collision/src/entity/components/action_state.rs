@@ -86,23 +86,20 @@ pub enum Hitlag {
 impl Hitlag {
     pub fn step(&mut self, rng: &mut ChaChaRng) {
         match self {
-            &mut Hitlag::Attack { ref mut counter } => {
+            Hitlag::Attack { counter } => {
                 *counter -= 1;
                 if *counter == 0 {
                     *self = Hitlag::None;
                 }
             }
-            &mut Hitlag::Launch {
-                ref mut counter,
-                ref mut wobble_x,
-            } => {
+            Hitlag::Launch { counter, wobble_x } => {
                 *wobble_x = (rng.gen::<f32>() - 0.5) * 3.0;
                 *counter -= 1;
                 if *counter == 0 {
                     *self = Hitlag::None;
                 }
             }
-            &mut Hitlag::None => {}
+            Hitlag::None => {}
         }
     }
 }

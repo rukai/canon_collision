@@ -111,14 +111,18 @@ impl CommandLine {
                 self.cursor = self.command.chars().count();
             }
             if os_input.key_pressed_os(VirtualKeyCode::Down) {
-                if self.history_index > 0 {
-                    self.history_index -= 1;
-                    self.command = self.history[self.history_index as usize].clone();
-                    self.cursor = self.command.chars().count();
-                } else if self.history_index == 0 {
-                    self.history_index -= 1;
-                    self.command.clear();
-                    self.cursor = 0;
+                match self.history_index {
+                    0 => {
+                        self.history_index -= 1;
+                        self.command.clear();
+                        self.cursor = 0;
+                    }
+                    1.. => {
+                        self.history_index -= 1;
+                        self.command = self.history[self.history_index as usize].clone();
+                        self.cursor = self.command.chars().count();
+                    }
+                    _ => {}
                 }
             }
         }

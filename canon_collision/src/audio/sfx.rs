@@ -11,20 +11,20 @@ use kira::Value;
 use canon_collision_lib::entity_def::EntityDef;
 
 // TODO: move into hitbox canon_collision_lib hitbox definition
-pub enum HitBoxSFX {
+pub enum HitBoxSfx {
     Sword,
     Punch,
     //Explode, etc...
 }
 
-pub enum SFXType {
+pub enum SfxType {
     Walk,
     Run,
     Dash,
     Jump,
     Land,
     Die,
-    Hit(HitBoxSFX),
+    Hit(HitBoxSfx),
     /// TODO: Dont know if the ergonomics and efficiency of this is a good idea.
     ///       Lets play with it a bit and throw it away if we dont like it.
     Custom {
@@ -34,16 +34,16 @@ pub enum SFXType {
     },
 }
 
-pub struct SFX {
+pub struct Sfx {
     sfx: HashMap<String, SoundHandle>,
 }
 
-impl SFX {
+impl Sfx {
     pub fn new(manager: &mut AudioManager, path: &Path) -> Self {
         let mut sfx = HashMap::new();
         let path = path.join("sfx");
-        SFX::populate_sfx(manager, &path, None, &mut sfx);
-        SFX { sfx }
+        Sfx::populate_sfx(manager, &path, None, &mut sfx);
+        Sfx { sfx }
     }
 
     fn populate_sfx(
@@ -81,44 +81,44 @@ impl SFX {
                 }
                 sfx.insert(key, id);
             } else if file_type.is_dir() {
-                SFX::populate_sfx(manager, root_path, Some(&sub_search_path), sfx);
+                Sfx::populate_sfx(manager, root_path, Some(&sub_search_path), sfx);
             }
         }
     }
 
     /// TODO: How to handle rollback?
-    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SFXType) {
+    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SfxType) {
         let entity_name = entity.name.replace(' ', "");
 
         let sfx_id = match (&entity_name, &sfx) {
             //(_, SFXType::Walk) => ["Common/walk1.ogg", "Common/walk2.ogg"].choose(&mut rand::thread_rng()).unwrap(), // TODO: This is possible
-            (_, SFXType::Walk) => self.sfx.get_mut("Common/walk.ogg"),
-            (_, SFXType::Run) => self.sfx.get_mut("Common/walk.ogg"),
-            (_, SFXType::Dash) => self.sfx.get_mut("Common/dash.ogg"),
-            (_, SFXType::Jump) => self.sfx.get_mut("Common/jump.ogg"),
-            (_, SFXType::Land) => self.sfx.get_mut("Common/land.ogg"),
-            (_, SFXType::Die) => self.sfx.get_mut("Common/die.wav"),
-            (_, SFXType::Hit(HitBoxSFX::Sword)) => self.sfx.get_mut("Common/hit.wav"),
-            (_, SFXType::Hit(HitBoxSFX::Punch)) => self.sfx.get_mut("Common/hit.wav"),
-            (folder, SFXType::Custom { filename, .. }) => {
+            (_, SfxType::Walk) => self.sfx.get_mut("Common/walk.ogg"),
+            (_, SfxType::Run) => self.sfx.get_mut("Common/walk.ogg"),
+            (_, SfxType::Dash) => self.sfx.get_mut("Common/dash.ogg"),
+            (_, SfxType::Jump) => self.sfx.get_mut("Common/jump.ogg"),
+            (_, SfxType::Land) => self.sfx.get_mut("Common/land.ogg"),
+            (_, SfxType::Die) => self.sfx.get_mut("Common/die.wav"),
+            (_, SfxType::Hit(HitBoxSfx::Sword)) => self.sfx.get_mut("Common/hit.wav"),
+            (_, SfxType::Hit(HitBoxSfx::Punch)) => self.sfx.get_mut("Common/hit.wav"),
+            (folder, SfxType::Custom { filename, .. }) => {
                 self.sfx.get_mut(&format!("{}/{}", folder, filename))
             }
         };
 
         let (volume, pitch) = match (&entity_name, sfx) {
-            (_, SFXType::Walk) => (Value::Random(0.01, 0.03), Value::Random(0.95, 1.05)),
-            (_, SFXType::Run) => (Value::Random(0.03, 0.1), Value::Random(0.95, 1.05)),
-            (_, SFXType::Dash) => (Value::Random(0.15, 0.2), Value::Random(0.95, 1.05)),
-            (_, SFXType::Jump) => (Value::Random(0.15, 0.2), Value::Random(0.90, 1.1)),
-            (_, SFXType::Land) => (Value::Random(0.05, 0.1), Value::Random(0.90, 1.1)),
-            (_, SFXType::Die) => (Value::Random(0.30, 0.4), Value::Random(0.90, 1.1)),
-            (_, SFXType::Hit(HitBoxSFX::Sword)) => {
+            (_, SfxType::Walk) => (Value::Random(0.01, 0.03), Value::Random(0.95, 1.05)),
+            (_, SfxType::Run) => (Value::Random(0.03, 0.1), Value::Random(0.95, 1.05)),
+            (_, SfxType::Dash) => (Value::Random(0.15, 0.2), Value::Random(0.95, 1.05)),
+            (_, SfxType::Jump) => (Value::Random(0.15, 0.2), Value::Random(0.90, 1.1)),
+            (_, SfxType::Land) => (Value::Random(0.05, 0.1), Value::Random(0.90, 1.1)),
+            (_, SfxType::Die) => (Value::Random(0.30, 0.4), Value::Random(0.90, 1.1)),
+            (_, SfxType::Hit(HitBoxSfx::Sword)) => {
                 (Value::Random(0.15, 0.2), Value::Random(0.95, 1.05))
             }
-            (_, SFXType::Hit(HitBoxSFX::Punch)) => {
+            (_, SfxType::Hit(HitBoxSfx::Punch)) => {
                 (Value::Random(0.15, 0.2), Value::Random(0.90, 1.1))
             }
-            (_, SFXType::Custom { volume, pitch, .. }) => (volume, pitch),
+            (_, SfxType::Custom { volume, pitch, .. }) => (volume, pitch),
         };
 
         let instance_settings = InstanceSettings::default()

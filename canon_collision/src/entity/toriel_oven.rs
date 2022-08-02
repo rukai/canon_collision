@@ -1,6 +1,6 @@
 use kira::Value;
 
-use crate::audio::sfx::SFXType;
+use crate::audio::sfx::SfxType;
 use crate::entity::components::action_state::ActionState;
 use crate::entity::components::body::Body;
 use crate::entity::{ActionResult, StepContext};
@@ -72,7 +72,7 @@ impl TorielOven {
                 if state.frame == 40 {
                     context.audio.play_sound_effect(
                         context.entity_def,
-                        SFXType::Custom {
+                        SfxType::Custom {
                             filename: "ovenTimer.ogg".into(),
                             volume: Value::Fixed(0.3),
                             pitch: Value::Fixed(1.0),

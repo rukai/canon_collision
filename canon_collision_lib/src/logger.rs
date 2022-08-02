@@ -6,7 +6,7 @@ use std::io;
 use std::io::Write;
 
 pub fn init() {
-    let env_var = env::var("CC_LOG").unwrap_or("warn".into());
+    let env_var = env::var("CC_LOG").unwrap_or_else(|_| "warn".into());
     Builder::new().format(format).parse_filters(&env_var).init()
 }
 

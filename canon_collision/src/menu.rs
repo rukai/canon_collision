@@ -105,7 +105,7 @@ impl Menu {
                 0 => self.state = MenuState::character_select(),
                 1 => {
                     netplay.connect_match_making(
-                        config.netplay_region.clone().unwrap_or(String::from("AU")), // TODO: set region screen if region.is_none()
+                        config.netplay_region.clone().unwrap_or_else(|| "AU".into()), // TODO: set region screen if region.is_none()
                         2,
                     );
                     self.state = MenuState::NetplayWait {
@@ -587,7 +587,7 @@ impl Menu {
         } else {
             GameState::Netplay
         };
-        let init_seed = netplay.get_seed().unwrap_or(GameSetup::gen_seed());
+        let init_seed = netplay.get_seed().unwrap_or_else(GameSetup::gen_seed);
 
         self.game_setup = Some(GameSetup {
             input_history: vec![],
@@ -904,36 +904,36 @@ impl PlayerSelectUi {
 
     pub fn is_visible(&self) -> bool {
         match self {
-            &PlayerSelectUi::HumanUnplugged => false,
+            PlayerSelectUi::HumanUnplugged => false,
             _ => true,
         }
     }
 
     pub fn is_cpu(&self) -> bool {
         match self {
-            &PlayerSelectUi::CpuAi(_)
-            | &PlayerSelectUi::CpuFighter(_)
-            | &PlayerSelectUi::CpuTeam(_) => true,
+            PlayerSelectUi::CpuAi(_)
+            | PlayerSelectUi::CpuFighter(_)
+            | PlayerSelectUi::CpuTeam(_) => true,
             _ => false,
         }
     }
 
     pub fn is_human_plugged_in(&self) -> bool {
-        match self {
-            &PlayerSelectUi::HumanFighter(_) | &PlayerSelectUi::HumanTeam(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            PlayerSelectUi::HumanFighter(_) | PlayerSelectUi::HumanTeam(_)
+        )
     }
 
     #[allow(dead_code)] // Needed for headless build
     pub fn ticker_unwrap(&self) -> &MenuTicker {
         match self {
-            &PlayerSelectUi::HumanFighter(ref ticker)
-            | &PlayerSelectUi::CpuFighter(ref ticker)
-            | &PlayerSelectUi::HumanTeam(ref ticker)
-            | &PlayerSelectUi::CpuTeam(ref ticker)
-            | &PlayerSelectUi::CpuAi(ref ticker) => ticker,
-            &PlayerSelectUi::HumanUnplugged => {
+            PlayerSelectUi::HumanFighter(ticker)
+            | PlayerSelectUi::CpuFighter(ticker)
+            | PlayerSelectUi::HumanTeam(ticker)
+            | PlayerSelectUi::CpuTeam(ticker)
+            | PlayerSelectUi::CpuAi(ticker) => ticker,
+            PlayerSelectUi::HumanUnplugged => {
                 panic!("Tried to unwrap the PlayerSelectUi ticker but was HumanUnplugged")
             }
         }
@@ -941,15 +941,15 @@ impl PlayerSelectUi {
 
     pub fn ticker_full_reset(&mut self) {
         match self {
-            &mut PlayerSelectUi::HumanFighter(ref mut ticker)
-            | &mut PlayerSelectUi::CpuFighter(ref mut ticker)
-            | &mut PlayerSelectUi::HumanTeam(ref mut ticker)
-            | &mut PlayerSelectUi::CpuTeam(ref mut ticker)
-            | &mut PlayerSelectUi::CpuAi(ref mut ticker) => {
+            PlayerSelectUi::HumanFighter(ticker)
+            | PlayerSelectUi::CpuFighter(ticker)
+            | PlayerSelectUi::HumanTeam(ticker)
+            | PlayerSelectUi::CpuTeam(ticker)
+            | PlayerSelectUi::CpuAi(ticker) => {
                 ticker.reset();
                 ticker.cursor = 0;
             }
-            &mut PlayerSelectUi::HumanUnplugged => {}
+            PlayerSelectUi::HumanUnplugged => {}
         }
     }
 }

@@ -46,10 +46,8 @@ fn main() {
 
 fn get_engine_version(object: &Value) -> u64 {
     if let &Value::Map(ref map) = object {
-        if let Some(engine_version) = map.get(&Value::Text("engine_version".into())) {
-            if let Value::Integer(value) = engine_version {
-                return *value as u64;
-            }
+        if let Some(Value::Integer(value)) = map.get(&Value::Text("engine_version".into())) {
+            return *value as u64;
         }
     }
     engine_version()

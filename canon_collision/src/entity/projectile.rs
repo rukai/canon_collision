@@ -69,20 +69,20 @@ impl Projectile {
 
         for col_result in col_results {
             match col_result {
-                &CollisionResult::Clang { .. } => {
+                CollisionResult::Clang { .. } => {
                     set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
-                &CollisionResult::HitAtk { .. } => {
+                CollisionResult::HitAtk { .. } => {
                     set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
-                &CollisionResult::HitShieldAtk { .. } => {
+                CollisionResult::HitShieldAtk { .. } => {
                     set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
-                &CollisionResult::ReflectAtk { .. } => {
+                CollisionResult::ReflectAtk { .. } => {
                     // TODO
                     set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
-                &CollisionResult::AbsorbAtk { .. } => {
+                CollisionResult::AbsorbAtk { .. } => {
                     set_action = ActionResult::set_action(ProjectileAction::Hit);
                 }
                 _ => {}

@@ -23,12 +23,12 @@ pub enum RenderType {
 #[allow(unused)] // Needed for headless build
 pub fn get_render_id(role: &CollisionBoxRole) -> u32 {
     match role {
-        &CollisionBoxRole::Hurt(_) => 1,
-        &CollisionBoxRole::Hit(_) => 2,
-        &CollisionBoxRole::Grab => 3,
-        &CollisionBoxRole::Invincible => 6,
-        &CollisionBoxRole::Reflect => 7,
-        &CollisionBoxRole::Absorb => 8,
+        CollisionBoxRole::Hurt(_) => 1,
+        CollisionBoxRole::Hit(_) => 2,
+        CollisionBoxRole::Grab => 3,
+        CollisionBoxRole::Invincible => 6,
+        CollisionBoxRole::Reflect => 7,
+        CollisionBoxRole::Absorb => 8,
     }
 }
 

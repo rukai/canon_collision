@@ -1,3 +1,5 @@
+#![allow(clippy::identity_op)]
+
 mod animation;
 mod cli;
 mod hurtbox;
@@ -38,8 +40,8 @@ fn main() {
 
         let hurtboxes = hurtbox::get_hurtboxes();
 
-        if let Some(ref mut fighter) = package.entities.key_to_value_mut(&fighter_key) {
-            let model_name = fighter.name.replace(" ", "");
+        if let Some(ref mut fighter) = package.entities.key_to_value_mut(fighter_key) {
+            let model_name = fighter.name.replace(' ', "");
             let model = if let Some(data) = assets.get_model(&model_name) {
                 Model3D::from_gltf(&data, &model_name)
             } else {
@@ -60,9 +62,9 @@ fn main() {
             let action_keys = fighter.actions.keys();
             for action_key in action_keys {
                 let action = &mut fighter.actions[action_key.as_ref()];
-                if cli.action_names.len() == 0 || cli.action_names.contains(&action_key) {
+                if cli.action_names.is_empty() || cli.action_names.contains(&action_key) {
                     if let Some(animation) = model.animations.get(&action_key) {
-                        regenerate_action(action, &model.root_joint, animation, &cli, &hurtboxes);
+                        regenerate_action(action, &model.root_joint, animation, &cli, hurtboxes);
                     } else {
                         println!(
                             "PlayerAction '{}' does not have a corresponding animation, skipping.",

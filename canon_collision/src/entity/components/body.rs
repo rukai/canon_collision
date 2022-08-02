@@ -92,46 +92,28 @@ impl Body {
 
     #[allow(dead_code)]
     pub fn is_ledge(&self) -> bool {
-        if let &Location::GrabbedLedge { .. } = &self.location {
-            true
-        } else {
-            false
-        }
+        matches!(self.location, Location::GrabbedLedge { .. })
     }
 
     pub fn is_grabbed(&self) -> bool {
-        if let &Location::GrabbedByPlayer(_) = &self.location {
-            true
-        } else {
-            false
-        }
+        matches!(self.location, Location::GrabbedByPlayer(_))
     }
 
     pub fn is_item_held(&self) -> bool {
-        if let &Location::ItemHeldByPlayer(_) = &self.location {
-            true
-        } else {
-            false
-        }
+        matches!(self.location, Location::ItemHeldByPlayer(_))
     }
 
     pub fn is_airbourne(&self) -> bool {
-        if let &Location::Airbourne { .. } = &self.location {
-            true
-        } else {
-            false
-        }
+        matches!(self.location, Location::Airbourne { .. })
     }
 
     pub fn is_hogging_ledge(&self, check_platform_i: usize, face_right: bool) -> bool {
-        if let &Location::GrabbedLedge {
-            platform_i,
-            ref logic,
-            ..
+        if let Location::GrabbedLedge {
+            platform_i, logic, ..
         } = &self.location
         {
-            if let &LedgeLogic::Hog = logic {
-                return self.face_right == face_right && check_platform_i == platform_i;
+            if let LedgeLogic::Hog = logic {
+                return self.face_right == face_right && check_platform_i == *platform_i;
             }
         }
         false

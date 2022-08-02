@@ -214,7 +214,7 @@ fn run(
                 netplay.connect_match_making(
                     cli_results
                         .netplay_region
-                        .unwrap_or(config.netplay_region.clone().unwrap_or(String::from("AU"))),
+                        .unwrap_or(config.netplay_region.clone().unwrap_or_else(|| "AU".into())),
                     cli_results.netplay_players.unwrap_or(2),
                 );
                 let state = MenuState::NetplayWait {

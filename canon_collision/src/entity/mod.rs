@@ -17,7 +17,7 @@ use projectile::Projectile;
 use toriel_fireball::TorielFireball;
 use toriel_oven::{MessageTorielOven, TorielOven};
 
-use crate::audio::sfx::{HitBoxSFX, SFXType};
+use crate::audio::sfx::{HitBoxSfx, SfxType};
 use crate::audio::Audio;
 use crate::collision::collision_box::CollisionResult;
 use crate::graphics;
@@ -162,20 +162,20 @@ impl Entity {
         self.process_action_result(context, action_result);
         for col_result in col_results {
             match col_result {
-                &CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
-                    context.audio.play_sound_effect(context.entity_def, SFXType::Hit(HitBoxSFX::Punch));
-                    self.state.hitlist.push(entity_defend_i);
+                CollisionResult::HitAtk { entity_defend_i, ref hitbox, .. } => {
+                    context.audio.play_sound_effect(context.entity_def, SfxType::Hit(HitBoxSfx::Punch));
+                    self.state.hitlist.push(*entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
-                &CollisionResult::HitShieldAtk { entity_defend_i, ref hitbox, .. } => {
-                    context.audio.play_sound_effect(context.entity_def, SFXType::Hit(HitBoxSFX::Sword));
-                    self.state.hitlist.push(entity_defend_i);
+                CollisionResult::HitShieldAtk { entity_defend_i, ref hitbox, .. } => {
+                    context.audio.play_sound_effect(context.entity_def, SfxType::Hit(HitBoxSfx::Sword));
+                    self.state.hitlist.push(*entity_defend_i);
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
-                &CollisionResult::HitDef { ref hitbox, .. } => {
+                CollisionResult::HitDef { hitbox, .. } => {
                     self.state.hitlag = Hitlag::Launch { counter: (hitbox.damage / 3.0 + 3.0) as u64, wobble_x: 0.0 };
                 }
-                &CollisionResult::HitShieldDef { ref hitbox, .. } => {
+                CollisionResult::HitShieldDef { hitbox, .. } => {
                     self.state.hitlag = Hitlag::Attack { counter: (hitbox.damage / 3.0 + 3.0) as u64 };
                 }
                 _ => { }

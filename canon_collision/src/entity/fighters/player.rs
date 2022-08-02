@@ -1,4 +1,4 @@
-use crate::audio::sfx::SFXType;
+use crate::audio::sfx::SfxType;
 use crate::collision::collision_box::CollisionResult;
 use crate::entity::components::action_state::ActionState;
 use crate::entity::components::body::{Body, Location, PhysicsResult};
@@ -338,26 +338,22 @@ impl Player {
         let mut set_action = None;
         for col_result in col_results {
             match col_result {
-                &CollisionResult::HitAtk {
-                    ref hitbox,
-                    ref point,
-                    ..
-                } => {
+                CollisionResult::HitAtk { hitbox, point, .. } => {
                     self.hit_particles(*point, hitbox);
                 }
-                &CollisionResult::HitDef {
-                    ref hitbox,
-                    ref hurtbox,
+                CollisionResult::HitDef {
+                    hitbox,
+                    hurtbox,
                     entity_atk_i,
                 } => {
-                    set_action = self.launch(context, state, hitbox, hurtbox, entity_atk_i);
+                    set_action = self.launch(context, state, hitbox, hurtbox, *entity_atk_i);
                 }
-                &CollisionResult::HitShieldAtk {
-                    ref hitbox,
-                    ref power_shield,
+                CollisionResult::HitShieldAtk {
+                    hitbox,
+                    power_shield,
                     entity_defend_i,
                 } => {
-                    let entity_def = &context.entities[entity_defend_i];
+                    let entity_def = &context.entities[*entity_defend_i];
                     if let Some(player_def) = &entity_def.ty.get_player() {
                         if let &Some(ref power_shield) = power_shield {
                             if let (Some(PlayerAction::PowerShield), &Some(ref stun)) =
@@ -378,13 +374,13 @@ impl Player {
                         }
                     }
                 }
-                &CollisionResult::HitShieldDef {
-                    ref hitbox,
-                    ref power_shield,
+                CollisionResult::HitShieldDef {
+                    hitbox,
+                    power_shield,
                     entity_atk_i,
                 } => {
-                    if let &Some(ref power_shield) = power_shield {
-                        if let (Some(PlayerAction::PowerShield), &Some(ref parry)) =
+                    if let Some(power_shield) = power_shield {
+                        if let (Some(PlayerAction::PowerShield), Some(parry)) =
                             (state.get_action(), &power_shield.parry)
                         {
                             if parry.window > state.frame as u64 {
@@ -403,19 +399,19 @@ impl Player {
                     let analog_mult = 1.0 - (self.shield_analog - 0.3) / 0.7;
                     let vel_mult = if self.parry_timer > 0 { 1.0 } else { 0.6 };
                     let x_diff = self.bps_xy(context, state).0
-                        - context.entities[entity_atk_i].bps_xy(context).0;
+                        - context.entities[*entity_atk_i].bps_xy(context).0;
                     let vel =
                         (hitbox.damage.floor() * (0.195 * analog_mult + 0.09) + 0.4) * vel_mult;
                     self.body.x_vel = vel.min(2.0) * x_diff.signum();
                     self.shield_stun_timer =
                         (hitbox.damage.floor() * (analog_mult + 0.3) * 0.975 + 2.0) as u64;
                 }
-                &CollisionResult::GrabAtk(_entity_defend_i) => {
+                CollisionResult::GrabAtk(_entity_defend_i) => {
                     set_action = ActionResult::set_action(PlayerAction::GrabbingIdle)
                 }
-                &CollisionResult::GrabDef(entity_atk_i) => {
-                    self.body.face_right = !context.entities[entity_atk_i].face_right();
-                    self.body.location = Location::GrabbedByPlayer(entity_atk_i);
+                CollisionResult::GrabDef(entity_atk_i) => {
+                    self.body.face_right = !context.entities[*entity_atk_i].face_right();
+                    self.body.location = Location::GrabbedByPlayer(*entity_atk_i);
                     set_action = ActionResult::set_action(PlayerAction::GrabbedIdle)
                 }
                 _ => {}
@@ -821,7 +817,7 @@ impl Player {
         if state.frame == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Jump);
+                .play_sound_effect(context.entity_def, SfxType::Jump);
         }
         None.or_else(|| self.check_attacks_aerial(context))
             .or_else(|| self.check_special_air(context))
@@ -1154,7 +1150,7 @@ impl Player {
         if state.frame == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Land);
+                .play_sound_effect(context.entity_def, SfxType::Land);
         }
         let frame = state.frame + self.land_frame_skip as i64 + 1;
 
@@ -1170,7 +1166,7 @@ impl Player {
         if state.frame == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Land);
+                .play_sound_effect(context.entity_def, SfxType::Land);
         }
         self.land_particles(context, state);
 
@@ -1235,7 +1231,7 @@ impl Player {
         if state.frame_no_restart % 20 == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Walk);
+                .play_sound_effect(context.entity_def, SfxType::Walk);
         }
 
         if context.input[0].stick_x == 0.0 {
@@ -1280,7 +1276,7 @@ impl Player {
         if state.frame == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Dash);
+                .play_sound_effect(context.entity_def, SfxType::Dash);
         }
         self.dash_particles(context, state);
         if state.frame == 1 {
@@ -1352,7 +1348,7 @@ impl Player {
         if state.frame_no_restart % 17 == 0 {
             context
                 .audio
-                .play_sound_effect(context.entity_def, SFXType::Run);
+                .play_sound_effect(context.entity_def, SfxType::Run);
         }
         None.or_else(|| self.check_jump(context))
             .or_else(|| self.check_shield(context))
@@ -2562,7 +2558,7 @@ impl Player {
     ) -> Option<ActionResult> {
         context
             .audio
-            .play_sound_effect(context.entity_def, SFXType::Die);
+            .play_sound_effect(context.entity_def, SfxType::Die);
         self.body = if context.stage.respawn_points.len() == 0 {
             Body::new(Location::Airbourne { x: 0.0, y: 0.0 }, true)
         } else {

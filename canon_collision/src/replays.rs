@@ -58,10 +58,7 @@ impl Replay {
             }
         }
 
-        let hot_reload_as_running = match game.state {
-            GameState::Local => true,
-            _ => false,
-        };
+        let hot_reload_as_running = matches!(game.state, GameState::Local);
 
         Replay {
             init_seed: game.init_seed,

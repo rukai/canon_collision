@@ -40,7 +40,7 @@ pub fn cli() -> CLIResults {
     results.fighter_name = matches.opt_str("f");
 
     if let Some(fighter_names) = matches.opt_str("a") {
-        for fighter_name in fighter_names.split(",") {
+        for fighter_name in fighter_names.split(',') {
             results.action_names.push(fighter_name.to_string());
         }
     }

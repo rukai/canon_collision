@@ -15,20 +15,20 @@ use canon_collision_lib::entity_def::EntityDef;
 
 pub mod sfx;
 
-use sfx::{SFXType, SFX};
+use sfx::{Sfx, SfxType};
 
 pub struct Audio {
     manager: AudioManager,
     path: PathBuf,
     bgm: Option<InstanceHandle>,
-    sfx: SFX,
+    sfx: Sfx,
 }
 
 impl Audio {
     pub fn new(assets: Assets) -> Self {
         let mut manager = AudioManager::new(AudioManagerSettings::default()).unwrap();
         let path = assets.path().join("audio");
-        let sfx = SFX::new(&mut manager, &path);
+        let sfx = Sfx::new(&mut manager, &path);
 
         Audio {
             manager,
@@ -38,7 +38,7 @@ impl Audio {
         }
     }
 
-    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SFXType) {
+    pub fn play_sound_effect(&mut self, entity: &EntityDef, sfx: SfxType) {
         self.sfx.play_sound_effect(entity, sfx);
     }
 

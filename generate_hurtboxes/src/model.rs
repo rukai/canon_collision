@@ -14,25 +14,25 @@ pub struct Model3D {
 
 impl Model3D {
     pub fn from_gltf(data: &[u8], model_name: &str) -> Model3D {
-        let gltf = Gltf::from_slice(&data).unwrap();
+        let gltf = Gltf::from_slice(data).unwrap();
         let blob = gltf.blob.as_ref().unwrap();
 
         let node = gltf
             .nodes()
             .find(|x| x.name() == Some(model_name))
-            .expect(&format!("Model must contain a node named {}", model_name));
+            .unwrap_or_else(|| panic!("Model must contain a node named {}", model_name));
 
         let mut root_joint = None;
         if let Some(skin) = node.skin() {
             // You might think that skin.skeleton() would return the root_node, but you would be wrong.
             let joints: Vec<_> = skin.joints().collect();
-            if joints.len() > 0 {
+            if !joints.is_empty() {
                 let reader = skin.reader(|buffer| {
                     match buffer.source() {
                         BufferSource::Bin => {}
                         _ => unimplemented!("It is assumed that gltf buffers use only bin source."),
                     }
-                    Some(&blob)
+                    Some(blob)
                 });
                 let ibm: Vec<Matrix4<f32>> = reader
                     .read_inverse_bind_matrices()
@@ -70,7 +70,7 @@ impl Model3D {
                                 "It is assumed that gltf buffers use only bin source."
                             ),
                         }
-                        Some(&blob)
+                        Some(blob)
                     });
                     let inputs: Vec<_> = reader.read_inputs().unwrap().collect();
                     let outputs = match reader.read_outputs().unwrap() {
@@ -169,7 +169,7 @@ fn skeleton_from_gltf_node(
         } => {
             let translation: Vector3<f32> = translation.into();
             let rotation =
-                Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]).into();
+                Quaternion::new(rotation[3], rotation[0], rotation[1], rotation[2]);
             let scale: Vector3<f32> = scale.into();
             (translation, rotation, scale)
         }

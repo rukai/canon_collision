@@ -71,8 +71,8 @@ impl Input {
         if reset_deadzones {
             for source in &mut self.input_sources {
                 match source {
-                    &mut InputSource::GCAdapter(_) => {} // TODO: send message to thread or delete all manual reset_deadzone logic adapter.deadzones = Deadzone::empty4()
-                    &mut InputSource::GenericController(ref mut controller) => {
+                    InputSource::GCAdapter(_) => {} // TODO: send message to thread or delete all manual reset_deadzone logic adapter.deadzones = Deadzone::empty4()
+                    InputSource::GenericController(controller) => {
                         controller.deadzone = Deadzone::empty()
                     }
                 }
@@ -101,10 +101,10 @@ impl Input {
         let mut inputs: Vec<ControllerInput> = Vec::new();
         for source in &mut self.input_sources {
             match source {
-                InputSource::GCAdapter(ref mut adapter) => {
+                InputSource::GCAdapter(adapter) => {
                     inputs.extend_from_slice(adapter.get_inputs());
                 }
-                InputSource::GenericController(ref mut controller) => {
+                InputSource::GenericController(controller) => {
                     let events = self
                         .events
                         .iter()

@@ -16,9 +16,9 @@ pub fn set_animated_joints(
     root_joint: &mut Joint,
     parent_transform: Matrix4<f32>,
 ) {
-    let mut translation = root_joint.translation.clone();
-    let mut rotation = root_joint.rotation.clone();
-    let mut scale = root_joint.scale.clone();
+    let mut translation = root_joint.translation;
+    let mut rotation = root_joint.rotation;
+    let mut scale = root_joint.scale;
 
     for channel in &animation.channels {
         if root_joint.node_index == channel.target_node_index {
@@ -65,7 +65,7 @@ pub fn set_animated_joints(
                 }
                 (ChannelOutputs::Rotations(rotations), Interpolation::Step) => {
                     let output_index = index_step(channel, frame);
-                    rotation = rotations[output_index].into();
+                    rotation = rotations[output_index];
                 }
                 (ChannelOutputs::Rotations(rotations), Interpolation::CubicSpline) => {
                     rotation = match index_cubicspline(channel, frame) {
@@ -139,7 +139,7 @@ pub fn set_animated_joints(
     root_joint.transform = transform;
 
     for child in &mut root_joint.children {
-        set_animated_joints(animation, frame, child, transform.clone());
+        set_animated_joints(animation, frame, child, transform);
     }
 }
 

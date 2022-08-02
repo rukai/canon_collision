@@ -157,37 +157,37 @@ impl Default for PlayerAction {
 
 impl PlayerAction {
     pub fn is_air_attack(&self) -> bool {
-        match self {
+        matches!(
+            self,
             &PlayerAction::Fair
-            | &PlayerAction::Bair
-            | &PlayerAction::Uair
-            | &PlayerAction::Dair
-            | &PlayerAction::Nair => true,
-            _ => false,
-        }
+                | &PlayerAction::Bair
+                | &PlayerAction::Uair
+                | &PlayerAction::Dair
+                | &PlayerAction::Nair
+        )
     }
 
     pub fn is_attack_land(&self) -> bool {
-        match self {
+        matches!(
+            self,
             &PlayerAction::FairLand
-            | &PlayerAction::BairLand
-            | &PlayerAction::UairLand
-            | &PlayerAction::DairLand
-            | &PlayerAction::NairLand => true,
-            _ => false,
-        }
+                | &PlayerAction::BairLand
+                | &PlayerAction::UairLand
+                | &PlayerAction::DairLand
+                | &PlayerAction::NairLand
+        )
     }
 
     pub fn is_land(&self) -> bool {
-        match self {
+        matches!(
+            self,
             &PlayerAction::FairLand
-            | &PlayerAction::BairLand
-            | &PlayerAction::UairLand
-            | &PlayerAction::DairLand
-            | &PlayerAction::NairLand
-            | &PlayerAction::SpecialLand
-            | &PlayerAction::Land => true,
-            _ => false,
-        }
+                | &PlayerAction::BairLand
+                | &PlayerAction::UairLand
+                | &PlayerAction::DairLand
+                | &PlayerAction::NairLand
+                | &PlayerAction::SpecialLand
+                | &PlayerAction::Land
+        )
     }
 }

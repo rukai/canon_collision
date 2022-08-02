@@ -125,6 +125,7 @@ impl AnalogFilter {
     pub fn default_digital() -> AnalogFilter {
         AnalogFilter::FromDigital { value: 1.0 }
     }
+
     pub fn default_analog() -> AnalogFilter {
         AnalogFilter::FromAnalog {
             min: -1,
@@ -135,36 +136,36 @@ impl AnalogFilter {
 
     pub fn is_digital_source(&self) -> bool {
         match self {
-            &AnalogFilter::FromDigital { .. } => true,
-            _ => false,
+            AnalogFilter::FromDigital { .. } => true,
+            AnalogFilter::FromAnalog { .. } => false,
         }
     }
 
     pub fn set_min(&mut self, new_min: i32) {
         match self {
-            &mut AnalogFilter::FromAnalog { ref mut min, .. } => *min = new_min,
-            &mut AnalogFilter::FromDigital { .. } => unreachable!(),
+            AnalogFilter::FromAnalog { min, .. } => *min = new_min,
+            AnalogFilter::FromDigital { .. } => unreachable!(),
         }
     }
 
     pub fn set_max(&mut self, new_max: i32) {
         match self {
-            &mut AnalogFilter::FromAnalog { ref mut max, .. } => *max = new_max,
-            &mut AnalogFilter::FromDigital { .. } => unreachable!(),
+            AnalogFilter::FromAnalog { max, .. } => *max = new_max,
+            AnalogFilter::FromDigital { .. } => unreachable!(),
         }
     }
 
     pub fn set_flip(&mut self, new_flip: bool) {
         match self {
-            &mut AnalogFilter::FromAnalog { ref mut flip, .. } => *flip = new_flip,
-            &mut AnalogFilter::FromDigital { .. } => unreachable!(),
+            AnalogFilter::FromAnalog { flip, .. } => *flip = new_flip,
+            AnalogFilter::FromDigital { .. } => unreachable!(),
         }
     }
 
     pub fn set_value(&mut self, new_value: f32) {
         match self {
-            &mut AnalogFilter::FromDigital { ref mut value, .. } => *value = new_value,
-            &mut AnalogFilter::FromAnalog { .. } => unreachable!(),
+            AnalogFilter::FromDigital { value, .. } => *value = new_value,
+            AnalogFilter::FromAnalog { .. } => unreachable!(),
         }
     }
 }
@@ -186,22 +187,22 @@ impl DigitalFilter {
 
     pub fn is_digital_source(&self) -> bool {
         match self {
-            &DigitalFilter::FromDigital => true,
-            _ => false,
+            DigitalFilter::FromDigital => true,
+            DigitalFilter::FromAnalog { .. } => false,
         }
     }
 
     pub fn set_min(&mut self, new_min: i32) {
         match self {
-            &mut DigitalFilter::FromAnalog { ref mut min, .. } => *min = new_min,
-            &mut DigitalFilter::FromDigital => unreachable!(),
+            DigitalFilter::FromAnalog { min, .. } => *min = new_min,
+            DigitalFilter::FromDigital => unreachable!(),
         }
     }
 
     pub fn set_max(&mut self, new_max: i32) {
         match self {
-            &mut DigitalFilter::FromAnalog { ref mut max, .. } => *max = new_max,
-            &mut DigitalFilter::FromDigital => unreachable!(),
+            DigitalFilter::FromAnalog { max, .. } => *max = new_max,
+            DigitalFilter::FromDigital => unreachable!(),
         }
     }
 }

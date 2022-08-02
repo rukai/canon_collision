@@ -64,10 +64,7 @@ impl NetCommandLine {
         T: Node,
     {
         match NodeRunner::new(command) {
-            Ok(runner) => {
-                
-                package.node_step(runner)
-            }
+            Ok(runner) => package.node_step(runner),
             Err(msg) => msg,
         }
     }
@@ -360,7 +357,7 @@ impl Netplay {
     /// Returns the index of the local machine
     pub fn local_index(&self) -> usize {
         match &self.state {
-            &NetplayState::Running { .. } => self.index,
+            NetplayState::Running { .. } => self.index,
             _ => 0,
         }
     }
@@ -380,14 +377,14 @@ impl Netplay {
             .min()
             .unwrap_or(1);
         match &self.state {
-            &NetplayState::Running => self.state_frame.saturating_sub(input_frames).max(1),
+            NetplayState::Running => self.state_frame.saturating_sub(input_frames).max(1),
             _ => 1,
         }
     }
 
     pub fn frame(&self) -> usize {
         match &self.state {
-            &NetplayState::Running => self.state_frame,
+            NetplayState::Running => self.state_frame,
             _ => 0,
         }
     }
@@ -402,7 +399,7 @@ impl Netplay {
             .min()
             .unwrap_or(1);
         match &self.state {
-            &NetplayState::Running => self.state_frame > input_frames + 1,
+            NetplayState::Running => self.state_frame > input_frames + 1,
             _ => false,
         }
     }
@@ -410,7 +407,7 @@ impl Netplay {
     /// Return the seed used for this netplay session
     pub fn get_seed(&self) -> Option<u64> {
         match &self.state {
-            &NetplayState::Running { .. } => Some(self.seed),
+            NetplayState::Running { .. } => Some(self.seed),
             _ => None,
         }
     }
@@ -473,7 +470,7 @@ impl Netplay {
 
     fn disconnect_with_reason(&mut self, reason: &str) {
         match &self.state {
-            &NetplayState::Offline | &NetplayState::Disconnected { .. } => {}
+            NetplayState::Offline | NetplayState::Disconnected { .. } => {}
             _ => {
                 for peer in self.peers.iter() {
                     self.socket.send_to(&[0xAA], peer).ok();
@@ -488,7 +485,7 @@ impl Netplay {
 
     pub fn set_offline(&mut self) {
         match &self.state {
-            &NetplayState::Offline => {}
+            NetplayState::Offline => {}
             _ => {
                 for peer in self.peers.iter() {
                     self.socket.send_to(&[0xAA], peer).ok();
@@ -500,7 +497,7 @@ impl Netplay {
     }
 
     pub fn send_controller_inputs(&mut self, inputs: Vec<ControllerInput>) {
-        if let &NetplayState::Running = &self.state {
+        if let NetplayState::Running = &self.state {
             let input_confirm = InputConfirm {
                 frame: self.state_frame,
                 inputs,
@@ -535,12 +532,12 @@ pub enum NetplayState {
 impl NetplayState {
     pub fn to_string(&self) -> String {
         match self {
-            &NetplayState::Offline => String::from("Offline"),
-            &NetplayState::Running => String::from("Running"),
-            &NetplayState::InitConnection(_) => String::from("InitConnection"),
-            &NetplayState::MatchMaking { .. } => String::from("MatchMaking"),
-            &NetplayState::Disconnected { .. } => String::from("Disconnected"),
-            &NetplayState::PingTest { .. } => String::from("PingTest"),
+            NetplayState::Offline => String::from("Offline"),
+            NetplayState::Running => String::from("Running"),
+            NetplayState::InitConnection(_) => String::from("InitConnection"),
+            NetplayState::MatchMaking { .. } => String::from("MatchMaking"),
+            NetplayState::Disconnected { .. } => String::from("Disconnected"),
+            NetplayState::PingTest { .. } => String::from("PingTest"),
         }
     }
 }

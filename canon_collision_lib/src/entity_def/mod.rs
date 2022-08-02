@@ -365,21 +365,14 @@ impl ActionFrame {
     pub fn get_hitboxes(&self) -> Vec<&CollisionBox> {
         self.colboxes
             .iter()
-            .filter(|x| match x.role {
-                CollisionBoxRole::Hit(_) => true,
-                CollisionBoxRole::Grab => true,
-                _ => false,
-            })
+            .filter(|x| matches!(x.role, CollisionBoxRole::Hit(_) | CollisionBoxRole::Grab))
             .collect()
     }
 
     pub fn get_hurtboxes(&self) -> Vec<&CollisionBox> {
         self.colboxes
             .iter()
-            .filter(|x| match x.role {
-                CollisionBoxRole::Hurt(_) => true,
-                _ => false,
-            })
+            .filter(|x| matches!(x.role, CollisionBoxRole::Hurt(_)))
             .collect()
     }
 }

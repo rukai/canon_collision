@@ -1,4 +1,6 @@
 #![windows_subsystem = "windows"]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::identity_op)]
 
 #[macro_use]
 extern crate log;

@@ -1004,8 +1004,8 @@ impl Game {
 
                         for selection in self.selector.surfaces.iter() {
                             match selection {
-                                &SurfaceSelection::P1(i) => {
-                                    let surface = &self.stage.surfaces[i];
+                                SurfaceSelection::P1(i) => {
+                                    let surface = &self.stage.surfaces[*i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
                                         if !f32_equal(surface.x1, prev_x)
                                             || !f32_equal(surface.y1, prev_y)
@@ -1015,8 +1015,8 @@ impl Game {
                                     }
                                     points.push((surface.x1, surface.y1));
                                 }
-                                &SurfaceSelection::P2(i) => {
-                                    let surface = &self.stage.surfaces[i];
+                                SurfaceSelection::P2(i) => {
+                                    let surface = &self.stage.surfaces[*i];
                                     if let Some((prev_x, prev_y)) = points.last().cloned() {
                                         if !f32_equal(surface.x2, prev_x)
                                             || !f32_equal(surface.y2, prev_y)
@@ -1041,13 +1041,13 @@ impl Game {
                         if join {
                             for selection in self.selector.surfaces.iter() {
                                 match selection {
-                                    &SurfaceSelection::P1(i) => {
-                                        let surface = &mut self.stage.surfaces[i];
+                                    SurfaceSelection::P1(i) => {
+                                        let surface = &mut self.stage.surfaces[*i];
                                         surface.x1 = average_x;
                                         surface.y1 = average_y;
                                     }
-                                    &SurfaceSelection::P2(i) => {
-                                        let surface = &mut self.stage.surfaces[i];
+                                    SurfaceSelection::P2(i) => {
+                                        let surface = &mut self.stage.surfaces[*i];
                                         surface.x2 = average_x;
                                         surface.y2 = average_y;
                                     }
@@ -1057,13 +1057,13 @@ impl Game {
                             // split
                             for selection in self.selector.surfaces.iter() {
                                 match selection {
-                                    &SurfaceSelection::P1(i) => {
-                                        let surface = &mut self.stage.surfaces[i];
+                                    SurfaceSelection::P1(i) => {
+                                        let surface = &mut self.stage.surfaces[*i];
                                         surface.x1 = average_x + (surface.x2 - average_x) / 5.0;
                                         surface.y1 = average_y + (surface.y2 - average_y) / 5.0;
                                     }
-                                    &SurfaceSelection::P2(i) => {
-                                        let surface = &mut self.stage.surfaces[i];
+                                    SurfaceSelection::P2(i) => {
+                                        let surface = &mut self.stage.surfaces[*i];
                                         surface.x2 = average_x + (surface.x1 - average_x) / 5.0;
                                         surface.y2 = average_y + (surface.y1 - average_y) / 5.0;
                                     }
@@ -1182,11 +1182,11 @@ impl Game {
             if self.selector.surfaces.len() == 1 {
                 // create new surface, p1 is selected surface, p2 is current mouse
                 let (x1, y1) = match self.selector.surfaces.iter().next().unwrap() {
-                    &SurfaceSelection::P1(i) => {
-                        (self.stage.surfaces[i].x1, self.stage.surfaces[i].y1)
+                    SurfaceSelection::P1(i) => {
+                        (self.stage.surfaces[*i].x1, self.stage.surfaces[*i].y1)
                     }
-                    &SurfaceSelection::P2(i) => {
-                        (self.stage.surfaces[i].x2, self.stage.surfaces[i].y2)
+                    SurfaceSelection::P2(i) => {
+                        (self.stage.surfaces[*i].x2, self.stage.surfaces[*i].y2)
                     }
                 };
 
@@ -1865,16 +1865,16 @@ pub enum GameState {
 impl fmt::Display for GameState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &GameState::Local => write!(f, "Local"),
-            &GameState::ReplayForwardsFromHistory => write!(f, "ReplayForwardsFromHistory"),
-            &GameState::ReplayForwardsFromInput => write!(f, "ReplayForwardsFromInput"),
-            &GameState::ReplayBackwards => write!(f, "ReplayBackwards"),
-            &GameState::Netplay => write!(f, "Netplay"),
-            &GameState::Paused => write!(f, "Paused"),
-            &GameState::Quit(_) => write!(f, "Quit"),
-            &GameState::StepThenPause => write!(f, "StepThenPause"),
-            &GameState::StepForwardThenPause => write!(f, "StepForwardThenPause"),
-            &GameState::StepBackwardThenPause => write!(f, "StepBackwardThenPause)"),
+            GameState::Local => write!(f, "Local"),
+            GameState::ReplayForwardsFromHistory => write!(f, "ReplayForwardsFromHistory"),
+            GameState::ReplayForwardsFromInput => write!(f, "ReplayForwardsFromInput"),
+            GameState::ReplayBackwards => write!(f, "ReplayBackwards"),
+            GameState::Netplay => write!(f, "Netplay"),
+            GameState::Paused => write!(f, "Paused"),
+            GameState::Quit(_) => write!(f, "Quit"),
+            GameState::StepThenPause => write!(f, "StepThenPause"),
+            GameState::StepForwardThenPause => write!(f, "StepForwardThenPause"),
+            GameState::StepBackwardThenPause => write!(f, "StepBackwardThenPause)"),
         }
     }
 }
@@ -2003,7 +2003,7 @@ pub enum SurfaceSelection {
 impl SurfaceSelection {
     fn index(&self) -> usize {
         match self {
-            &SurfaceSelection::P1(index) | &SurfaceSelection::P2(index) => index,
+            SurfaceSelection::P1(index) | SurfaceSelection::P2(index) => *index,
         }
     }
 }
