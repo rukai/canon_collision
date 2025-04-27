@@ -210,10 +210,10 @@ impl Netplay {
                     data.insert(0, 0x00);
                     if let Err(_) = self
                         .socket
-                        .send_to(&data, "matchmaking.canoncollision.com:8413")
+                        .send_to(&data, "matchmaking.rukai.xyz:8413")
                     {
                         self.disconnect_with_reason(
-                            "matchmaking.canoncollision.com:8413 is inaccessible",
+                            "matchmaking.rukai.xyz:8413 is inaccessible",
                         );
                     }
                 }
